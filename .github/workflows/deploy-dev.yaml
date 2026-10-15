@@ -24,17 +24,51 @@ jobs:
       SERVER_HOST: ${{ secrets.DEV_SERVER_HOST }}
       SERVER_USER: ${{ secrets.DEV_SERVER_USER }}
       SERVER_PORT: ${{ secrets.DEV_SERVER_PORT }}
+      WEBSITE_URL: https://test.thelendsystem.com
 
     steps:
-      # Step 1: Configure SSH
+      # 1. Get exact triggering commit
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # 2. Configure Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      # 3. Install dependencies
+      - name: Install Dependencies
+        run: npm ci
+
+      # 4. Build React + Vite
+      - name: Build Application
+        run: |
+          set -euo pipefail
+
+          npm run build
+
+          test -s dist/index.html
+          echo "React build successful"
+
+      # 5. Add deployment commit marker
+      - name: Prepare Deployment Version
+        run: |
+          set -euo pipefail
+
+          printf '%s\n' "$GITHUB_SHA" \
+            > dist/deployment-version.txt
+
+          echo "Prepared commit: $GITHUB_SHA"
+
+      # 6. Configure SSH
       - name: Configure SSH
         env:
           SSH_PRIVATE_KEY: ${{ secrets.DEV_SERVER_SSH_KEY }}
           SSH_KNOWN_HOSTS: ${{ secrets.DEV_SERVER_KNOWN_HOSTS }}
         run: |
           set -euo pipefail
-
-          echo "Configuring SSH..."
 
           test -n "$SERVER_HOST"
           test -n "$SERVER_USER"
@@ -47,63 +81,27 @@ jobs:
 
           printf '%s\n' "$SSH_PRIVATE_KEY" \
             > "$HOME/.ssh/deploy_key"
+
           chmod 600 "$HOME/.ssh/deploy_key"
 
           printf '%s\n' "$SSH_KNOWN_HOSTS" \
             > "$HOME/.ssh/known_hosts"
+
           chmod 600 "$HOME/.ssh/known_hosts"
-
-          echo "SSH configured successfully"
-
-      # Step 2: Validate SSH Private Key
-      - name: Validate SSH Private Key
-        run: |
-          set -euo pipefail
 
           ssh-keygen -y -P "" \
             -f "$HOME/.ssh/deploy_key" \
             > /dev/null
 
-          echo "SSH private key is valid"
+          echo "SSH configured successfully"
 
-      # Step 3: Diagnose SSH Network
-      - name: Diagnose SSH Network
-        run: |
-          set -euo pipefail
-
-          echo "Checking DNS..."
-          getent ahostsv4 "$SERVER_HOST"
-
-          echo "Testing SSH connectivity..."
-          nc -4 -vz -w 15 \
-            "$SERVER_HOST" "$SERVER_PORT"
-
-          echo "Network connection successful"
-
-      # Step 4: Test SSH Connection
+      # 7. Check connectivity and authentication
       - name: Test SSH Connection
         run: |
           set -euo pipefail
 
-          ssh \
-            -4 \
-            -i "$HOME/.ssh/deploy_key" \
-            -p "$SERVER_PORT" \
-            -o IdentitiesOnly=yes \
-            -o BatchMode=yes \
-            -o StrictHostKeyChecking=yes \
-            -o ConnectTimeout=20 \
-            "$SERVER_USER@$SERVER_HOST" \
-            'whoami && hostname'
-
-          echo "SSH authentication successful"
-
-      # Step 5: Deploy and Build Application
-      - name: Deploy React Vite Application
-        run: |
-          set -euo pipefail
-
-          echo "Starting React Vite deployment..."
+          nc -4 -vz -w 15 \
+            "$SERVER_HOST" "$SERVER_PORT"
 
           ssh \
             -4 \
@@ -114,16 +112,40 @@ jobs:
             -o StrictHostKeyChecking=yes \
             -o ConnectTimeout=20 \
             "$SERVER_USER@$SERVER_HOST" \
-            'bash "$HOME/apps/my-project-dev/deploy-dev.sh"'
+            'whoami && test -d "$HOME/public_html"'
 
-          echo "Deployment script finished"
+          echo "SSH and document root verified"
 
-      # Step 6: Verify Published Files
-      - name: Verify Deployment Files
+      # 8. Publish Vite build to public_html
+      - name: Deploy to cPanel
         run: |
           set -euo pipefail
 
-          echo "Checking website deployment files..."
+          echo "Uploading Vite build to public_html..."
+
+          rsync -avz \
+            --checksum \
+            --exclude='.htaccess' \
+            --exclude='.user.ini' \
+            --exclude='php.ini' \
+            --exclude='.well-known/' \
+            --exclude='cgi-bin/' \
+            -e "ssh -4 \
+              -i $HOME/.ssh/deploy_key \
+              -p $SERVER_PORT \
+              -o IdentitiesOnly=yes \
+              -o BatchMode=yes \
+              -o StrictHostKeyChecking=yes \
+              -o ConnectTimeout=20" \
+            dist/ \
+            "$SERVER_USER@$SERVER_HOST:public_html/"
+
+          echo "Build uploaded successfully"
+
+      # 9. Verify deployed files on server
+      - name: Verify Server Deployment
+        run: |
+          set -euo pipefail
 
           ssh \
             -4 \
@@ -134,52 +156,62 @@ jobs:
             -o StrictHostKeyChecking=yes \
             -o ConnectTimeout=20 \
             "$SERVER_USER@$SERVER_HOST" \
-            'test -s "$HOME/public_html/index.html" && \
-             test -d "$HOME/public_html/assets" && \
-             echo "Build files successfully published"'
+            'test -s "$HOME/public_html/index.html" &&
+             test -s "$HOME/public_html/deployment-version.txt" &&
+             test -d "$HOME/public_html/assets"'
 
-      
-      # Step 7: Verify Live Deployment
-      - name: Verify Live Website Version
+          echo "Published files verified"
+
+      # 10. Verify live website version
+      - name: Verify Live Website
         run: |
           set -euo pipefail
 
-          echo "Verifying live website..."
-
-          WEBSITE="https://test.thelendsystem.com"
+          echo "Checking website HTTP response..."
 
           curl -fLsS \
             --retry 3 \
             --max-time 20 \
             -o /dev/null \
-            "$WEBSITE/"
+            "$WEBSITE_URL/"
 
-          echo "Checking deployed Git commit..."
+          echo "Checking live deployment commit..."
 
-          LIVE_COMMIT=$(curl -fLsS \
-            --retry 3 \
-            --max-time 20 \
-            "$WEBSITE/deployment-version.txt")
+          MATCHED=0
 
-          echo "Expected commit: $GITHUB_SHA"
-          echo "Live commit: $LIVE_COMMIT"
+          for attempt in 1 2 3 4 5; do
+            LIVE_COMMIT=$(curl -fLsS \
+              --max-time 20 \
+              -H "Cache-Control: no-cache" \
+              "$WEBSITE_URL/deployment-version.txt?sha=$GITHUB_SHA" \
+              || true)
 
-          if [ "$LIVE_COMMIT" != "$GITHUB_SHA" ]; then
-            echo "ERROR: Live website commit mismatch!"
+            if [ "$LIVE_COMMIT" = "$GITHUB_SHA" ]; then
+              MATCHED=1
+              break
+            fi
+
+            echo "Version not updated yet (attempt $attempt)"
+            sleep 5
+          done
+
+          if [ "$MATCHED" -ne 1 ]; then
+            echo "ERROR: Live website commit mismatch"
+            echo "Expected: $GITHUB_SHA"
+            echo "Received: $LIVE_COMMIT"
             exit 1
           fi
 
-          echo "Live website is running the expected commit"
+          echo "Live website commit verified: $GITHUB_SHA"
 
-      # Step 8: Deployment Summary
+      # 11. Deployment Summary
       - name: Deployment Summary
         if: success()
         run: |
-          echo "================================"
-          echo "Deployment Successful"
-          echo "================================"
-          echo "Website: https://test.thelendsystem.com"
-          echo "Branch: main"
-          echo "Build: React + Vite"
-          echo "Document root: public_html"
-          echo "================================"
+          echo "## Development Deployment Successful" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Website: $WEBSITE_URL" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Branch: main" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Commit: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Build: React + Vite" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Destination: public_html" >> "$GITHUB_STEP_SUMMARY"
