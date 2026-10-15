@@ -24,6 +24,7 @@ jobs:
     steps:
       - name: Configure SSH
         env:
+          SSH_PRIVATE_KEY: ${{ secrets.DEV_SERVER_SSH_KEY }}
           SERVER_HOST: ${{ secrets.DEV_SERVER_HOST }}
           SSH_KNOWN_HOSTS: ${{ secrets.DEV_SERVER_KNOWN_HOSTS }}
         run: |
