@@ -11,69 +11,78 @@ permissions:
   contents: read
 
 concurrency:
-  group: development-deployment
+  group: lendsystem-development-deployment
   cancel-in-progress: false
+  queue: max
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
   deploy:
-    name: Build and Deploy React Vite
+    name: Build, Deploy and Verify
     runs-on: ubuntu-latest
     timeout-minutes: 30
+
+    environment:
+      name: development
+      url: https://test.thelendsystem.com
 
     env:
       SERVER_HOST: ${{ secrets.DEV_SERVER_HOST }}
       SERVER_USER: ${{ secrets.DEV_SERVER_USER }}
       SERVER_PORT: ${{ secrets.DEV_SERVER_PORT }}
+      DEPLOY_ROOT: ${{ secrets.DEV_DEPLOY_ROOT }}
       WEBSITE_URL: https://test.thelendsystem.com
 
     steps:
-      # Step 1: Checkout exact commit
+      # 1. Checkout exact commit
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
           persist-credentials: false
 
-      # Step 2: Setup Node.js
+      # 2. Setup Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: npm
 
-      # Step 3: Install dependencies
+      # 3. Install reproducible dependencies
       - name: Install Dependencies
-        run: npm ci
+        run: |
+          set -euo pipefail
+          npm ci
 
-      # Step 4: Build React Vite
+      # 4. Quality checks
+      - name: Run Quality Checks
+        run: |
+          set -euo pipefail
+
+          npm run lint --if-present
+          npm run test --if-present
+
+      # 5. Build application
       - name: Build Application
         run: |
           set -euo pipefail
 
           echo "Building commit: $GITHUB_SHA"
+
           npm run build
 
           test -s dist/index.html
           test -d dist/assets
-
-          echo "=== Build files ==="
-          find dist -maxdepth 2 -type f
-
-          echo "=== React source ==="
-          sed -n '1,80p' src/App.jsx
-
-          echo "Build completed successfully"
-
-      # Step 5: Prepare deployment metadata
-      - name: Prepare Deployment Version
-        run: |
-          set -euo pipefail
+          test -n "$(find dist/assets -type f -print -quit)"
 
           printf '%s\n' "$GITHUB_SHA" \
             > dist/deployment-version.txt
 
-          echo "Deployment commit: $GITHUB_SHA"
+          echo "Build completed successfully"
 
-      # Step 6: Configure SSH
+      # 6. Configure secure SSH
       - name: Configure SSH
         env:
           SSH_PRIVATE_KEY: ${{ secrets.DEV_SERVER_SSH_KEY }}
@@ -81,39 +90,51 @@ jobs:
         run: |
           set -euo pipefail
 
-          test -n "$SERVER_HOST"
-          test -n "$SERVER_USER"
-          test -n "$SERVER_PORT"
-          test -n "$SSH_PRIVATE_KEY"
-          test -n "$SSH_KNOWN_HOSTS"
+          for value in \
+            "$SERVER_HOST" \
+            "$SERVER_USER" \
+            "$SERVER_PORT" \
+            "$DEPLOY_ROOT" \
+            "$SSH_PRIVATE_KEY" \
+            "$SSH_KNOWN_HOSTS"; do
+            test -n "$value"
+          done
+
+          [[ "$SERVER_PORT" =~ ^[0-9]+$ ]]
+          [[ "$DEPLOY_ROOT" =~ ^/[A-Za-z0-9_./-]+$ ]]
+          [[ "$DEPLOY_ROOT" != "/" ]]
+          [[ "$DEPLOY_ROOT" != */../* ]]
+          [[ "$DEPLOY_ROOT" != */.. ]]
+          [[ "$DEPLOY_ROOT" != */./* ]]
+          [[ "$DEPLOY_ROOT" != */. ]]
 
           mkdir -p "$HOME/.ssh"
           chmod 700 "$HOME/.ssh"
 
           printf '%s\n' "$SSH_PRIVATE_KEY" \
             > "$HOME/.ssh/deploy_key"
+
           chmod 600 "$HOME/.ssh/deploy_key"
 
           printf '%s\n' "$SSH_KNOWN_HOSTS" \
             > "$HOME/.ssh/known_hosts"
+
           chmod 600 "$HOME/.ssh/known_hosts"
 
           ssh-keygen -y -P "" \
             -f "$HOME/.ssh/deploy_key" \
             > /dev/null
 
-          echo "SSH configuration complete"
+          cat >> "$GITHUB_ENV" <<EOF
+          GIT_SSH_COMMAND=ssh -4 -i $HOME/.ssh/deploy_key -p $SERVER_PORT -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20
+          EOF
 
-      # Step 7: Test connection
-      - name: Test SSH Connection
+      # 7. Validate server and deployment structure
+      - name: Server Preflight
         run: |
           set -euo pipefail
 
-          nc -4 -vz -w 15 \
-            "$SERVER_HOST" "$SERVER_PORT"
-
-          ssh \
-            -4 \
+          ssh -4 \
             -i "$HOME/.ssh/deploy_key" \
             -p "$SERVER_PORT" \
             -o IdentitiesOnly=yes \
@@ -121,71 +142,203 @@ jobs:
             -o StrictHostKeyChecking=yes \
             -o ConnectTimeout=20 \
             "$SERVER_USER@$SERVER_HOST" \
-            'whoami && test -d "$HOME/public_html"'
+            bash -s -- "$DEPLOY_ROOT" <<'REMOTE'
+          set -euo pipefail
 
-          echo "SSH connection successful"
+          root="$1"
 
-      # Step 8: Deploy build
-      - name: Deploy to cPanel
+          test -d "$root"
+          test -d "$root/releases"
+          test -L "$root/current"
+
+          target="$(readlink "$root/current")"
+          test -n "$target"
+
+          case "$target" in
+            "$root/releases/"*) ;;
+            *)
+              echo "Invalid current release target"
+              exit 1
+              ;;
+          esac
+
+          test -f "$root/current/index.html"
+          test -w "$root/releases"
+          test -w "$root"
+
+          echo "Server preflight successful"
+          REMOTE
+
+      # 8. Create unique release identifier
+      - name: Prepare Release
+        id: release
         run: |
           set -euo pipefail
 
-          echo "Uploading React build..."
+          RELEASE_ID="${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 
-          rsync -avz \
-            --checksum \
-            --exclude='.htaccess' \
-            --exclude='.user.ini' \
-            --exclude='php.ini' \
-            --exclude='.well-known/' \
-            --exclude='cgi-bin/' \
-            -e "ssh -4 \
-              -i $HOME/.ssh/deploy_key \
-              -p $SERVER_PORT \
-              -o IdentitiesOnly=yes \
-              -o BatchMode=yes \
-              -o StrictHostKeyChecking=yes \
-              -o ConnectTimeout=20" \
-            dist/ \
-            "$SERVER_USER@$SERVER_HOST:public_html/"
+          echo "id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
+          echo "Release: $RELEASE_ID"
 
-          echo "Build uploaded"
-
-      
-      # Step 9: Verify uploaded files
-      - name: Verify Uploaded Files
+      # 9. Create isolated release directory
+      - name: Create Release Directory
         run: |
           set -euo pipefail
 
-          echo "Comparing GitHub build with server files..."
+          ssh -4 \
+            -i "$HOME/.ssh/deploy_key" \
+            -p "$SERVER_PORT" \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            "$SERVER_USER@$SERVER_HOST" \
+            bash -s -- \
+            "$DEPLOY_ROOT" \
+            "${{ steps.release.outputs.id }}" <<'REMOTE'
+          set -euo pipefail
 
-          DIFF=$(rsync -rcn \
-            --out-format='%n' \
-            -e "ssh -4 \
-              -i $HOME/.ssh/deploy_key \
-              -p $SERVER_PORT \
-              -o IdentitiesOnly=yes \
-              -o BatchMode=yes \
-              -o StrictHostKeyChecking=yes \
-              -o ConnectTimeout=20" \
-            dist/ \
-            "$SERVER_USER@$SERVER_HOST:public_html/")
+          root="$1"
+          release_id="$2"
+          release="$root/releases/$release_id"
 
-          if [ -n "$DIFF" ]; then
-            echo "ERROR: Build files differ from server"
-            echo "$DIFF"
+          if [ -e "$release" ] || [ -L "$release" ]; then
+            echo "Release directory already exists"
             exit 1
           fi
 
-          echo "SUCCESS: Uploaded files match GitHub build"
+          mkdir -- "$release"
 
-      # Step 10: Verify live deployment
+          echo "Release directory created"
+          REMOTE
+
+      # 10. Upload build into isolated release
+      - name: Upload Build
+        run: |
+          set -euo pipefail
+
+          release="${{ steps.release.outputs.id }}"
+
+          rsync -avz \
+            --checksum \
+            --delete \
+            -e "$GIT_SSH_COMMAND" \
+            dist/ \
+            "$SERVER_USER@$SERVER_HOST:$DEPLOY_ROOT/releases/$release/"
+
+          echo "Build uploaded"
+
+      # 11. Verify all uploaded build files
+      - name: Verify Uploaded Build
+        run: |
+          set -euo pipefail
+
+          release="${{ steps.release.outputs.id }}"
+
+          diff_output="$(
+            rsync -rcn \
+              --delete \
+              --out-format='%n' \
+              -e "$GIT_SSH_COMMAND" \
+              dist/ \
+              "$SERVER_USER@$SERVER_HOST:$DEPLOY_ROOT/releases/$release/"
+          )"
+
+          if [ -n "$diff_output" ]; then
+            echo "ERROR: Uploaded build differs"
+            echo "$diff_output"
+            exit 1
+          fi
+
+          echo "Uploaded build verified"
+
+      # 12. Atomically activate the release
+      - name: Activate Release
+        id: activate
+        run: |
+          set -euo pipefail
+
+          ssh -4 \
+            -i "$HOME/.ssh/deploy_key" \
+            -p "$SERVER_PORT" \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            "$SERVER_USER@$SERVER_HOST" \
+            bash -s -- \
+            "$DEPLOY_ROOT" \
+            "${{ steps.release.outputs.id }}" <<'REMOTE'
+          set -euo pipefail
+
+          root="$1"
+          release_id="$2"
+
+          release="$root/releases/$release_id"
+
+          test -s "$release/index.html"
+          test -d "$release/assets"
+          test -s "$release/deployment-version.txt"
+          test -L "$root/current"
+
+          old_release="$(readlink "$root/current")"
+
+          case "$old_release" in
+            "$root/releases/"*) ;;
+            *)
+              echo "Invalid previous release"
+              exit 1
+              ;;
+          esac
+
+          # Save previous release for rollback
+          previous_tmp="$root/.previous-$release_id"
+
+          ln -s -- "$old_release" "$previous_tmp"
+          mv -Tf -- "$previous_tmp" "$root/previous"
+
+          # Create new pointer, then switch atomically
+          next="$root/.next-$release_id"
+
+          ln -s -- "$release" "$next"
+          mv -Tf -- "$next" "$root/current"
+
+          echo "Release activated: $release_id"
+          REMOTE
+
+      # 13. Verify live deployment
       - name: Verify Live Website
         run: |
           set -euo pipefail
 
-          echo "Checking live website..."
+          echo "Verifying live deployment..."
 
+          # Check deployment version, allowing for
+          # short-lived web-server or CDN caching.
+          verified=false
+
+          for attempt in 1 2 3 4 5; do
+            live_commit="$(
+              curl -fLsS \
+                --retry 2 \
+                --max-time 20 \
+                -H "Cache-Control: no-cache" \
+                "$WEBSITE_URL/deployment-version.txt?sha=$GITHUB_SHA" \
+                || true
+            )"
+
+            if [ "$live_commit" = "$GITHUB_SHA" ]; then
+              verified=true
+              break
+            fi
+
+            sleep 3
+          done
+
+          if [ "$verified" != "true" ]; then
+            echo "ERROR: Live commit mismatch"
+            exit 1
+          fi
+
+          # Compare actual live HTML with build
           curl -fLsS \
             --retry 3 \
             --max-time 20 \
@@ -193,63 +346,88 @@ jobs:
             "$WEBSITE_URL/?sha=$GITHUB_SHA" \
             -o live-index.html
 
-          echo "Checking live commit..."
-
-          LIVE_COMMIT=$(curl -fLsS \
-            --max-time 20 \
-            -H "Cache-Control: no-cache" \
-            "$WEBSITE_URL/deployment-version.txt?sha=$GITHUB_SHA")
-
-          echo "Expected commit: $GITHUB_SHA"
-          echo "Live commit: $LIVE_COMMIT"
-
-          test "$LIVE_COMMIT" = "$GITHUB_SHA" || {
-            echo "ERROR: Live commit mismatch"
-            exit 1
-          }
-
-          echo "Checking live HTML asset references..."
-
-          grep -oE '/assets/[^"]+' \
-            dist/index.html > expected-assets.txt
-
-          grep -oE '/assets/[^"]+' \
-            live-index.html > live-assets.txt
-
-          if ! diff -u expected-assets.txt live-assets.txt; then
-            echo "ERROR: Live HTML references old assets"
+          if ! cmp -s dist/index.html live-index.html; then
+            echo "ERROR: Live HTML differs from build"
             exit 1
           fi
 
-          echo "Checking JavaScript and CSS assets..."
-
-          while IFS= read -r asset; do
-            test -n "$asset" || continue
+          # Verify all files in the Vite assets directory
+          while IFS= read -r -d '' file; do
+            relative="${file#dist/}"
 
             curl -fLsS \
+              --retry 3 \
               --max-time 20 \
               -H "Cache-Control: no-cache" \
-              "$WEBSITE_URL$asset?sha=$GITHUB_SHA" \
+              "$WEBSITE_URL/$relative?sha=$GITHUB_SHA" \
               -o live-asset.tmp
 
-            cmp \
-              "dist${asset}" \
-              live-asset.tmp || {
-                echo "ERROR: Live asset differs: $asset"
-                exit 1
-              }
-          done < expected-assets.txt
+            if ! cmp -s "$file" live-asset.tmp; then
+              echo "ERROR: Asset mismatch: $relative"
+              exit 1
+            fi
 
-          echo "Live website assets match build"
+          done < <(find dist/assets -type f -print0)
 
-      # Step 11: Summary
+          echo "Live HTML and assets verified"
+          echo "Deployment commit: $GITHUB_SHA"
+
+      # 14. Automatically rollback if verification fails
+      - name: Rollback Failed Deployment
+        if: ${{ failure() && steps.activate.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+
+          echo "Live verification failed. Rolling back..."
+
+          ssh -4 \
+            -i "$HOME/.ssh/deploy_key" \
+            -p "$SERVER_PORT" \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            "$SERVER_USER@$SERVER_HOST" \
+            bash -s -- "$DEPLOY_ROOT" <<'REMOTE'
+          set -euo pipefail
+
+          root="$1"
+
+          test -L "$root/previous"
+          test -L "$root/current"
+
+          previous="$(readlink "$root/previous")"
+
+          case "$previous" in
+            "$root/releases/"*) ;;
+            *)
+              echo "Unsafe rollback target"
+              exit 1
+              ;;
+          esac
+
+          test -s "$previous/index.html"
+
+          rollback_link="$root/.rollback-$$"
+
+          ln -s -- "$previous" "$rollback_link"
+          mv -Tf -- "$rollback_link" "$root/current"
+
+          echo "Previous release restored"
+          REMOTE
+
+      # 15. Write deployment report
       - name: Deployment Summary
         if: success()
         run: |
-          echo "## Deployment Successful" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Website: $WEBSITE_URL" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Branch: main" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Commit: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Framework: React + Vite" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Document root: public_html" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "## Development Deployment Successful"
+            echo ""
+            echo "- Website: $WEBSITE_URL"
+            echo "- Branch: main"
+            echo "- Commit: $GITHUB_SHA"
+            echo "- Release: ${{ steps.release.outputs.id }}"
+            echo "- Framework: React + Vite"
+            echo "- Deployment: Atomic symlink activation"
+            echo "- Verification: Passed"
+            echo "- Rollback: Previous release retained"
+          } >> "$GITHUB_STEP_SUMMARY"
