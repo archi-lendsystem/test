@@ -1,4 +1,3 @@
-
 name: Deploy Development
 
 on:
@@ -22,8 +21,8 @@ jobs:
 
     env:
       SERVER_HOST: ${{ secrets.DEV_SERVER_HOST }}
-      SERVER_USER: tthelendsyste
-      SERVER_PORT: "22"
+      SERVER_USER: ${{ secrets.DEV_SERVER_USER }}
+      SERVER_PORT: ${{ secrets.DEV_SERVER_PORT }}
 
     steps:
       # Step 1: Configure SSH
