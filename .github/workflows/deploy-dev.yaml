@@ -5,7 +5,6 @@ on:
   push:
     branches:
       - main
-
   workflow_dispatch:
 
 permissions:
@@ -27,7 +26,6 @@ jobs:
       SERVER_PORT: "22"
 
     steps:
-
       # Step 1: Configure SSH
       - name: Configure SSH
         env:
@@ -36,7 +34,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          echo "========== CONFIGURING SSH =========="
+          echo "Configuring SSH..."
 
           test -n "$SERVER_HOST" || {
             echo "ERROR: DEV_SERVER_HOST is missing"
@@ -68,71 +66,45 @@ jobs:
 
           echo "SSH configuration completed"
 
-      # Step 2: Validate SSH Private Key
+      # Step 2: Validate private key
       - name: Validate SSH Private Key
         run: |
           set -euo pipefail
 
-          echo "========== VALIDATING SSH KEY =========="
+          echo "Validating SSH private key..."
 
           ssh-keygen -y -P "" \
             -f "$HOME/.ssh/deploy_key" \
-            > /dev/null || {
-              echo "ERROR: Invalid or encrypted SSH key"
-              exit 1
-            }
+            > /dev/null
 
-          echo "SSH private key validation successful"
+          echo "SSH private key is valid"
 
-      # Step 3: Diagnose GitHub Runner Network
+      # Step 3: Diagnose DNS and connectivity
       - name: Diagnose SSH Network
         run: |
           set -euo pipefail
 
-          echo "========== RUNNER INFORMATION =========="
+          echo "Checking server DNS..."
 
-          echo "GitHub runner public IPv4:"
-          curl -4 -fsS --max-time 10 \
-            https://api.ipify.org || true
-          echo
+          getent ahostsv4 "$SERVER_HOST"
 
-          echo "========== SERVER DNS =========="
+          echo "Checking SSH port $SERVER_PORT..."
 
-          echo "Resolving server IPv4 address..."
+          nc -4 -vz -w 15 \
+            "$SERVER_HOST" "$SERVER_PORT" || {
+              echo "ERROR: SSH network connection failed"
+              echo "Check host, firewall and GitHub runner access"
+              exit 1
+            }
 
-          getent ahostsv4 "$SERVER_HOST" || {
-            echo "ERROR: Server DNS resolution failed"
-            exit 1
-          }
+          echo "SSH network connectivity successful"
 
-          echo "========== SSH PORT TEST =========="
-
-          echo "Testing server port $SERVER_PORT..."
-
-          if nc -4 -vz -w 20 \
-            "$SERVER_HOST" "$SERVER_PORT"; then
-
-            echo "SUCCESS: SSH port is reachable"
-
-          else
-
-            echo "ERROR: GitHub runner cannot reach server SSH port"
-
-            echo "Possible causes:"
-            echo "1. Server firewall blocking port 22"
-            echo "2. GitHub runner IP blocked"
-            echo "3. Incorrect SSH hostname/IP"
-            echo "4. Hosting provider network restrictions"
-
-            exit 1
-          fi
-
-      # Step 4: Test SSH Authentication
+      # Step 4: Test SSH authentication
       - name: Test SSH Connection
         run: |
           set -euo pipefail
 
-          echo "========== TESTING SSH =========="
+          echo "Testing SSH authentication..."
 
           ssh \
             -4 \
@@ -147,30 +119,12 @@ jobs:
 
           echo "SSH authentication successful"
 
-      # Step 5: Verify Deployment Script
-      - name: Verify Remote Deployment Script
-        run: |
-          set -euo pipefail
-
-          echo "========== VERIFYING DEPLOY SCRIPT =========="
-
-          ssh \
-            -4 \
-            -i "$HOME/.ssh/deploy_key" \
-            -p "$SERVER_PORT" \
-            -o IdentitiesOnly=yes \
-            -o BatchMode=yes \
-            -o StrictHostKeyChecking=yes \
-            -o ConnectTimeout=20 \
-            "$SERVER_USER@$SERVER_HOST" \
-            'test -f "$HOME/apps/my-project-dev/deploy-dev.sh" && echo "Deployment script found"'
-
-      # Step 6: Run Deployment Script
+      # Step 5: Run deployment script
       - name: Deploy Development Application
         run: |
           set -euo pipefail
 
-          echo "========== STARTING DEPLOYMENT =========="
+          echo "Starting development deployment..."
 
           ssh \
             -4 \
