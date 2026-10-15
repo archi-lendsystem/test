@@ -1,0 +1,140 @@
+
+name: Deploy Development
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: development-deployment
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: SSH and Deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      SERVER_HOST: ${{ secrets.DEV_SERVER_HOST }}
+      SERVER_USER: tthelendsyste
+      SERVER_PORT: "22"
+
+    steps:
+      # Step 1: Configure SSH
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.DEV_SERVER_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.DEV_SERVER_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+
+          echo "Configuring SSH..."
+
+          test -n "$SERVER_HOST" || {
+            echo "ERROR: DEV_SERVER_HOST is missing"
+            exit 1
+          }
+
+          test -n "$SSH_PRIVATE_KEY" || {
+            echo "ERROR: DEV_SERVER_SSH_KEY is missing"
+            exit 1
+          }
+
+          test -n "$SSH_KNOWN_HOSTS" || {
+            echo "ERROR: DEV_SERVER_KNOWN_HOSTS is missing"
+            exit 1
+          }
+
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+
+          printf '%s\n' "$SSH_PRIVATE_KEY" \
+            > "$HOME/.ssh/deploy_key"
+
+          chmod 600 "$HOME/.ssh/deploy_key"
+
+          printf '%s\n' "$SSH_KNOWN_HOSTS" \
+            > "$HOME/.ssh/known_hosts"
+
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+          echo "SSH configuration completed"
+
+      # Step 2: Validate private key
+      - name: Validate SSH Private Key
+        run: |
+          set -euo pipefail
+
+          echo "Validating SSH private key..."
+
+          ssh-keygen -y -P "" \
+            -f "$HOME/.ssh/deploy_key" \
+            > /dev/null
+
+          echo "SSH private key is valid"
+
+      # Step 3: Diagnose DNS and connectivity
+      - name: Diagnose SSH Network
+        run: |
+          set -euo pipefail
+
+          echo "Checking server DNS..."
+
+          getent ahostsv4 "$SERVER_HOST"
+
+          echo "Checking SSH port $SERVER_PORT..."
+
+          nc -4 -vz -w 15 \
+            "$SERVER_HOST" "$SERVER_PORT" || {
+              echo "ERROR: SSH network connection failed"
+              echo "Check host, firewall and GitHub runner access"
+              exit 1
+            }
+
+          echo "SSH network connectivity successful"
+
+      # Step 4: Test SSH authentication
+      - name: Test SSH Connection
+        run: |
+          set -euo pipefail
+
+          echo "Testing SSH authentication..."
+
+          ssh \
+            -4 \
+            -i "$HOME/.ssh/deploy_key" \
+            -p "$SERVER_PORT" \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=20 \
+            "$SERVER_USER@$SERVER_HOST" \
+            'whoami && hostname'
+
+          echo "SSH authentication successful"
+
+      # Step 5: Run deployment script
+      - name: Deploy Development Application
+        run: |
+          set -euo pipefail
+
+          echo "Starting development deployment..."
+
+          ssh \
+            -4 \
+            -i "$HOME/.ssh/deploy_key" \
+            -p "$SERVER_PORT" \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=20 \
+            "$SERVER_USER@$SERVER_HOST" \
+            'bash "$HOME/apps/my-project-dev/deploy-dev.sh"'
+
+          echo "Deployment script completed successfully"
