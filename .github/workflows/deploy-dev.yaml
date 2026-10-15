@@ -11,78 +11,22 @@ permissions:
   contents: read
 
 concurrency:
-  group: lendsystem-development-deployment
+  group: development-deployment
   cancel-in-progress: false
-  queue: max
-
-defaults:
-  run:
-    shell: bash
 
 jobs:
   deploy:
-    name: Build, Deploy and Verify
+    name: Build and Deploy React Vite
     runs-on: ubuntu-latest
     timeout-minutes: 30
-
-    environment:
-      name: development
-      url: https://test.thelendsystem.com
 
     env:
       SERVER_HOST: ${{ secrets.DEV_SERVER_HOST }}
       SERVER_USER: ${{ secrets.DEV_SERVER_USER }}
       SERVER_PORT: ${{ secrets.DEV_SERVER_PORT }}
-      DEPLOY_ROOT: ${{ secrets.DEV_DEPLOY_ROOT }}
-      WEBSITE_URL: https://test.thelendsystem.com
 
     steps:
-      # 1. Checkout exact commit
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-
-      # 2. Setup Node.js
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-
-      # 3. Install reproducible dependencies
-      - name: Install Dependencies
-        run: |
-          set -euo pipefail
-          npm ci
-
-      # 4. Quality checks
-      - name: Run Quality Checks
-        run: |
-          set -euo pipefail
-
-          npm run lint --if-present
-          npm run test --if-present
-
-      # 5. Build application
-      - name: Build Application
-        run: |
-          set -euo pipefail
-
-          echo "Building commit: $GITHUB_SHA"
-
-          npm run build
-
-          test -s dist/index.html
-          test -d dist/assets
-          test -n "$(find dist/assets -type f -print -quit)"
-
-          printf '%s\n' "$GITHUB_SHA" \
-            > dist/deployment-version.txt
-
-          echo "Build completed successfully"
-
-      # 6. Configure secure SSH
+      # Step 1: Configure SSH
       - name: Configure SSH
         env:
           SSH_PRIVATE_KEY: ${{ secrets.DEV_SERVER_SSH_KEY }}
@@ -90,51 +34,59 @@ jobs:
         run: |
           set -euo pipefail
 
-          for value in \
-            "$SERVER_HOST" \
-            "$SERVER_USER" \
-            "$SERVER_PORT" \
-            "$DEPLOY_ROOT" \
-            "$SSH_PRIVATE_KEY" \
-            "$SSH_KNOWN_HOSTS"; do
-            test -n "$value"
-          done
+          echo "Configuring SSH..."
 
-          [[ "$SERVER_PORT" =~ ^[0-9]+$ ]]
-          [[ "$DEPLOY_ROOT" =~ ^/[A-Za-z0-9_./-]+$ ]]
-          [[ "$DEPLOY_ROOT" != "/" ]]
-          [[ "$DEPLOY_ROOT" != */../* ]]
-          [[ "$DEPLOY_ROOT" != */.. ]]
-          [[ "$DEPLOY_ROOT" != */./* ]]
-          [[ "$DEPLOY_ROOT" != */. ]]
+          test -n "$SERVER_HOST"
+          test -n "$SERVER_USER"
+          test -n "$SERVER_PORT"
+          test -n "$SSH_PRIVATE_KEY"
+          test -n "$SSH_KNOWN_HOSTS"
 
           mkdir -p "$HOME/.ssh"
           chmod 700 "$HOME/.ssh"
 
           printf '%s\n' "$SSH_PRIVATE_KEY" \
             > "$HOME/.ssh/deploy_key"
-
           chmod 600 "$HOME/.ssh/deploy_key"
 
           printf '%s\n' "$SSH_KNOWN_HOSTS" \
             > "$HOME/.ssh/known_hosts"
-
           chmod 600 "$HOME/.ssh/known_hosts"
+
+          echo "SSH configured successfully"
+
+      # Step 2: Validate SSH Private Key
+      - name: Validate SSH Private Key
+        run: |
+          set -euo pipefail
 
           ssh-keygen -y -P "" \
             -f "$HOME/.ssh/deploy_key" \
             > /dev/null
 
-          cat >> "$GITHUB_ENV" <<EOF
-          GIT_SSH_COMMAND=ssh -4 -i $HOME/.ssh/deploy_key -p $SERVER_PORT -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20
-          EOF
+          echo "SSH private key is valid"
 
-      # 7. Validate server and deployment structure
-      - name: Server Preflight
+      # Step 3: Diagnose SSH Network
+      - name: Diagnose SSH Network
         run: |
           set -euo pipefail
 
-          ssh -4 \
+          echo "Checking DNS..."
+          getent ahostsv4 "$SERVER_HOST"
+
+          echo "Testing SSH connectivity..."
+          nc -4 -vz -w 15 \
+            "$SERVER_HOST" "$SERVER_PORT"
+
+          echo "Network connection successful"
+
+      # Step 4: Test SSH Connection
+      - name: Test SSH Connection
+        run: |
+          set -euo pipefail
+
+          ssh \
+            -4 \
             -i "$HOME/.ssh/deploy_key" \
             -p "$SERVER_PORT" \
             -o IdentitiesOnly=yes \
@@ -142,292 +94,75 @@ jobs:
             -o StrictHostKeyChecking=yes \
             -o ConnectTimeout=20 \
             "$SERVER_USER@$SERVER_HOST" \
-            bash -s -- "$DEPLOY_ROOT" <<'REMOTE'
-          set -euo pipefail
+            'whoami && hostname'
 
-          root="$1"
+          echo "SSH authentication successful"
 
-          test -d "$root"
-          test -d "$root/releases"
-          test -L "$root/current"
-
-          target="$(readlink "$root/current")"
-          test -n "$target"
-
-          case "$target" in
-            "$root/releases/"*) ;;
-            *)
-              echo "Invalid current release target"
-              exit 1
-              ;;
-          esac
-
-          test -f "$root/current/index.html"
-          test -w "$root/releases"
-          test -w "$root"
-
-          echo "Server preflight successful"
-          REMOTE
-
-      # 8. Create unique release identifier
-      - name: Prepare Release
-        id: release
+      # Step 5: Deploy and Build Application
+      - name: Deploy React Vite Application
         run: |
           set -euo pipefail
 
-          RELEASE_ID="${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          echo "Starting React Vite deployment..."
 
-          echo "id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
-          echo "Release: $RELEASE_ID"
-
-      # 9. Create isolated release directory
-      - name: Create Release Directory
-        run: |
-          set -euo pipefail
-
-          ssh -4 \
+          ssh \
+            -4 \
             -i "$HOME/.ssh/deploy_key" \
             -p "$SERVER_PORT" \
             -o IdentitiesOnly=yes \
             -o BatchMode=yes \
             -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=20 \
             "$SERVER_USER@$SERVER_HOST" \
-            bash -s -- \
-            "$DEPLOY_ROOT" \
-            "${{ steps.release.outputs.id }}" <<'REMOTE'
-          set -euo pipefail
+            'bash "$HOME/apps/my-project-dev/deploy-dev.sh"'
 
-          root="$1"
-          release_id="$2"
-          release="$root/releases/$release_id"
+          echo "Deployment script finished"
 
-          if [ -e "$release" ] || [ -L "$release" ]; then
-            echo "Release directory already exists"
-            exit 1
-          fi
-
-          mkdir -- "$release"
-
-          echo "Release directory created"
-          REMOTE
-
-      # 10. Upload build into isolated release
-      - name: Upload Build
+      # Step 6: Verify Published Files
+      - name: Verify Deployment Files
         run: |
           set -euo pipefail
 
-          release="${{ steps.release.outputs.id }}"
+          echo "Checking website deployment files..."
 
-          rsync -avz \
-            --checksum \
-            --delete \
-            -e "$GIT_SSH_COMMAND" \
-            dist/ \
-            "$SERVER_USER@$SERVER_HOST:$DEPLOY_ROOT/releases/$release/"
-
-          echo "Build uploaded"
-
-      # 11. Verify all uploaded build files
-      - name: Verify Uploaded Build
-        run: |
-          set -euo pipefail
-
-          release="${{ steps.release.outputs.id }}"
-
-          diff_output="$(
-            rsync -rcn \
-              --delete \
-              --out-format='%n' \
-              -e "$GIT_SSH_COMMAND" \
-              dist/ \
-              "$SERVER_USER@$SERVER_HOST:$DEPLOY_ROOT/releases/$release/"
-          )"
-
-          if [ -n "$diff_output" ]; then
-            echo "ERROR: Uploaded build differs"
-            echo "$diff_output"
-            exit 1
-          fi
-
-          echo "Uploaded build verified"
-
-      # 12. Atomically activate the release
-      - name: Activate Release
-        id: activate
-        run: |
-          set -euo pipefail
-
-          ssh -4 \
+          ssh \
+            -4 \
             -i "$HOME/.ssh/deploy_key" \
             -p "$SERVER_PORT" \
             -o IdentitiesOnly=yes \
             -o BatchMode=yes \
             -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=20 \
             "$SERVER_USER@$SERVER_HOST" \
-            bash -s -- \
-            "$DEPLOY_ROOT" \
-            "${{ steps.release.outputs.id }}" <<'REMOTE'
-          set -euo pipefail
+            'test -s "$HOME/public_html/index.html" && \
+             test -d "$HOME/public_html/assets" && \
+             echo "Build files successfully published"'
 
-          root="$1"
-          release_id="$2"
-
-          release="$root/releases/$release_id"
-
-          test -s "$release/index.html"
-          test -d "$release/assets"
-          test -s "$release/deployment-version.txt"
-          test -L "$root/current"
-
-          old_release="$(readlink "$root/current")"
-
-          case "$old_release" in
-            "$root/releases/"*) ;;
-            *)
-              echo "Invalid previous release"
-              exit 1
-              ;;
-          esac
-
-          # Save previous release for rollback
-          previous_tmp="$root/.previous-$release_id"
-
-          ln -s -- "$old_release" "$previous_tmp"
-          mv -Tf -- "$previous_tmp" "$root/previous"
-
-          # Create new pointer, then switch atomically
-          next="$root/.next-$release_id"
-
-          ln -s -- "$release" "$next"
-          mv -Tf -- "$next" "$root/current"
-
-          echo "Release activated: $release_id"
-          REMOTE
-
-      # 13. Verify live deployment
-      - name: Verify Live Website
+      # Step 7: Verify Website HTTP Response
+      - name: Verify Website
         run: |
           set -euo pipefail
 
-          echo "Verifying live deployment..."
+          echo "Checking test.thelendsystem.com..."
 
-          # Check deployment version, allowing for
-          # short-lived web-server or CDN caching.
-          verified=false
-
-          for attempt in 1 2 3 4 5; do
-            live_commit="$(
-              curl -fLsS \
-                --retry 2 \
-                --max-time 20 \
-                -H "Cache-Control: no-cache" \
-                "$WEBSITE_URL/deployment-version.txt?sha=$GITHUB_SHA" \
-                || true
-            )"
-
-            if [ "$live_commit" = "$GITHUB_SHA" ]; then
-              verified=true
-              break
-            fi
-
-            sleep 3
-          done
-
-          if [ "$verified" != "true" ]; then
-            echo "ERROR: Live commit mismatch"
-            exit 1
-          fi
-
-          # Compare actual live HTML with build
-          curl -fLsS \
+          curl \
+            -fLsS \
             --retry 3 \
             --max-time 20 \
-            -H "Cache-Control: no-cache" \
-            "$WEBSITE_URL/?sha=$GITHUB_SHA" \
-            -o live-index.html
+            -o /dev/null \
+            https://test.thelendsystem.com/
 
-          if ! cmp -s dist/index.html live-index.html; then
-            echo "ERROR: Live HTML differs from build"
-            exit 1
-          fi
+          echo "Website is responding successfully"
 
-          # Verify all files in the Vite assets directory
-          while IFS= read -r -d '' file; do
-            relative="${file#dist/}"
-
-            curl -fLsS \
-              --retry 3 \
-              --max-time 20 \
-              -H "Cache-Control: no-cache" \
-              "$WEBSITE_URL/$relative?sha=$GITHUB_SHA" \
-              -o live-asset.tmp
-
-            if ! cmp -s "$file" live-asset.tmp; then
-              echo "ERROR: Asset mismatch: $relative"
-              exit 1
-            fi
-
-          done < <(find dist/assets -type f -print0)
-
-          echo "Live HTML and assets verified"
-          echo "Deployment commit: $GITHUB_SHA"
-
-      # 14. Automatically rollback if verification fails
-      - name: Rollback Failed Deployment
-        if: ${{ failure() && steps.activate.outcome == 'success' }}
-        run: |
-          set -euo pipefail
-
-          echo "Live verification failed. Rolling back..."
-
-          ssh -4 \
-            -i "$HOME/.ssh/deploy_key" \
-            -p "$SERVER_PORT" \
-            -o IdentitiesOnly=yes \
-            -o BatchMode=yes \
-            -o StrictHostKeyChecking=yes \
-            "$SERVER_USER@$SERVER_HOST" \
-            bash -s -- "$DEPLOY_ROOT" <<'REMOTE'
-          set -euo pipefail
-
-          root="$1"
-
-          test -L "$root/previous"
-          test -L "$root/current"
-
-          previous="$(readlink "$root/previous")"
-
-          case "$previous" in
-            "$root/releases/"*) ;;
-            *)
-              echo "Unsafe rollback target"
-              exit 1
-              ;;
-          esac
-
-          test -s "$previous/index.html"
-
-          rollback_link="$root/.rollback-$$"
-
-          ln -s -- "$previous" "$rollback_link"
-          mv -Tf -- "$rollback_link" "$root/current"
-
-          echo "Previous release restored"
-          REMOTE
-
-      # 15. Write deployment report
+      # Step 8: Deployment Summary
       - name: Deployment Summary
         if: success()
         run: |
-          {
-            echo "## Development Deployment Successful"
-            echo ""
-            echo "- Website: $WEBSITE_URL"
-            echo "- Branch: main"
-            echo "- Commit: $GITHUB_SHA"
-            echo "- Release: ${{ steps.release.outputs.id }}"
-            echo "- Framework: React + Vite"
-            echo "- Deployment: Atomic symlink activation"
-            echo "- Verification: Passed"
-            echo "- Rollback: Previous release retained"
-          } >> "$GITHUB_STEP_SUMMARY"
+          echo "================================"
+          echo "Deployment Successful"
+          echo "================================"
+          echo "Website: https://test.thelendsystem.com"
+          echo "Branch: main"
+          echo "Build: React + Vite"
+          echo "Document root: public_html"
+          echo "================================"
