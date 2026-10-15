@@ -138,21 +138,38 @@ jobs:
              test -d "$HOME/public_html/assets" && \
              echo "Build files successfully published"'
 
-      # Step 7: Verify Website HTTP Response
-      - name: Verify Website
+      
+      # Step 7: Verify Live Deployment
+      - name: Verify Live Website Version
         run: |
           set -euo pipefail
 
-          echo "Checking test.thelendsystem.com..."
+          echo "Verifying live website..."
 
-          curl \
-            -fLsS \
+          WEBSITE="https://test.thelendsystem.com"
+
+          curl -fLsS \
             --retry 3 \
             --max-time 20 \
             -o /dev/null \
-            https://test.thelendsystem.com/
+            "$WEBSITE/"
 
-          echo "Website is responding successfully"
+          echo "Checking deployed Git commit..."
+
+          LIVE_COMMIT=$(curl -fLsS \
+            --retry 3 \
+            --max-time 20 \
+            "$WEBSITE/deployment-version.txt")
+
+          echo "Expected commit: $GITHUB_SHA"
+          echo "Live commit: $LIVE_COMMIT"
+
+          if [ "$LIVE_COMMIT" != "$GITHUB_SHA" ]; then
+            echo "ERROR: Live website commit mismatch!"
+            exit 1
+          fi
+
+          echo "Live website is running the expected commit"
 
       # Step 8: Deployment Summary
       - name: Deployment Summary
