@@ -23,13 +23,13 @@ jobs:
 
     environment:
       name: development
-      url: https://test.thelendsystem.com
+      url: ${{secrets.DEV_WEBSITE_URL}}
 
     env:
       SERVER_HOST: ${{ secrets.DEV_SERVER_HOST }}
       SERVER_USER: ${{ secrets.DEV_SERVER_USER }}
       SERVER_PORT: ${{ secrets.DEV_SERVER_PORT }}
-      WEBSITE_URL: https://test.thelendsystem.com
+      WEBSITE_URL: ${{ secrets.DEV_WEBSITE_URL }}
 
     defaults:
       run:
@@ -70,7 +70,7 @@ jobs:
       - name: Build Application
         env:
           # Optional: configure this repository variable
-          VITE_API_URL: ${{ vars.VITE_API_URL }}
+          VITE_API_URL: ${{secrets.DEV_WEBSITE_URL}}
         run: |
           set -euo pipefail
 
