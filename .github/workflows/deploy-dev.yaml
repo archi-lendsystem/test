@@ -1,9 +1,10 @@
+
 name: Deploy Development
 
 on:
   push:
     branches:
-      - main
+      - staging
   workflow_dispatch:
 
 permissions:
@@ -15,15 +16,24 @@ concurrency:
 
 jobs:
   deploy:
+    if: github.ref == 'refs/heads/staging'
     name: Build and Deploy React Vite
     runs-on: ubuntu-latest
     timeout-minutes: 30
+
+    environment:
+      name: development
+      url: https://test.thelendsystem.com
 
     env:
       SERVER_HOST: ${{ secrets.DEV_SERVER_HOST }}
       SERVER_USER: ${{ secrets.DEV_SERVER_USER }}
       SERVER_PORT: ${{ secrets.DEV_SERVER_PORT }}
       WEBSITE_URL: https://test.thelendsystem.com
+
+    defaults:
+      run:
+        shell: bash
 
     steps:
       # Step 1: Checkout exact commit
@@ -43,12 +53,29 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      # Step 4: Build React Vite
+      # Step 4: Run lint and tests
+      - name: Lint and Test
+        run: |
+          set -euo pipefail
+
+          npm run lint --if-present
+
+          if npm run | grep -qE '^[[:space:]]+test$'; then
+            npm test -- --run
+          else
+            echo "No test script configured"
+          fi
+
+      # Step 5: Build React Vite
       - name: Build Application
+        env:
+          # Optional: configure this repository variable
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
         run: |
           set -euo pipefail
 
           echo "Building commit: $GITHUB_SHA"
+
           npm run build
 
           test -s dist/index.html
@@ -57,12 +84,9 @@ jobs:
           echo "=== Build files ==="
           find dist -maxdepth 2 -type f
 
-          echo "=== React source ==="
-          sed -n '1,80p' src/App.jsx
-
           echo "Build completed successfully"
 
-      # Step 5: Prepare deployment metadata
+      # Step 6: Prepare deployment metadata
       - name: Prepare Deployment Version
         run: |
           set -euo pipefail
@@ -72,7 +96,22 @@ jobs:
 
           echo "Deployment commit: $GITHUB_SHA"
 
-      # Step 6: Configure SSH
+      # Step 7: Create shared rsync exclusions
+      - name: Prepare Rsync Exclusions
+        run: |
+          set -euo pipefail
+
+          cat > "$RUNNER_TEMP/rsync-exclude.txt" <<'EOF'
+          .htaccess
+          .user.ini
+          php.ini
+          .well-known/
+          cgi-bin/
+          EOF
+
+          echo "Shared rsync exclusions created"
+
+      # Step 8: Configure SSH
       - name: Configure SSH
         env:
           SSH_PRIVATE_KEY: ${{ secrets.DEV_SERVER_SSH_KEY }}
@@ -101,9 +140,26 @@ jobs:
             -f "$HOME/.ssh/deploy_key" \
             > /dev/null
 
+          cat > "$HOME/.ssh/config" <<EOF
+          Host deploy-server
+              HostName $SERVER_HOST
+              User $SERVER_USER
+              Port $SERVER_PORT
+              IdentityFile $HOME/.ssh/deploy_key
+              IdentitiesOnly yes
+              BatchMode yes
+              StrictHostKeyChecking yes
+              UserKnownHostsFile $HOME/.ssh/known_hosts
+              ConnectTimeout 20
+              AddressFamily inet
+              ServerAliveInterval 15
+          EOF
+
+          chmod 600 "$HOME/.ssh/config"
+
           echo "SSH configuration complete"
 
-      # Step 7: Test connection
+      # Step 9: Test SSH connection
       - name: Test SSH Connection
         run: |
           set -euo pipefail
@@ -111,64 +167,59 @@ jobs:
           nc -4 -vz -w 15 \
             "$SERVER_HOST" "$SERVER_PORT"
 
-          ssh \
-            -4 \
-            -i "$HOME/.ssh/deploy_key" \
-            -p "$SERVER_PORT" \
-            -o IdentitiesOnly=yes \
-            -o BatchMode=yes \
-            -o StrictHostKeyChecking=yes \
-            -o ConnectTimeout=20 \
-            "$SERVER_USER@$SERVER_HOST" \
+          ssh deploy-server \
             'whoami && test -d "$HOME/public_html"'
 
           echo "SSH connection successful"
 
-      # Step 8: Deploy build
-      - name: Deploy to cPanel
+      # Step 10: Deploy assets and other files first
+      - name: Deploy Application Files
         run: |
           set -euo pipefail
 
-          echo "Uploading React build..."
+          echo "Phase 1: Uploading application files..."
 
           rsync -avz \
             --checksum \
-            --exclude='.htaccess' \
-            --exclude='.user.ini' \
-            --exclude='php.ini' \
-            --exclude='.well-known/' \
-            --exclude='cgi-bin/' \
-            -e "ssh -4 \
-              -i $HOME/.ssh/deploy_key \
-              -p $SERVER_PORT \
-              -o IdentitiesOnly=yes \
-              -o BatchMode=yes \
-              -o StrictHostKeyChecking=yes \
-              -o ConnectTimeout=20" \
+            --chmod=D755,F644 \
+            --exclude-from="$RUNNER_TEMP/rsync-exclude.txt" \
+            --exclude='/index.html' \
+            --exclude='/deployment-version.txt' \
             dist/ \
-            "$SERVER_USER@$SERVER_HOST:public_html/"
+            deploy-server:public_html/
 
-          echo "Build uploaded"
+          echo "Phase 1 completed"
 
-      
-      # Step 9: Verify uploaded files
+          echo "Phase 2: Publishing index.html..."
+
+          rsync -avz \
+            --checksum \
+            --chmod=D755,F644 \
+            dist/index.html \
+            deploy-server:public_html/index.html
+
+          echo "Publishing deployment version..."
+
+          rsync -avz \
+            --checksum \
+            --chmod=D755,F644 \
+            dist/deployment-version.txt \
+            deploy-server:public_html/deployment-version.txt
+
+          echo "Application deployment completed"
+
+      # Step 11: Verify uploaded files
       - name: Verify Uploaded Files
         run: |
           set -euo pipefail
 
-          echo "Comparing GitHub build with server files..."
+          echo "Comparing build with server files..."
 
           DIFF=$(rsync -rcn \
             --out-format='%n' \
-            -e "ssh -4 \
-              -i $HOME/.ssh/deploy_key \
-              -p $SERVER_PORT \
-              -o IdentitiesOnly=yes \
-              -o BatchMode=yes \
-              -o StrictHostKeyChecking=yes \
-              -o ConnectTimeout=20" \
+            --exclude-from="$RUNNER_TEMP/rsync-exclude.txt" \
             dist/ \
-            "$SERVER_USER@$SERVER_HOST:public_html/")
+            deploy-server:public_html/)
 
           if [ -n "$DIFF" ]; then
             echo "ERROR: Build files differ from server"
@@ -176,47 +227,63 @@ jobs:
             exit 1
           fi
 
-          echo "SUCCESS: Uploaded files match GitHub build"
+          echo "SUCCESS: Uploaded files match build"
 
-      # Step 10: Verify live deployment
+      
+      # Step 12: Verify live website
       - name: Verify Live Website
         run: |
           set -euo pipefail
 
+          fetch() {
+            curl \
+              -fLsS \
+              --retry 3 \
+              --retry-delay 5 \
+              --retry-all-errors \
+              --max-time 20 \
+              -H "Cache-Control: no-cache" \
+              "$@"
+          }
+
           echo "Checking live website..."
 
-          curl -fLsS \
-            --retry 3 \
-            --max-time 20 \
-            -H "Cache-Control: no-cache" \
+          fetch \
             "$WEBSITE_URL/?sha=$GITHUB_SHA" \
             -o live-index.html
 
-          echo "Checking live commit..."
+          echo "Checking live deployment commit..."
 
-          LIVE_COMMIT=$(curl -fLsS \
-            --max-time 20 \
-            -H "Cache-Control: no-cache" \
+          LIVE_COMMIT=$(fetch \
             "$WEBSITE_URL/deployment-version.txt?sha=$GITHUB_SHA")
 
           echo "Expected commit: $GITHUB_SHA"
           echo "Live commit: $LIVE_COMMIT"
 
-          test "$LIVE_COMMIT" = "$GITHUB_SHA" || {
+          if [ "$LIVE_COMMIT" != "$GITHUB_SHA" ]; then
             echo "ERROR: Live commit mismatch"
             exit 1
-          }
+          fi
 
-          echo "Checking live HTML asset references..."
+          echo "Checking complete live HTML..."
 
-          grep -oE '/assets/[^"]+' \
-            dist/index.html > expected-assets.txt
+          if ! cmp -s dist/index.html live-index.html; then
+            echo "ERROR: Live HTML differs from build"
+            exit 1
+          fi
 
-          grep -oE '/assets/[^"]+' \
-            live-index.html > live-assets.txt
+          echo "SUCCESS: Live HTML matches build"
+
+          echo "Extracting build asset references..."
+
+          grep -oE "/assets/[^\"'[:space:]<>]+" \
+            dist/index.html > expected-assets.txt || true
+
+          grep -oE "/assets/[^\"'[:space:]<>]+" \
+            live-index.html > live-assets.txt || true
 
           if ! diff -u expected-assets.txt live-assets.txt; then
-            echo "ERROR: Live HTML references old assets"
+            echo "ERROR: Live HTML references incorrect assets"
             exit 1
           fi
 
@@ -225,30 +292,36 @@ jobs:
           while IFS= read -r asset; do
             test -n "$asset" || continue
 
-            curl -fLsS \
-              --max-time 20 \
-              -H "Cache-Control: no-cache" \
+            if [ ! -f "dist${asset}" ]; then
+              echo "ERROR: Asset not found in build: $asset"
+              exit 1
+            fi
+
+            fetch \
               "$WEBSITE_URL$asset?sha=$GITHUB_SHA" \
               -o live-asset.tmp
 
-            cmp \
-              "dist${asset}" \
-              live-asset.tmp || {
-                echo "ERROR: Live asset differs: $asset"
-                exit 1
-              }
+            if ! cmp -s "dist${asset}" live-asset.tmp; then
+              echo "ERROR: Live asset differs: $asset"
+              exit 1
+            fi
+
+            echo "Verified: $asset"
+
           done < expected-assets.txt
 
-          echo "Live website assets match build"
+          echo "SUCCESS: Live website matches build"
 
-      # Step 11: Summary
+
+      # Step 13: Deployment Summary
       - name: Deployment Summary
         if: success()
         run: |
           echo "## Deployment Successful" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "- Website: $WEBSITE_URL" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Branch: main" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Branch: $GITHUB_REF_NAME" >> "$GITHUB_STEP_SUMMARY"
           echo "- Commit: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Environment: development" >> "$GITHUB_STEP_SUMMARY"
           echo "- Framework: React + Vite" >> "$GITHUB_STEP_SUMMARY"
           echo "- Document root: public_html" >> "$GITHUB_STEP_SUMMARY"
