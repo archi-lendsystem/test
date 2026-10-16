@@ -70,7 +70,7 @@ jobs:
       - name: Build Application
         env:
           # Optional: configure this repository variable
-          VITE_API_URL: ${{secrets.DEV_WEBSITE_URL}}
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
         run: |
           set -euo pipefail
 
