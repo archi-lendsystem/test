@@ -17,9 +17,9 @@ concurrency:
 jobs:
   deploy:
     if: github.ref == 'refs/heads/staging'
-    name: Build and Deploy React Vite
+    name: Build Audit and Deploy React Vite
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     environment:
       name: development
@@ -52,7 +52,18 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      # Step 4: Run lint and tests
+      # Step 4: NPM Security Audit
+      - name: NPM Security Audit
+        run: |
+          set -euo pipefail
+
+          echo "Running dependency security audit..."
+
+          npm audit --audit-level=high
+
+          echo "Security audit passed"
+
+      # Step 5: Run lint and tests
       - name: Lint and Test
         run: |
           set -euo pipefail
@@ -65,10 +76,9 @@ jobs:
             echo "No test script configured"
           fi
 
-      # Step 5: Build React Vite
+      # Step 6: Build React Vite
       - name: Build Application
         env:
-          # Optional: configure this repository variable
           VITE_API_URL: ${{ vars.VITE_API_URL }}
         run: |
           set -euo pipefail
@@ -85,7 +95,28 @@ jobs:
 
           echo "Build completed successfully"
 
-      # Step 6: Prepare deployment metadata
+      # Step 7: Lighthouse Quality Audit
+      - name: Lighthouse Quality Audit
+        run: |
+          set -euo pipefail
+
+          echo "Running Lighthouse CI audit..."
+
+          npx --no-install lhci autorun
+
+          echo "Lighthouse audit completed"
+
+      # Step 8: Upload Lighthouse Reports
+      - name: Upload Lighthouse Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-reports
+          path: lighthouse-reports/
+          retention-days: 14
+          if-no-files-found: warn
+
+      # Step 9: Prepare deployment metadata
       - name: Prepare Deployment Version
         run: |
           set -euo pipefail
@@ -95,7 +126,7 @@ jobs:
 
           echo "Deployment commit: $GITHUB_SHA"
 
-      # Step 7: Create shared rsync exclusions
+      # Step 10: Create rsync exclusions
       - name: Prepare Rsync Exclusions
         run: |
           set -euo pipefail
@@ -110,7 +141,7 @@ jobs:
 
           echo "Shared rsync exclusions created"
 
-      # Step 8: Configure SSH
+      # Step 11: Configure SSH
       - name: Configure SSH
         env:
           SSH_PRIVATE_KEY: ${{ secrets.DEV_SERVER_SSH_KEY }}
@@ -158,7 +189,7 @@ jobs:
 
           echo "SSH configuration complete"
 
-      # Step 9: Test SSH connection
+      # Step 12: Test SSH connection
       - name: Test SSH Connection
         run: |
           set -euo pipefail
@@ -171,7 +202,7 @@ jobs:
 
           echo "SSH connection successful"
 
-      # Step 10: Deploy assets and other files first
+      # Step 13: Deploy application files
       - name: Deploy Application Files
         run: |
           set -euo pipefail
@@ -207,7 +238,7 @@ jobs:
 
           echo "Application deployment completed"
 
-      # Step 11: Verify uploaded files
+      # Step 14: Verify uploaded files
       - name: Verify Uploaded Files
         run: |
           set -euo pipefail
@@ -228,8 +259,7 @@ jobs:
 
           echo "SUCCESS: Uploaded files match build"
 
-      
-      # Step 12: Verify live website
+      # Step 15: Verify live website
       - name: Verify Live Website
         run: |
           set -euo pipefail
@@ -311,16 +341,27 @@ jobs:
 
           echo "SUCCESS: Live website matches build"
 
-
-      # Step 13: Deployment Summary
+      # Step 16: Deployment Summary
       - name: Deployment Summary
-        if: success()
+        if: always()
         run: |
-          echo "## Deployment Successful" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Website: $WEBSITE_URL" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Branch: $GITHUB_REF_NAME" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Commit: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Environment: development" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Framework: React + Vite" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Document root: public_html" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "## Development Deployment Report"
+            echo ""
+            echo "- Website: $WEBSITE_URL"
+            echo "- Branch: $GITHUB_REF_NAME"
+            echo "- Commit: $GITHUB_SHA"
+            echo "- Environment: development"
+            echo "- Framework: React + Vite"
+            echo "- Document root: public_html"
+            echo "- Workflow result: ${{ job.status }}"
+            echo ""
+            echo "### Quality Checks"
+            echo "- NPM Security Audit"
+            echo "- Lint and Tests"
+            echo "- Lighthouse Quality Audit"
+            echo "- SSH and rsync verification"
+            echo "- Live website verification"
+            echo ""
+            echo "Download Lighthouse reports from the workflow artifacts."
+          } >> "$GITHUB_STEP_SUMMARY"
