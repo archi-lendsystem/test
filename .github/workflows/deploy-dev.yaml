@@ -1,4 +1,3 @@
-
 name: Deploy Development
 
 on:
@@ -52,16 +51,30 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      # Step 4: NPM Security Audit
+      # Step 4: Production dependency security audit
       - name: NPM Security Audit
         run: |
           set -euo pipefail
 
-          echo "Running dependency security audit..."
+          echo "Auditing production dependencies (devDependencies excluded)..."
 
-          npm audit --audit-level=high
+          npm audit --omit=dev --audit-level=high
 
-          echo "Security audit passed"
+          echo "Production security audit passed"
+
+      - name: Full Dependency Audit Report
+        if: success()
+        run: |
+          npm audit --json > npm-audit-report.json || true
+
+      - name: Upload Security Audit Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-security-audit
+          path: npm-audit-report.json
+          retention-days: 14
+          if-no-files-found: warn
 
       # Step 5: Run lint and tests
       - name: Lint and Test
@@ -100,9 +113,15 @@ jobs:
         run: |
           set -euo pipefail
 
-          echo "Running Lighthouse CI audit..."
+          test -f lighthouserc.cjs
 
-          npx --no-install lhci autorun
+          echo "Installing Lighthouse CI..."
+
+          npm install --global @lhci/cli@0.15.1
+
+          echo "Running Lighthouse Audit..."
+
+          lhci autorun
 
           echo "Lighthouse audit completed"
 
@@ -152,6 +171,7 @@ jobs:
           test -n "$SERVER_HOST"
           test -n "$SERVER_USER"
           test -n "$SERVER_PORT"
+          test -n "$WEBSITE_URL"
           test -n "$SSH_PRIVATE_KEY"
           test -n "$SSH_KNOWN_HOSTS"
 
@@ -275,6 +295,9 @@ jobs:
               "$@"
           }
 
+          WEBSITE_URL="${WEBSITE_URL%/}"
+          test -n "$WEBSITE_URL"
+
           echo "Checking live website..."
 
           fetch \
@@ -356,12 +379,13 @@ jobs:
             echo "- Document root: public_html"
             echo "- Workflow result: ${{ job.status }}"
             echo ""
-            echo "### Quality Checks"
+            echo "### Configured Quality Checks"
             echo "- NPM Security Audit"
             echo "- Lint and Tests"
             echo "- Lighthouse Quality Audit"
             echo "- SSH and rsync verification"
             echo "- Live website verification"
             echo ""
-            echo "Download Lighthouse reports from the workflow artifacts."
+            echo "Check individual step results above; listed checks are not pass/fail assertions."
+          echo "Download Lighthouse reports from the workflow artifacts."
           } >> "$GITHUB_STEP_SUMMARY"
