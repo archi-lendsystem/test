@@ -1,0 +1,202 @@
+{
+    "$schema": "https://getcomposer.org/schema.json",
+    "name": "laravel/laravel",
+    "type": "project",
+    "description": "The skeleton application for the Laravel framework.",
+    "keywords": [
+        "laravel",
+        "framework"
+    ],
+    "license": "MIT",
+    "require": {
+        "php": "^8.2",
+        "barryvdh/laravel-dompdf": "^3.1",
+        "laravel/framework": "^12.0",
+        "laravel/horizon": "^5.46",
+        "laravel/pulse": "^1.7",
+        "laravel/sanctum": "^4.3",
+        "laravel/tinker": "^2.10.1",
+        "nwidart/laravel-modules": "^12.0",
+        "phpoffice/phpspreadsheet": "^5.9",
+        "setasign/fpdf": "^1.8",
+        "setasign/fpdi": "^2.6"
+    },
+    "require-dev": {
+        "dedoc/scramble": "^0.13.22",
+        "fakerphp/faker": "^1.23",
+        "laravel/pail": "^1.2.2",
+        "laravel/pint": "^1.29",
+        "laravel/sail": "^1.41",
+        "mockery/mockery": "^1.6",
+        "nunomaduro/collision": "^8.6",
+        "phpunit/phpunit": "^11.5.50"
+    },
+    "autoload": {
+        "psr-4": {
+            "App\\": "app/",
+            "Modules\\BranchMonitoring\\": "Modules/BranchMonitoring/app/",
+            "Modules\\BranchMonitoring\\Database\\Seeders\\": "Modules/BranchMonitoring/database/seeders/",
+            "Modules\\Auth\\": "Modules/Auth/app/",
+            "Modules\\UserManagement\\": "Modules/UserManagement/app/",
+            "Modules\\UserManagement\\Database\\Seeders\\": "Modules/UserManagement/database/seeders/",
+            "Modules\\Product\\": "Modules/Product/app/",
+            "Modules\\Product\\Database\\Seeders\\": "Modules/Product/database/seeders/",
+           
+            "Modules\\PinCode\\": "Modules/PinCode/app/",
+            "Modules\\Pan\\": "Modules/Pan/app/",
+            "Modules\\Seller\\": "Modules/Seller/app/",
+            "Modules\\SellerDetail\\": "Modules/SellerDetail/app/",
+
+            "Modules\\Property\\": "Modules/Property/app/",
+            "Modules\\PropertyVisitReport\\": "Modules/PropertyVisitReport/app/",
+            "Modules\\PropertyDetail\\": "Modules/PropertyDetail/app/",
+
+            "Modules\\Experian\\": "Modules/Experian/app/",
+            "Modules\\Transunion\\": "Modules/Transunion/app/",
+          
+            "Modules\\DltSms\\": "Modules/DltSms/app/",
+
+            "Modules\\BLLeadCreation\\": "Modules/BLLeadCreation/app/",
+            "Modules\\BLAmortization\\": "Modules/BLAmortization/app/",
+            "Modules\\Customers\\": "Modules/Customers/app/",
+             "Modules\\LUCReport\\": "Modules/LUCReport/app/",
+             "Modules\\DemandVsCollection\\": "Modules/DemandVsCollection/app/",
+            "Modules\\Customers\\Database\\Seeders\\": "Modules/Customers/database/seeders/",
+             "Modules\\BLSchemeSelect\\": "Modules/BLSchemeSelect/app/",
+            "Modules\\BLLeadCreation\\Database\\Seeders\\": "Modules/BLLeadCreation/database/seeders/",
+            "Modules\\BLApplicant\\": "Modules/BLApplicant/app/",
+            "Modules\\BLApplicantDetails\\": "Modules/BLApplicantDetails/app/",
+            "Modules\\BLExperianReportGenrate\\": "Modules/BLExperianReportGenrate/app/",
+            "Modules\\BLWorkDetails\\": "Modules/BLWorkDetails/app/",
+            "Modules\\BLLeads\\": "Modules/BLLeads/app/",
+             "Modules\\BLWorkflow\\Database\\Seeders\\": "Modules/BLWorkflow/database/seeders/",
+            "Modules\\BLBusinessDetails\\": "Modules/BLBusinessDetails/app/",
+            "Modules\\BLApplicantRole\\": "Modules/BLApplicantRole/app/",
+            "Modules\\BLApplicantRoleDetails\\": "Modules/BLApplicantRoleDetails/app/",
+            "Modules\\BLReference\\": "Modules/BLReference/app/",
+            "Modules\\BLReferenceDetails\\": "Modules/BLReferenceDetails/app/",
+            "Modules\\BLBankDetails\\": "Modules/BLBankDetails/app/",
+            "Modules\\BLDocumentCheckList\\": "Modules/BLDocumentCheckList/app/",
+            "Modules\\BLDocumentCheckList\\Database\\Seeders\\": "Modules/BLDocumentCheckList/database/seeders/",
+            "Modules\\BLDocumentUpload\\": "Modules/BLDocumentUpload/app/",
+            "Modules\\BLLeadSubmit\\": "Modules/BLLeadSubmit/app/",
+            "Modules\\BLLeadAssignment\\": "Modules/BLLeadAssignment/app/",
+            "Modules\\BLBankAnalyzer\\": "Modules/BLBankAnalyzer/app/",
+            "Modules\\BLDedupe\\": "Modules/BLDedupe/app/",
+            "Modules\\BLCreditVisitReport\\": "Modules/BLCreditVisitReport/app/",
+            "Modules\\BLIMDDetails\\": "Modules/BLIMDDetails/app/",
+            "Modules\\BLIMDDetailsVerification\\": "Modules/BLIMDDetailsVerification/app/",
+            "Modules\\BLReferenceVerification\\": "Modules/BLReferenceVerification/app/",
+            "Modules\\BLIncomeAnalyzer\\": "Modules/BLIncomeAnalyzer/app/",
+            "Modules\\BLTeleVerification\\": "Modules/BLTeleVerification/app/",
+            "Modules\\BLCam\\": "Modules/BLCam/app/",
+            "Modules\\BLCaseDiscusion\\": "Modules/BLCaseDiscusion/app/",
+            "Modules\\BLSaction\\": "Modules/BLSaction/app/",
+            "Modules\\BLApproval\\": "Modules/BLApproval/app/",
+            "Modules\\BLSelectLenders\\": "Modules/BLSelectLenders/app/",
+            "Modules\\BLDisbursment\\": "Modules/BLDisbursment/app/",
+            "Modules\\BLTemplate\\": "Modules/BLTemplate/app/",
+            "Modules\\BLLeadApplication\\": "Modules/BLLeadApplication/app/",
+            "Modules\\BLJourney\\": "Modules/BLJourney/app/",
+            "Modules\\BLMyTask\\": "Modules/BLMyTask/app/",
+            "Modules\\BLWorkflow\\": "Modules/BLWorkflow/app/",
+            "Modules\\BLOfficeDetails\\": "Modules/BLOfficeDetails/app/",
+            "Modules\\CibilSubmission\\" : "Modules/CibilSubmission/app/",
+            "Modules\\CrifSubmission\\" : "Modules/CrifSubmission/app/",
+            "Modules\\BLSanctionCondition\\": "Modules/BLSanctionCondition/app/",
+            "Modules\\BLSanctionCondition\\Database\\Seeders\\": "Modules/BLSanctionCondition/database/seeders/",
+            "Modules\\BLInsurance\\": "Modules/BLInsurance/app/",
+            "Modules\\Insurance\\": "Modules/Insurance/app/",
+             "Modules\\Repayment\\": "Modules/Repayment/app/",
+            "Modules\\Dashboard\\": "Modules/Dashboard/app/",
+            "Modules\\BLLeadTopBar\\": "Modules/BLLeadTopBar/app/",
+            "Modules\\PaydayLoanPartner\\": "Modules/PaydayLoanPartner/app/",
+            "Modules\\PaydayPartnerCases\\": "Modules/PaydayPartnerCases/app/",
+            "Modules\\PaydayPartnerCases\\Database\\Seeders\\": "Modules/PaydayPartnerCases/database/seeders/",
+            "Modules\\UserProfile\\": "Modules/UserProfile/app/",
+            "Modules\\ProductScheme\\": "Modules/ProductScheme/app/",
+            "Modules\\ProductScheme\\Database\\Seeders\\": "Modules/ProductScheme/database/seeders/",
+            "Modules\\ESign\\": "Modules/ESign/app/",
+            "Modules\\NatureOfBusiness\\": "Modules/NatureOfBusiness/app/",
+            "Modules\\LUC\\": "Modules/LUC/app/",
+            "Modules\\Charges\\": "Modules/Charges/app/",
+            "Modules\\DPD\\": "Modules/DPD/app/",
+            "Modules\\FollowUpPTP\\": "Modules/FollowUpPTP/app/",
+            "Modules\\NPA\\": "Modules/NPA/app/",
+            "Modules\\Foreclosure\\": "Modules/Foreclosure/app/",
+            "Modules\\NOC\\": "Modules/NOC/app/",
+            "Modules\\Settlement\\": "Modules/Settlement/app/",
+            "Modules\\Notification\\": "Modules/Notification/app/",
+            "Modules\\DemandReport\\": "Modules/DemandReport/app/",
+            "Modules\\DemandNotice\\": "Modules/DemandNotice/app/",
+            "Modules\\CollectionReport\\": "Modules/CollectionReport/app/",
+            "Modules\\EmiStatement\\": "Modules/EmiStatement/app/",
+            "Modules\\RCU\\": "Modules/RCU/app/",
+            "Modules\\Crif\\": "Modules/Crif/app/",
+            "Modules\\OverdueCollection\\": "Modules/OverdueCollection/app/",
+            "Modules\\BLReports\\": "Modules/BLReports/app/",
+            "Modules\\Reports\\": "Modules/Reports/app/",
+            "Database\\Factories\\": "database/factories/",
+            "Database\\Seeders\\": "database/seeders/"
+            
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "setup": [
+            "composer install",
+            "@php -r \"file_exists('.env') || copy('.env.example', '.env');\"",
+            "@php artisan key:generate",
+            "@php artisan migrate --force",
+            "npm install",
+            "npm run build"
+        ],
+        "dev": [
+            "Composer\\Config::disableProcessTimeout",
+            "npx concurrently -c \"#93c5fd,#c4b5fd,#fb7185,#fdba74\" \"php artisan serve\" \"php artisan queue:listen --tries=1 --timeout=0\" \"php artisan pail --timeout=0\" \"npm run dev\" --names=server,queue,logs,vite --kill-others"
+        ],
+        "test": [
+            "@php artisan config:clear --ansi",
+            "@php artisan test"
+        ],
+        "post-autoload-dump": [
+            "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
+            "@php artisan package:discover --ansi"
+        ],
+        "post-update-cmd": [
+            "@php artisan vendor:publish --tag=laravel-assets --ansi --force"
+        ],
+        "post-root-package-install": [
+            "@php -r \"file_exists('.env') || copy('.env.example', '.env');\""
+        ],
+        "post-create-project-cmd": [
+            "@php artisan key:generate --ansi",
+            "@php -r \"file_exists('database/database.sqlite') || touch('database/database.sqlite');\"",
+            "@php artisan migrate --graceful --ansi"
+        ],
+        "pre-package-uninstall": [
+            "Illuminate\\Foundation\\ComposerScripts::prePackageUninstall"
+        ]
+    },
+    "extra": {
+        "laravel": {
+            "dont-discover": []
+        }
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "preferred-install": "dist",
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true,
+            "php-http/discovery": true,
+            "wikimedia/composer-merge-plugin": true
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}

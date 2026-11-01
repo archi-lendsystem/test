@@ -1,0 +1,30 @@
+{
+    "name": "nwidart/natureofbusiness",
+    "description": "",
+    "authors": [
+        {
+            "name": "Nicolas Widart",
+            "email": "n.widart@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\NatureOfBusiness\\": "app/",
+            "Modules\\NatureOfBusiness\\Database\\Factories\\": "database/factories/",
+            "Modules\\NatureOfBusiness\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\NatureOfBusiness\\Tests\\": "tests/"
+        }
+    }
+}

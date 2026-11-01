@@ -1,0 +1,30 @@
+{
+    "name": "nwidart/blmytask",
+    "description": "",
+    "authors": [
+        {
+            "name": "Nicolas Widart",
+            "email": "n.widart@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\BLMyTask\\": "app/",
+            "Modules\\BLMyTask\\Database\\Factories\\": "database/factories/",
+            "Modules\\BLMyTask\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\BLMyTask\\Tests\\": "tests/"
+        }
+    }
+}

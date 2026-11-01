@@ -1,0 +1,11 @@
+{
+    "name": "BLReferenceDetails",
+    "alias": "blreferencedetails",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\BLReferenceDetails\\Providers\\BLReferenceDetailsServiceProvider"
+    ],
+    "files": []
+}

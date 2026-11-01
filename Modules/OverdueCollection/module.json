@@ -1,0 +1,11 @@
+{
+    "name": "OverdueCollection",
+    "alias": "overduecollection",
+    "description": "Live 'who owes what today' report — overdue accounts with source, branch, disbursement, and charges rolled in.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\OverdueCollection\\Providers\\OverdueCollectionServiceProvider"
+    ],
+    "files": []
+}

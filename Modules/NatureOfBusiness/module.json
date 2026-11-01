@@ -1,0 +1,11 @@
+{
+    "name": "NatureOfBusiness",
+    "alias": "natureofbusiness",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\NatureOfBusiness\\Providers\\NatureOfBusinessServiceProvider"
+    ],
+    "files": []
+}

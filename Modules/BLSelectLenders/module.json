@@ -1,0 +1,11 @@
+{
+    "name": "BLSelectLenders",
+    "alias": "blselectlenders",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\BLSelectLenders\\Providers\\BLSelectLendersServiceProvider"
+    ],
+    "files": []
+}

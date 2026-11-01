@@ -1,0 +1,11 @@
+{
+    "name": "BLApplicantRoleDetails",
+    "alias": "blapplicantroledetails",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\BLApplicantRoleDetails\\Providers\\BLApplicantRoleDetailsServiceProvider"
+    ],
+    "files": []
+}

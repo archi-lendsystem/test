@@ -1,0 +1,30 @@
+{
+    "name": "nwidart/paydaypartnercases",
+    "description": "",
+    "authors": [
+        {
+            "name": "Nicolas Widart",
+            "email": "n.widart@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\PaydayPartnerCases\\": "app/",
+            "Modules\\PaydayPartnerCases\\Database\\Factories\\": "database/factories/",
+            "Modules\\PaydayPartnerCases\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\PaydayPartnerCases\\Tests\\": "tests/"
+        }
+    }
+}

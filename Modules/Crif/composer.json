@@ -1,0 +1,30 @@
+{
+    "name": "nwidart/crif",
+    "description": "",
+    "authors": [
+        {
+            "name": "Nicolas Widart",
+            "email": "n.widart@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\Crif\\": "app/",
+            "Modules\\Crif\\Database\\Factories\\": "database/factories/",
+            "Modules\\Crif\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\Crif\\Tests\\": "tests/"
+        }
+    }
+}

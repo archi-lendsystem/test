@@ -1,0 +1,11 @@
+{
+    "name": "BLCreditVisitReport",
+    "alias": "blcreditvisitreport",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\BLCreditVisitReport\\Providers\\BLCreditVisitReportServiceProvider"
+    ],
+    "files": []
+}

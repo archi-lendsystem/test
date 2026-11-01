@@ -1,0 +1,11 @@
+{
+    "name": "BLDedupe",
+    "alias": "bldedupe",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\BLDedupe\\Providers\\BLDedupeServiceProvider"
+    ],
+    "files": []
+}

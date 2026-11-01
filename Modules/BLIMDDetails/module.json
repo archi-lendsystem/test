@@ -1,0 +1,11 @@
+{
+    "name": "BLIMDDetails",
+    "alias": "blimddetails",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\BLIMDDetails\\Providers\\BLIMDDetailsServiceProvider"
+    ],
+    "files": []
+}

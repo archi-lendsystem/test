@@ -1,0 +1,11 @@
+{
+    "name": "PropertyDetail",
+    "alias": "propertydetail",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\PropertyDetail\\Providers\\PropertyDetailServiceProvider"
+    ],
+    "files": []
+}

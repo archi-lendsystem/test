@@ -1,0 +1,11 @@
+{
+    "name": "BranchMonitoring",
+    "alias": "branchmonitoring",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\BranchMonitoring\\Providers\\BranchMonitoringServiceProvider"
+    ],
+    "files": []
+}

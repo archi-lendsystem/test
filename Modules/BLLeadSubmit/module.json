@@ -1,0 +1,11 @@
+{
+    "name": "BLLeadSubmit",
+    "alias": "blleadsubmit",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\BLLeadSubmit\\Providers\\BLLeadSubmitServiceProvider"
+    ],
+    "files": []
+}

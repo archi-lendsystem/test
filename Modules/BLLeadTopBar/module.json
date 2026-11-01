@@ -1,0 +1,11 @@
+{
+    "name": "BLLeadTopBar",
+    "alias": "blleadtopbar",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\BLLeadTopBar\\Providers\\BLLeadTopBarServiceProvider"
+    ],
+    "files": []
+}

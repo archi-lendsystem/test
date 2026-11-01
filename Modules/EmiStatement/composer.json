@@ -1,0 +1,30 @@
+{
+    "name": "nwidart/emistatement",
+    "description": "",
+    "authors": [
+        {
+            "name": "Nicolas Widart",
+            "email": "n.widart@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\EmiStatement\\": "app/",
+            "Modules\\EmiStatement\\Database\\Factories\\": "database/factories/",
+            "Modules\\EmiStatement\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\EmiStatement\\Tests\\": "tests/"
+        }
+    }
+}

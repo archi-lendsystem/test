@@ -1,0 +1,30 @@
+{
+    "name": "nwidart/npa",
+    "description": "",
+    "authors": [
+        {
+            "name": "Nicolas Widart",
+            "email": "n.widart@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\NPA\\": "app/",
+            "Modules\\NPA\\Database\\Factories\\": "database/factories/",
+            "Modules\\NPA\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\NPA\\Tests\\": "tests/"
+        }
+    }
+}

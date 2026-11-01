@@ -1,0 +1,30 @@
+{
+    "name": "nwidart/transunion",
+    "description": "",
+    "authors": [
+        {
+            "name": "Nicolas Widart",
+            "email": "n.widart@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\Transunion\\": "app/",
+            "Modules\\Transunion\\Database\\Factories\\": "database/factories/",
+            "Modules\\Transunion\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\Transunion\\Tests\\": "tests/"
+        }
+    }
+}

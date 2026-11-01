@@ -1,0 +1,11 @@
+{
+    "name": "BLDocumentCheckList",
+    "alias": "bldocumentchecklist",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\BLDocumentCheckList\\Providers\\BLDocumentCheckListServiceProvider"
+    ],
+    "files": []
+}

@@ -1,0 +1,30 @@
+{
+    "name": "nwidart/noc",
+    "description": "",
+    "authors": [
+        {
+            "name": "Nicolas Widart",
+            "email": "n.widart@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\NOC\\": "app/",
+            "Modules\\NOC\\Database\\Factories\\": "database/factories/",
+            "Modules\\NOC\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\NOC\\Tests\\": "tests/"
+        }
+    }
+}

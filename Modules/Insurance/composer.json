@@ -1,0 +1,30 @@
+{
+    "name": "nwidart/insurance",
+    "description": "",
+    "authors": [
+        {
+            "name": "Nicolas Widart",
+            "email": "n.widart@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\Insurance\\": "app/",
+            "Modules\\Insurance\\Database\\Factories\\": "database/factories/",
+            "Modules\\Insurance\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\Insurance\\Tests\\": "tests/"
+        }
+    }
+}

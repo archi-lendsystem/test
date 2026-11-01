@@ -1,0 +1,30 @@
+{
+    "name": "nwidart/bldocumentupload",
+    "description": "",
+    "authors": [
+        {
+            "name": "Nicolas Widart",
+            "email": "n.widart@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\BLDocumentUpload\\": "app/",
+            "Modules\\BLDocumentUpload\\Database\\Factories\\": "database/factories/",
+            "Modules\\BLDocumentUpload\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\BLDocumentUpload\\Tests\\": "tests/"
+        }
+    }
+}

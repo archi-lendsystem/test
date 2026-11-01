@@ -1,0 +1,11 @@
+{
+    "name": "PropertyVisitReport",
+    "alias": "propertyvisitreport",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\PropertyVisitReport\\Providers\\PropertyVisitReportServiceProvider"
+    ],
+    "files": []
+}

@@ -1,0 +1,11 @@
+{
+    "name": "Experian",
+    "alias": "experian",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Experian\\Providers\\ExperianServiceProvider"
+    ],
+    "files": []
+}

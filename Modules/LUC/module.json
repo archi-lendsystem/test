@@ -1,0 +1,11 @@
+{
+    "name": "LUC",
+    "alias": "luc",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\LUC\\Providers\\LUCServiceProvider"
+    ],
+    "files": []
+}

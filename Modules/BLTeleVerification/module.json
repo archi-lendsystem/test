@@ -1,0 +1,11 @@
+{
+    "name": "BLTeleVerification",
+    "alias": "blteleverification",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\BLTeleVerification\\Providers\\BLTeleVerificationServiceProvider"
+    ],
+    "files": []
+}

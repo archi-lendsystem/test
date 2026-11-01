@@ -1,0 +1,11 @@
+{
+    "name": "BLSaction",
+    "alias": "blsaction",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\BLSaction\\Providers\\BLSactionServiceProvider"
+    ],
+    "files": []
+}

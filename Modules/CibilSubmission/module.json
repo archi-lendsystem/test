@@ -1,0 +1,11 @@
+{
+    "name": "CibilSubmission",
+    "alias": "cibilsubmission",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\CibilSubmission\\Providers\\CibilSubmissionServiceProvider"
+    ],
+    "files": []
+}

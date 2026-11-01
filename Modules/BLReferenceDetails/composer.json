@@ -1,0 +1,30 @@
+{
+    "name": "nwidart/blreferencedetails",
+    "description": "",
+    "authors": [
+        {
+            "name": "Nicolas Widart",
+            "email": "n.widart@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\BLReferenceDetails\\": "app/",
+            "Modules\\BLReferenceDetails\\Database\\Factories\\": "database/factories/",
+            "Modules\\BLReferenceDetails\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\BLReferenceDetails\\Tests\\": "tests/"
+        }
+    }
+}

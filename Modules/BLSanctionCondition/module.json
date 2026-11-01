@@ -1,0 +1,11 @@
+{
+    "name": "BLSanctionCondition",
+    "alias": "blsanctioncondition",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\BLSanctionCondition\\Providers\\BLSanctionConditionServiceProvider"
+    ],
+    "files": []
+}
