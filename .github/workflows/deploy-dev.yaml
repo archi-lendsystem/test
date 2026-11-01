@@ -50,3 +50,4 @@ jobs:
             php artisan config:cache
 
             echo "Development deployment successful"
+            
