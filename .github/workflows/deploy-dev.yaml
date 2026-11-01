@@ -1,0 +1,52 @@
+name: Deploy Laravel Development
+
+on:
+  push:
+    branches:
+      - development
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to Development Server
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEV_SERVER_HOST }}
+          username: ${{ secrets.DEV_SERVER_USER }}
+          key: ${{ secrets.DEV_SERVER_SSH_KEY }}
+          port: ${{ secrets.DEV_SERVER_PORT }}
+          script_stop: true
+          script: |
+            set -e
+
+            export PATH="/opt/cpanel/ea-php84/root/usr/bin:$HOME/.local/bin:$PATH"
+
+            cd "${{ secrets.DEV_DEPLOY_PATH }}"
+
+            test -f .env || {
+              echo "ERROR: .env file missing"
+              exit 1
+            }
+
+            git fetch origin development
+            git reset --hard origin/development
+
+            php -v
+
+            composer install \
+              --no-dev \
+              --prefer-dist \
+              --no-interaction \
+              --optimize-autoloader
+
+            php artisan config:clear
+            php artisan config:cache
+
+            echo "Development deployment successful"
