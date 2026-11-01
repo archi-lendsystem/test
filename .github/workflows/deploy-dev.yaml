@@ -3,7 +3,7 @@ name: Deploy Laravel Development
 on:
   push:
     branches:
-      - development
+      - staging
   workflow_dispatch:
 
 permissions:
@@ -50,4 +50,3 @@ jobs:
             php artisan config:cache
 
             echo "Development deployment successful"
-            
