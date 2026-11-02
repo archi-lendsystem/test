@@ -11,218 +11,323 @@ permissions:
   contents: read
 
 concurrency:
-  group: laravel-staging-deployment
+  group: laravel-staging-deploy
   cancel-in-progress: false
 
 jobs:
   deploy:
-    name: Deploy backend
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+    name: Deploy Laravel to cPanel
+    runs-on: [self-hosted, macOS]
+    timeout-minutes: 30
+
+    defaults:
+      run:
+        shell: bash
+
+    env:
+      DEPLOY_PATH: backend-api
 
     steps:
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.2.0
-        env:
-          REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
-
+      # ====================================
+      # 1. Checkout staging branch
+      # ====================================
+      - name: Checkout Laravel project
+        uses: actions/checkout@v4
         with:
-          host: ${{ secrets.DEV_SERVER_HOST }}
-          username: ${{ secrets.DEV_SERVER_USER }}
-          key: ${{ secrets.DEV_SERVER_SSH_KEY }}
-          port: ${{ secrets.DEV_SERVER_PORT }}
-          envs: REPO_URL
-          command_timeout: 15m
+          ref: staging
+          persist-credentials: false
 
-          script: |
-            set -eu
+      # ====================================
+      # 2. Verify local .env
+      # ====================================
+      - name: Validate local .env
+        run: |
+          set -euo pipefail
 
-            export PATH="/opt/cpanel/ea-php84/root/usr/bin:$HOME/.local/bin:$PATH"
+          # CHANGE THIS TO YOUR LOCAL PROJECT PATH
+          LOCAL_PROJECT="/Users/YOUR_USERNAME/path/to/test"
+          LOCAL_ENV="$LOCAL_PROJECT/.env"
 
-            DEPLOY_PATH="$HOME/backend-api"
+          echo "Checking local environment"
 
-            echo "===================================="
-            echo "Starting Laravel deployment"
-            echo "===================================="
+          if [ ! -s "$LOCAL_ENV" ]; then
+            echo "::error::Local .env missing or empty"
+            exit 1
+          fi
 
-            echo "Connected to server"
-            whoami
+          if [ ! -r "$LOCAL_ENV" ]; then
+            echo "::error::Cannot read local .env"
+            exit 1
+          fi
 
-            # --------------------------------
-            # 1. Prepare directory
-            # --------------------------------
+          if git ls-files --error-unmatch .env \
+              >/dev/null 2>&1; then
+            echo "::error::.env is tracked in Git"
+            exit 1
+          fi
 
-            mkdir -p "$DEPLOY_PATH"
-            cd "$DEPLOY_PATH"
+          echo "LOCAL_ENV=$LOCAL_ENV" >> "$GITHUB_ENV"
 
-            echo "Deployment path: $DEPLOY_PATH"
+          echo "Local .env verified"
 
-            # --------------------------------
-            # 2. Clone or update repository
-            # --------------------------------
+      # ====================================
+      # 3. Configure secure SSH
+      # ====================================
+      - name: Configure SSH
+        env:
+          SSH_HOST: ${{ secrets.DEV_SERVER_HOST }}
+          SSH_USER: ${{ secrets.DEV_SERVER_USER }}
+          SSH_PORT: ${{ secrets.DEV_SERVER_PORT }}
+          SSH_KEY: ${{ secrets.DEV_SERVER_SSH_KEY }}
+          SSH_HOST_KEY: ${{ secrets.DEV_SERVER_HOST_KEY }}
+        run: |
+          set -euo pipefail
 
-            if [ ! -d .git ]; then
+          SSH_DIR="$RUNNER_TEMP/laravel-ssh"
+          mkdir -p "$SSH_DIR"
+          chmod 700 "$SSH_DIR"
 
-              echo "First-time deployment"
+          if [ -z "$SSH_KEY" ] || [ -z "$SSH_HOST_KEY" ]; then
+            echo "::error::SSH key or host verification missing"
+            exit 1
+          fi
 
-              # Clone into a temporary directory to
-              # preserve existing server-side files.
+          printf '%s\n' "$SSH_KEY" > "$SSH_DIR/id_deploy"
+          printf '%s\n' "$SSH_HOST_KEY" > "$SSH_DIR/known_hosts"
 
-              TEMP_REPO=$(mktemp -d "$HOME/laravel-clone.XXXXXX")
+          chmod 600 "$SSH_DIR/id_deploy"
+          chmod 600 "$SSH_DIR/known_hosts"
 
-              git clone \
-                --branch staging \
-                --single-branch \
-                "$REPO_URL" \
-                "$TEMP_REPO"
+          {
+            echo "Host cpanel-deploy"
+            echo "  HostName $SSH_HOST"
+            echo "  User $SSH_USER"
+            echo "  Port ${SSH_PORT:-22}"
+            echo "  IdentityFile $SSH_DIR/id_deploy"
+            echo "  UserKnownHostsFile $SSH_DIR/known_hosts"
+            echo "  StrictHostKeyChecking yes"
+            echo "  IdentitiesOnly yes"
+            echo "  BatchMode yes"
+          } > "$SSH_DIR/config"
 
-              # Refuse to overwrite pre-existing files
-              # other than the server-side .env.
+          chmod 600 "$SSH_DIR/config"
 
-              if [ -n "$(find "$DEPLOY_PATH" -mindepth 1 -maxdepth 1 ! -name .env -print -quit)" ]; then
-                echo "ERROR: Deployment directory contains other files"
-                rm -rf "$TEMP_REPO"
-                exit 1
-              fi
+          echo "SSH configured"
 
-              cp -R "$TEMP_REPO/." "$DEPLOY_PATH/"
-              rm -rf "$TEMP_REPO"
+      # ====================================
+      # 4. Verify server connection
+      # ====================================
+      - name: Test SSH connection
+        run: |
+          set -euo pipefail
 
-            else
+          ssh -F "$RUNNER_TEMP/laravel-ssh/config" \
+            cpanel-deploy \
+            'echo "Connected to cPanel server"'
 
-              echo "Updating staging branch"
+      # ====================================
+      # 5. Package source code
+      # ====================================
+      - name: Package Laravel source
+        run: |
+          set -euo pipefail
 
-              git fetch origin staging
-              git reset --hard origin/staging
+          echo "Creating deployment archive"
 
-            fi
+          git archive --format=tar HEAD \
+            | gzip > "$RUNNER_TEMP/laravel-release.tar.gz"
 
-            # --------------------------------
-            # 3. Verify Laravel application
-            # --------------------------------
+          test -s "$RUNNER_TEMP/laravel-release.tar.gz"
 
-            if [ ! -f artisan ]; then
-              echo "ERROR: Laravel artisan missing"
-              exit 1
-            fi
+          echo "Source archive created"
 
-            if [ ! -f composer.json ]; then
-              echo "ERROR: composer.json missing"
-              exit 1
-            fi
+      # ====================================
+      # 6. Prepare server directories
+      # ====================================
+      - name: Prepare cPanel directories
+        run: |
+          set -euo pipefail
 
-            # --------------------------------
-            # 4. Verify persistent .env
-            # --------------------------------
+          ssh -F "$RUNNER_TEMP/laravel-ssh/config" \
+            cpanel-deploy 'sh -se' <<'REMOTE'
+          set -eu
+          umask 077
 
-            echo "Checking Laravel environment"
+          mkdir -p "$HOME/backend-api"
+          mkdir -p "$HOME/backend-api/storage"
+          mkdir -p "$HOME/backend-api/bootstrap/cache"
 
-            if git ls-files --error-unmatch .env >/dev/null 2>&1; then
-              echo "ERROR: .env must not be tracked in Git"
-              exit 1
-            fi
+          echo "Server directories ready"
+          REMOTE
 
-            if [ ! -s .env ]; then
-              echo "ERROR: .env missing on cPanel"
-              echo "Upload your local .env to:"
-              echo "$DEPLOY_PATH/.env"
-              exit 1
-            fi
+      # ====================================
+      # 7. Upload Laravel source code
+      # ====================================
+      - name: Upload source to cPanel
+        run: |
+          set -euo pipefail
 
-            chmod 600 .env
+          scp -q \
+            -F "$RUNNER_TEMP/laravel-ssh/config" \
+            "$RUNNER_TEMP/laravel-release.tar.gz" \
+            "cpanel-deploy:backend-api/.release-upload.tar.gz"
 
-            echo "Laravel .env verified"
+          echo "Source uploaded successfully"
 
-            # --------------------------------
-            # 5. Check PHP and Composer
-            # --------------------------------
+      # ====================================
+      # 8. Upload local .env
+      # ====================================
+      - name: Upload local environment
+        run: |
+          set -euo pipefail
 
-            echo "Checking PHP"
-            php -v
+          echo "Synchronizing local .env to cPanel"
 
-            echo "Checking Composer"
-            composer --version
+          scp -q \
+            -F "$RUNNER_TEMP/laravel-ssh/config" \
+            "$LOCAL_ENV" \
+            "cpanel-deploy:backend-api/.env.upload"
 
-            # --------------------------------
-            # 6. Prepare writable directories
-            # --------------------------------
+          echo ".env transferred securely"
 
-            echo "Preparing Laravel directories"
+      # ====================================
+      # 9. Deploy and configure Laravel
+      # ====================================
+      - name: Deploy Laravel application
+        run: |
+          set -euo pipefail
 
-            mkdir -p \
-              storage/app/public \
-              storage/framework/cache/data \
-              storage/framework/sessions \
-              storage/framework/views \
-              storage/logs \
-              bootstrap/cache
+          ssh -F "$RUNNER_TEMP/laravel-ssh/config" \
+            cpanel-deploy 'bash -se' <<'REMOTE'
 
-            chmod -R u+rwX storage bootstrap/cache
+          set -euo pipefail
+          umask 077
 
-            # --------------------------------
-            # 7. Install dependencies
-            # --------------------------------
+          export PATH="/opt/cpanel/ea-php84/root/usr/bin:$HOME/.local/bin:$PATH"
 
-            echo "Installing Composer dependencies"
+          DEPLOY_PATH="$HOME/backend-api"
+          cd "$DEPLOY_PATH"
 
-            composer install \
-              --no-dev \
-              --prefer-dist \
-              --no-interaction \
-              --no-progress \
-              --optimize-autoloader
+          echo "=================================="
+          echo "Starting Laravel deployment"
+          echo "=================================="
 
-            # --------------------------------
-            # 8. Clear old configuration
-            # --------------------------------
+          # -------------------------------
+          # 1. Validate uploaded files
+          # -------------------------------
+          test -s .release-upload.tar.gz
+          test -s .env.upload
 
-            echo "Clearing Laravel configuration"
+          # -------------------------------
+          # 2. Extract new code
+          # -------------------------------
+          echo "Extracting Laravel source"
 
-            php artisan config:clear
+          tar -xzf .release-upload.tar.gz
 
-            # --------------------------------
-            # 9. Run migrations
-            # --------------------------------
+          test -f artisan
+          test -f composer.json
 
-            echo "Running database migrations"
+          # -------------------------------
+          # 3. Configure environment
+          # -------------------------------
+          echo "Configuring Laravel .env"
 
-            php artisan migrate \
-              --force \
-              --no-interaction
+          chmod 600 .env.upload
+          mv -f .env.upload .env
+          chmod 600 .env
 
-            # --------------------------------
-            # 10. Link public storage
-            # --------------------------------
+          # -------------------------------
+          # 4. Check PHP and Composer
+          # -------------------------------
+          echo "Checking PHP"
+          php -v
 
-            echo "Creating storage link"
+          echo "Checking Composer"
+          composer --version
 
-            php artisan storage:link
+          # -------------------------------
+          # 5. Prepare Laravel directories
+          # -------------------------------
+          echo "Preparing storage directories"
 
-            # --------------------------------
-            # 11. Optimize Laravel
-            # --------------------------------
+          mkdir -p \
+            storage/app/public \
+            storage/framework/cache/data \
+            storage/framework/sessions \
+            storage/framework/views \
+            storage/logs \
+            bootstrap/cache
 
-            echo "Optimizing application"
+          chmod -R u+rwX storage bootstrap/cache
 
-            php artisan config:cache
-            php artisan view:cache
+          # -------------------------------
+          # 6. Install Composer packages
+          # -------------------------------
+          echo "Installing dependencies"
 
-            # --------------------------------
-            # 12. Restart queue workers
-            # --------------------------------
+          composer install \
+            --no-dev \
+            --prefer-dist \
+            --no-interaction \
+            --no-progress \
+            --optimize-autoloader
 
-            echo "Restarting Laravel queues"
+          # -------------------------------
+          # 7. Clear configuration cache
+          # -------------------------------
+          echo "Clearing configuration"
 
-            php artisan queue:restart
+          php artisan config:clear
 
-            # --------------------------------
-            # 13. Verify deployment
-            # --------------------------------
+          # -------------------------------
+          # 8. Run migrations
+          # -------------------------------
+          echo "Running database migrations"
 
-            echo "Checking Laravel application"
+          php artisan migrate \
+            --force \
+            --no-interaction
 
-            php artisan --version
+          # -------------------------------
+          # 9. Link public storage
+          # -------------------------------
+          echo "Linking storage"
 
-            echo "===================================="
-            echo "Laravel deployment successful"
-            echo "===================================="
+          php artisan storage:link
+
+          # -------------------------------
+          # 10. Optimize Laravel
+          # -------------------------------
+          echo "Optimizing application"
+
+          php artisan config:cache
+          php artisan view:cache
+
+          # -------------------------------
+          # 11. Verify deployment
+          # -------------------------------
+          echo "Verifying application"
+
+          php artisan --version
+          php artisan migrate:status
+
+          # -------------------------------
+          # 12. Cleanup uploaded archive
+          # -------------------------------
+          rm -f .release-upload.tar.gz
+
+          echo "=================================="
+          echo "Laravel deployment successful"
+          echo "=================================="
+
+          REMOTE
+
+      # ====================================
+      # 10. Clean local temporary files
+      # ====================================
+      - name: Cleanup deployment files
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP/laravel-ssh"
+          rm -f "$RUNNER_TEMP/laravel-release.tar.gz"
