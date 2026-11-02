@@ -72,20 +72,30 @@ echo "Clearing Laravel caches"
 "$PHP_BIN" artisan view:clear
 "$PHP_BIN" artisan event:clear
 
+
 # ======================================
 # 5. Verify registered API routes
 # ======================================
 echo "Checking API routes"
 
-"$PHP_BIN" artisan route:list --path=api/health \
-  | tee /dev/stderr \
-  | grep -Eq 'api/health'
+HEALTH_ROUTES="$("$PHP_BIN" artisan route:list --path=api/health)"
+AUTH_ROUTES="$("$PHP_BIN" artisan route:list --path=api/v1/auth)"
 
-"$PHP_BIN" artisan route:list --path=api/v1/auth \
-  | tee /dev/stderr \
-  | grep -Eq 'api/v1/auth'
+echo "$HEALTH_ROUTES"
+echo "$AUTH_ROUTES"
 
-echo "Laravel API routes registered"
+if ! grep -Fq 'api/health' <<< "$HEALTH_ROUTES"; then
+    echo "ERROR: Health API route missing"
+    exit 1
+fi
+
+if ! grep -Fq 'api/v1/auth' <<< "$AUTH_ROUTES"; then
+    echo "ERROR: Authentication API routes missing"
+    exit 1
+fi
+
+echo "Laravel API routes registered successfully"
+
 
 # ======================================
 # 6. Database migrations
