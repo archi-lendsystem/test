@@ -18,17 +18,20 @@ jobs:
   deploy:
     name: Deploy Application to cPanel
     runs-on: [self-hosted, macOS, ARM64]
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     defaults:
       run:
         shell: bash
 
     env:
-      LOCAL_ENV_PATH: ${{ vars.LOCAL_ENV_PATH }}
-      REMOTE_DEPLOY_DIR: ${{ vars.REMOTE_DEPLOY_DIR }}
+      # Configure these in GitHub Actions Variables.
+      # Fallbacks are for this existing project only.
+      LOCAL_ENV_PATH: ${{ vars.LOCAL_ENV_PATH || '/Users/archirastogi/Documents/GitHub/test/.env' }}
+      REMOTE_DEPLOY_DIR: ${{ vars.REMOTE_DEPLOY_DIR || 'backend-api' }}
 
     steps:
+
       # ====================================
       # 1. Checkout source code
       # ====================================
@@ -51,7 +54,7 @@ jobs:
           : "${REMOTE_DEPLOY_DIR:?REMOTE_DEPLOY_DIR is missing}"
 
           if [ ! -s "$LOCAL_ENV_PATH" ]; then
-            echo "::error::Local .env missing or empty"
+            echo "::error::Local .env missing or empty: $LOCAL_ENV_PATH"
             exit 1
           fi
 
@@ -61,28 +64,32 @@ jobs:
           fi
 
           if [ ! -f scripts/deploy.sh ]; then
-            echo "::error::scripts/deploy.sh missing"
+            echo "::error::scripts/deploy.sh is missing"
             exit 1
           fi
+
+          bash -n scripts/deploy.sh
 
           if git ls-files --error-unmatch .env \
               >/dev/null 2>&1; then
-            echo "::error::.env is tracked in Git"
+            echo "::error::.env must not be tracked in Git"
             exit 1
           fi
 
-          # Allow only a single safe directory name
+          # Restrict path to one safe directory inside $HOME.
           if [[ ! "$REMOTE_DEPLOY_DIR" =~ ^[A-Za-z0-9_-]+$ ]]; then
-            echo "::error::Invalid deployment directory"
+            echo "::error::Invalid remote deployment directory"
             exit 1
           fi
 
+          echo "Local .env verified"
+          echo "Deployment script verified"
           echo "Configuration validated successfully"
 
       # ====================================
-      # 3. Configure SSH
+      # 3. Configure secure SSH
       # ====================================
-      - name: Configure secure SSH
+      - name: Configure SSH
         env:
           SSH_HOST: ${{ secrets.DEV_SERVER_HOST }}
           SSH_USER: ${{ secrets.DEV_SERVER_USER }}
@@ -91,27 +98,22 @@ jobs:
           KNOWN_HOSTS: ${{ secrets.DEV_SERVER_KNOWN_HOSTS }}
         run: |
           set -euo pipefail
-
-          echo "Configuring SSH"
+          umask 077
 
           : "${SSH_HOST:?SSH host missing}"
           : "${SSH_USER:?SSH username missing}"
-          : "${SSH_KEY:?SSH key missing}"
-          : "${KNOWN_HOSTS:?Known hosts missing}"
+          : "${SSH_KEY:?SSH private key missing}"
+          : "${KNOWN_HOSTS:?SSH known hosts missing}"
 
           SSH_DIR="$RUNNER_TEMP/deploy-ssh"
 
           mkdir -p "$SSH_DIR"
           chmod 700 "$SSH_DIR"
 
-          printf '%s\n' "$SSH_KEY" \
-            > "$SSH_DIR/id_deploy"
+          printf '%s\n' "$SSH_KEY" > "$SSH_DIR/id_deploy"
+          printf '%s\n' "$KNOWN_HOSTS" > "$SSH_DIR/known_hosts"
 
-          printf '%s\n' "$KNOWN_HOSTS" \
-            > "$SSH_DIR/known_hosts"
-
-          chmod 600 "$SSH_DIR/id_deploy"
-          chmod 600 "$SSH_DIR/known_hosts"
+          chmod 600 "$SSH_DIR/id_deploy" "$SSH_DIR/known_hosts"
 
           {
             echo "Host cpanel-deploy"
@@ -124,16 +126,18 @@ jobs:
             echo "  IdentitiesOnly yes"
             echo "  BatchMode yes"
             echo "  ConnectTimeout 15"
+            echo "  ServerAliveInterval 30"
+            echo "  ServerAliveCountMax 5"
           } > "$SSH_DIR/config"
 
           chmod 600 "$SSH_DIR/config"
 
-          echo "SSH configuration completed"
+          echo "SSH configured successfully"
 
       # ====================================
-      # 4. Test SSH connection
+      # 4. Test server connection
       # ====================================
-      - name: Test server connection
+      - name: Test SSH connection
         run: |
           set -euo pipefail
 
@@ -142,23 +146,23 @@ jobs:
             'echo "SSH connection successful"'
 
       # ====================================
-      # 5. Package application
+      # 5. Package application source
       # ====================================
       - name: Package source code
         run: |
           set -euo pipefail
 
-          echo "Packaging application"
+          echo "Creating source archive"
 
           git archive --format=tar HEAD \
             | gzip > "$RUNNER_TEMP/app-release.tar.gz"
 
           test -s "$RUNNER_TEMP/app-release.tar.gz"
 
-          echo "Application package created"
+          echo "Source archive created"
 
       # ====================================
-      # 6. Prepare deployment directory
+      # 6. Prepare remote directory
       # ====================================
       - name: Prepare server directory
         run: |
@@ -184,26 +188,26 @@ jobs:
             "$RUNNER_TEMP/app-release.tar.gz" \
             "cpanel-deploy:$REMOTE_DEPLOY_DIR/.release-upload.tar.gz"
 
-          echo "Application uploaded"
+          echo "Source uploaded successfully"
 
       # ====================================
-      # 8. Upload local .env
+      # 8. Upload local environment
       # ====================================
-      - name: Upload environment
+      - name: Upload local .env
         run: |
           set -euo pipefail
 
-          echo "Uploading local environment"
+          echo "Uploading local .env"
 
           scp -q \
             -F "$RUNNER_TEMP/deploy-ssh/config" \
             "$LOCAL_ENV_PATH" \
             "cpanel-deploy:$REMOTE_DEPLOY_DIR/.env.upload"
 
-          echo "Environment uploaded successfully"
+          echo ".env uploaded successfully"
 
       # ====================================
-      # 9. Execute remote deployment
+      # 9. Execute project deployment
       # ====================================
       - name: Deploy application
         run: |
@@ -212,7 +216,6 @@ jobs:
           ssh -F "$RUNNER_TEMP/deploy-ssh/config" \
             cpanel-deploy \
             "bash -se -- '$REMOTE_DEPLOY_DIR'" <<'REMOTE'
-
           set -euo pipefail
           umask 077
 
@@ -223,47 +226,45 @@ jobs:
           echo "Starting application deployment"
           echo "=================================="
 
-          # Validate uploaded files
+          # 1. Validate uploads
           test -s .release-upload.tar.gz
           test -s .env.upload
 
-          # Extract application
-          echo "Extracting source files"
+          # 2. Extract source
+          echo "Extracting source code"
           tar -xzf .release-upload.tar.gz
 
-          # Configure environment
-          echo "Configuring environment"
+          # 3. Install environment file
+          echo "Installing environment file"
           chmod 600 .env.upload
           mv -f .env.upload .env
           chmod 600 .env
 
-          # Execute framework-specific script
+          # 4. Check deployment script
           if [ ! -f scripts/deploy.sh ]; then
-            echo "ERROR: Deployment script missing"
+            echo "ERROR: scripts/deploy.sh missing"
             exit 1
           fi
 
-          echo "Executing deployment script"
+          bash -n scripts/deploy.sh
 
+          # 5. Execute framework-specific deployment
+          echo "Executing project deployment script"
           bash scripts/deploy.sh
 
-          echo "Framework deployment completed"
-
-          # Cleanup uploaded archive
+          # 6. Cleanup
           rm -f .release-upload.tar.gz
 
           echo "=================================="
-          echo "Deployment successful"
+          echo "Application deployment successful"
           echo "=================================="
-
           REMOTE
 
       # ====================================
-      # 10. Cleanup temporary files
+      # 10. Cleanup local temporary files
       # ====================================
       - name: Cleanup temporary files
         if: always()
         run: |
           rm -rf "$RUNNER_TEMP/deploy-ssh"
           rm -f "$RUNNER_TEMP/app-release.tar.gz"
-          

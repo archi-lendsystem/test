@@ -7,21 +7,32 @@ echo "=================================="
 echo "Laravel deployment started"
 echo "=================================="
 
+# ====================================
 # 1. Configure PHP environment
+# ====================================
 export PATH="/opt/cpanel/ea-php84/root/usr/bin:$HOME/.local/bin:$PATH"
 
-# 2. Verify application
+# ====================================
+# 2. Validate Laravel project
+# ====================================
+echo "Validating Laravel project"
+
 test -f artisan
 test -f composer.json
 test -s .env
 
+# ====================================
+# 3. Check PHP and Composer
+# ====================================
 echo "Checking PHP"
 php -v
 
 echo "Checking Composer"
 composer --version
 
-# 3. Prepare directories
+# ====================================
+# 4. Prepare Laravel directories
+# ====================================
 echo "Preparing Laravel directories"
 
 mkdir -p \
@@ -34,43 +45,68 @@ mkdir -p \
 
 chmod -R u+rwX storage bootstrap/cache
 
-# 4. Install dependencies
+# ====================================
+# 5. Install Composer dependencies
+# ====================================
 echo "Installing Composer dependencies"
 
 composer install \
   --no-dev \
   --prefer-dist \
   --no-interaction \
+  --no-progress \
   --optimize-autoloader \
   -v
 
-# 5. Clear configuration cache
-echo "Clearing Laravel configuration"
+# ====================================
+# 6. Verify Composer autoload
+# ====================================
+echo "Verifying Composer autoload"
 
-php artisan config:clear
+if [ ! -f vendor/autoload.php ]; then
+  echo "ERROR: vendor/autoload.php is missing"
+  exit 1
+fi
 
-# 6. Run database migrations
+echo "Composer dependencies installed successfully"
+
+# ====================================
+# 7. Clear Laravel caches
+# ====================================
+echo "Clearing Laravel caches"
+
+php artisan optimize:clear
+
+# ====================================
+# 8. Run database migrations
+# ====================================
 echo "Running database migrations"
 
 php artisan migrate \
   --force \
   --no-interaction
 
-# 7. Link public storage
+# ====================================
+# 9. Create storage link
+# ====================================
 echo "Creating storage link"
 
 php artisan storage:link
 
-# 8. Optimize application
+# ====================================
+# 10. Optimize Laravel configuration
+# ====================================
 echo "Optimizing Laravel"
 
 php artisan config:cache
 
-# Enable after all Blade views compile correctly.
+# Enable after all Blade issues are fixed
 # php artisan view:cache
 
-# 9. Verify deployment
-echo "Verifying Laravel"
+# ====================================
+# 11. Verify deployment
+# ====================================
+echo "Verifying application"
 
 php artisan --version
 php artisan migrate:status
