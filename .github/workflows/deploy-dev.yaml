@@ -17,7 +17,7 @@ concurrency:
 jobs:
   deploy:
     name: Deploy Laravel to cPanel
-    runs-on: [self-hosted, linux, x64]
+    runs-on: ubuntu-latest
 
     steps:
       - name: Validate local environment
