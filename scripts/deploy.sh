@@ -1,217 +1,97 @@
-
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "=================================="
-echo "Laravel deployment started"
-echo "=================================="
-
-# ====================================
-# 1. Configure server environment
-# ====================================
 export PATH="/opt/cpanel/ea-php84/root/usr/bin:$HOME/.local/bin:$PATH"
-
-APP_DIR="$(pwd)"
-WEB_ROOT="$HOME/public_html"
+APP_DIR="$(pwd -P)"
+REMOTE_WEB_ROOT="${REMOTE_WEB_ROOT:-public_html}"
+WEB_ROOT="$HOME/$REMOTE_WEB_ROOT"
 export WEB_ROOT
+PHP_BIN=/opt/cpanel/ea-php84/root/usr/bin/php
 
-# ====================================
-# 2. Validate Laravel application
-# ====================================
-echo "Validating application"
+echo '=== Laravel deployment ==='
+echo "Application directory: $APP_DIR"
+echo "Published web root: $WEB_ROOT"
 
+# Use an existing directory only for the expected domain, not an arbitrary cPanel account.
 test -f artisan
 test -f composer.json
 test -s .env
 test -f public/index.php
 test -f public/.htaccess
+command -v composer >/dev/null
+"$PHP_BIN" -v | head -n 1
 
-php -v
-composer --version
-
-# ====================================
-# 3. Prepare Laravel directories
-# ====================================
-echo "Preparing Laravel directories"
-
-mkdir -p \
-  storage/app/public \
-  storage/framework/cache/data \
-  storage/framework/sessions \
-  storage/framework/views \
-  storage/logs \
-  bootstrap/cache
-
+mkdir -p storage/app/public storage/framework/cache/data \
+  storage/framework/sessions storage/framework/views storage/logs bootstrap/cache
 chmod -R u+rwX storage bootstrap/cache
 
-# ====================================
-# 4. Install Composer dependencies
-# ====================================
-echo "Installing Composer dependencies"
-
-composer install \
-  --no-dev \
-  --prefer-dist \
-  --no-interaction \
-  --no-progress \
-  --optimize-autoloader \
-  -v
-
+composer install --no-dev --prefer-dist --no-interaction \
+  --no-progress --optimize-autoloader
 test -f vendor/autoload.php
 
-# ====================================
-# 5. Clear Laravel caches
-# ====================================
-echo "Clearing Laravel caches"
+# Clear stale route/config caches without deleting application cache data.
+"$PHP_BIN" artisan route:clear
+"$PHP_BIN" artisan config:clear
+"$PHP_BIN" artisan view:clear
+"$PHP_BIN" artisan event:clear
 
-php artisan optimize:clear
+# Confirm that the newly deployed Laravel source really defines the health route.
+"$PHP_BIN" artisan route:list --path=api/health | tee /dev/stderr | grep -Eq 'api/health'
 
-# ====================================
-# 6. Run database migrations
-# ====================================
-echo "Running database migrations"
-
-php artisan migrate \
-  --force \
-  --no-interaction
-
-# ====================================
-# 7. Create Laravel storage link
-# ====================================
-echo "Creating storage link"
-
-php artisan storage:link
-
-# ====================================
-# 8. Cache Laravel configuration
-# ====================================
-echo "Optimizing Laravel"
-
-php artisan config:cache
-
-# Enable after all module views are fixed.
-# php artisan view:cache
-
-# ====================================
-# 9. Prepare public_html
-# ====================================
-echo "Preparing domain document root"
+"$PHP_BIN" artisan migrate --force --no-interaction
+"$PHP_BIN" artisan storage:link
+"$PHP_BIN" artisan config:cache
+# Not enabling route:cache; module or closure routes may make it unsafe.
 
 mkdir -p "$WEB_ROOT"
 chmod 755 "$WEB_ROOT"
 
-# Backup previous website entry file if present.
-mkdir -p "$APP_DIR/.deploy-backups"
+# Preserve other files in public_html; publish Laravel's public assets.
+# Do not delete unrelated cPanel content or overwrite .env in the web root.
+cp -R "$APP_DIR/public/." "$WEB_ROOT/"
+find "$APP_DIR/public" -type d -exec chmod 755 {} +
+find "$APP_DIR/public" -type f -exec chmod 644 {} +
 
+# Keep index.html from shadowing index.php, but back it up first.
 if [ -f "$WEB_ROOT/index.html" ]; then
+  mkdir -p "$APP_DIR/.deploy-backups"
   mv "$WEB_ROOT/index.html" \
     "$APP_DIR/.deploy-backups/index.html.$(date +%Y%m%d%H%M%S)"
 fi
 
-# ====================================
-# 10. Publish Laravel public files
-# ====================================
-echo "Publishing Laravel public files"
-
-cp -R "$APP_DIR/public/." "$WEB_ROOT/"
-
-# Files extracted under a restrictive umask may
-# not be readable by the web server.
-find "$APP_DIR/public" -type d -exec chmod 755 {} +
-find "$APP_DIR/public" -type f -exec chmod 644 {} +
-
-find "$WEB_ROOT" -type d -exec chmod 755 {} +
-find "$WEB_ROOT" -type f -exec chmod 644 {} +
-
-# ====================================
-# 11. Fix Laravel index.php paths
-# ====================================
-echo "Configuring Laravel entry point"
-
-php <<'PHP'
+# public_html is a sibling of backend-api, so adjust vendor/bootstrap paths.
+"$PHP_BIN" <<'PHP'
 <?php
-
 $webRoot = getenv('WEB_ROOT');
 $appDir = getcwd();
-$appName = basename($appDir);
-
-$sourceFile = $appDir . '/public/index.php';
-$targetFile = $webRoot . '/index.php';
-
-$contents = file_get_contents($sourceFile);
-
-if ($contents === false) {
-    fwrite(STDERR, "Cannot read Laravel index.php\n");
-    exit(1);
-}
-
-// Laravel normally looks for vendor/bootstrap one
-// directory above public/. public_html is a sibling
-// of the Laravel application, so adjust those paths.
-$replacements = [
-    "__DIR__.'/../" =>
-        "__DIR__.'/../{$appName}/",
-
-    "__DIR__ . '/../" =>
-        "__DIR__ . '/../{$appName}/",
+$source = file_get_contents($appDir . '/public/index.php');
+if ($source === false) { fwrite(STDERR, "Cannot read public/index.php\n"); exit(1); }
+$replace = [
+    "__DIR__.'/../vendor/autoload.php'" => var_export($appDir . '/vendor/autoload.php', true),
+    "__DIR__ . '/../vendor/autoload.php'" => var_export($appDir . '/vendor/autoload.php', true),
+    "__DIR__.'/../bootstrap/app.php'" => var_export($appDir . '/bootstrap/app.php', true),
+    "__DIR__ . '/../bootstrap/app.php'" => var_export($appDir . '/bootstrap/app.php', true),
+    "__DIR__.'/../storage/framework/maintenance.php'" => var_export($appDir . '/storage/framework/maintenance.php', true),
+    "__DIR__ . '/../storage/framework/maintenance.php'" => var_export($appDir . '/storage/framework/maintenance.php', true),
 ];
-
-$updated = str_replace(
-    array_keys($replacements),
-    array_values($replacements),
-    $contents
-);
-
-if (
-    $updated === $contents ||
-    !str_contains($updated, "{$appName}/vendor/autoload.php") ||
-    !str_contains($updated, "{$appName}/bootstrap/app.php")
-) {
-    fwrite(
-        STDERR,
-        "Unsupported index.php format. Public entry point not updated.\n"
-    );
+$updated = str_replace(array_keys($replace), array_values($replace), $source);
+if ($updated === $source ||
+    !str_contains($updated, $appDir . '/vendor/autoload.php') ||
+    !str_contains($updated, $appDir . '/bootstrap/app.php')) {
+    fwrite(STDERR, "Unsupported public/index.php layout; review deployment path mapping\n");
     exit(1);
 }
-
-$tempFile = $webRoot . '/.index.php.deploy';
-
-if (file_put_contents($tempFile, $updated) === false) {
-    fwrite(STDERR, "Cannot write entry point\n");
-    exit(1);
-}
-
-chmod($tempFile, 0644);
-
-if (!rename($tempFile, $targetFile)) {
-    fwrite(STDERR, "Cannot publish entry point\n");
-    exit(1);
-}
-
-echo "Laravel index.php configured successfully\n";
+$tmp = $webRoot . '/.index.php.deploy';
+if (file_put_contents($tmp, $updated) === false) { exit(1); }
+chmod($tmp, 0644);
+if (!rename($tmp, $webRoot . '/index.php')) { exit(1); }
 PHP
 
-# ====================================
-# 12. Verify published files
-# ====================================
-echo "Verifying public website"
-
+chmod 644 "$WEB_ROOT/index.php" "$WEB_ROOT/.htaccess"
 test -f "$WEB_ROOT/index.php"
 test -f "$WEB_ROOT/.htaccess"
-test -f "$APP_DIR/vendor/autoload.php"
 
-chmod 644 "$WEB_ROOT/index.php"
-chmod 644 "$WEB_ROOT/.htaccess"
+"$PHP_BIN" artisan --version
+"$PHP_BIN" artisan migrate:status
 
-# ====================================
-# 13. Verify Laravel deployment
-# ====================================
-echo "Verifying Laravel"
-
-php artisan --version
-php artisan migrate:status
-
-echo "=================================="
-echo "Laravel deployment successful"
-echo "Website: https://test.thelendsystem.com"
-echo "=================================="
+echo '=== Server-side Laravel deployment completed ==='
