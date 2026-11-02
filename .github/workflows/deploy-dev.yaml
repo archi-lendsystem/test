@@ -237,6 +237,7 @@ jobs:
       # ====================================
       # 10. Execute project deployment
       # ====================================
+      
       - name: Deploy application
         run: |
           set -euo pipefail
@@ -250,22 +251,33 @@ jobs:
           DEPLOY_DIR="$1"
           cd "$HOME/$DEPLOY_DIR"
 
+          echo "STEP 1: Checking uploaded files"
+          ls -la
+
           test -s .release-upload.tar.gz
           test -s .env.upload
 
+          echo "STEP 2: Extracting application"
           tar -xzf .release-upload.tar.gz
 
+          echo "STEP 3: Installing .env"
           chmod 600 .env.upload
           mv -f .env.upload .env
           chmod 600 .env
 
+          echo "STEP 4: Checking deployment script"
+          test -f scripts/deploy.sh
           bash -n scripts/deploy.sh
+
+          echo "STEP 5: Running Laravel deployment"
           bash scripts/deploy.sh
 
+          echo "STEP 6: Cleaning up"
           rm -f .release-upload.tar.gz
 
           echo "Application deployment successful"
           REMOTE
+
 
       # ====================================
       # 11. Cleanup local temporary files
