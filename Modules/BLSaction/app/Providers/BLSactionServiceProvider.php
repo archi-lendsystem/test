@@ -31,10 +31,13 @@ class BLSactionServiceProvider extends ServiceProvider
         ], ['views', $this->moduleNameLower . '-module-views']);
 
         // ✅ This line registers the namespace "blSaction"
-        $this->loadViewsFrom(
-            array_merge($this->getPublishableViewPaths(), [$sourcePath]),
-            $this->moduleNameLower
+        $paths = array_merge(
+            $this->getPublishableViewPaths(),
+            [$sourcePath]
         );
+
+        $this->loadViewsFrom($paths, 'blSaction');
+        $this->loadViewsFrom($paths, 'blsaction');
     }
 
     protected function registerTranslations(): void
