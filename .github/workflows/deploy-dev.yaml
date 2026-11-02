@@ -1,3 +1,4 @@
+
 name: Deploy Laravel Development
 
 on:
@@ -17,35 +18,70 @@ jobs:
     steps:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.2.0
+        env:
+          DEPLOY_BASE_PATH: ${{ secrets.DEV_DEPLOY_PATH }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
         with:
           host: ${{ secrets.DEV_SERVER_HOST }}
           username: ${{ secrets.DEV_SERVER_USER }}
           key: ${{ secrets.DEV_SERVER_SSH_KEY }}
           port: ${{ secrets.DEV_SERVER_PORT }}
-          script_stop: true
+          envs: DEPLOY_BASE_PATH,REPO_URL
+          command_timeout: 10m
           script: |
             set -e
 
             export PATH="/opt/cpanel/ea-php84/root/usr/bin:$HOME/.local/bin:$PATH"
 
-            cd "${{ secrets.DEV_DEPLOY_PATH }}"
+            # Ensure the base directory is configured
+            if [ -z "$DEPLOY_BASE_PATH" ]; then
+              echo "ERROR: DEV_DEPLOY_PATH is missing"
+              exit 1
+            fi
 
-            test -f .env || {
-              echo "ERROR: .env file missing"
+            # Create the backend directory
+            mkdir -p "$DEPLOY_BASE_PATH/backend-api"
+            cd "$DEPLOY_BASE_PATH/backend-api"
+
+            # Clone on first deployment
+            if [ ! -d .git ]; then
+              if [ -n "$(ls -A)" ]; then
+                echo "ERROR: Directory is not empty and is not a Git repository"
+                exit 1
+              fi
+
+              echo "Cloning backend repository"
+              git clone --branch staging --single-branch "$REPO_URL" .
+            else
+              echo "Updating backend repository"
+              git fetch origin staging
+              git reset --hard origin/staging
+            fi
+
+            # Verify Laravel project
+            test -f artisan || {
+              echo "ERROR: Laravel project not found"
               exit 1
             }
 
-            git fetch origin development
-            git reset --hard origin/development
+            # Verify environment file
+            test -f .env || {
+              echo "ERROR: .env file missing"
+              echo "Create .env on the server before continuing"
+              exit 1
+            }
 
+            # Verify PHP
             php -v
 
+            # Install Composer dependencies
             composer install \
               --no-dev \
               --prefer-dist \
               --no-interaction \
               --optimize-autoloader
 
+            # Laravel optimization
             php artisan config:clear
             php artisan config:cache
 
