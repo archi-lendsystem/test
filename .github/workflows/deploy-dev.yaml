@@ -25,8 +25,6 @@ jobs:
         shell: bash
 
     env:
-      # Configure these in GitHub Actions Variables.
-      # Fallbacks are for this existing project only.
       LOCAL_ENV_PATH: ${{ vars.LOCAL_ENV_PATH || '/Users/archirastogi/Documents/GitHub/test/.env' }}
       REMOTE_DEPLOY_DIR: ${{ vars.REMOTE_DEPLOY_DIR || 'backend-api' }}
 
@@ -42,7 +40,39 @@ jobs:
           fetch-depth: 1
 
       # ====================================
-      # 2. Validate deployment configuration
+      # 2. Debug deployment configuration
+      # ====================================
+      - name: Debug deployment configuration
+        run: |
+          set -euo pipefail
+
+          echo "Repository: $GITHUB_REPOSITORY"
+          echo "Branch: $GITHUB_REF_NAME"
+          echo "Commit: $GITHUB_SHA"
+
+          if [ -n "${LOCAL_ENV_PATH:-}" ]; then
+            echo "LOCAL_ENV_PATH: CONFIGURED"
+          else
+            echo "::error::LOCAL_ENV_PATH: EMPTY"
+            exit 1
+          fi
+
+          if [ -n "${REMOTE_DEPLOY_DIR:-}" ]; then
+            echo "REMOTE_DEPLOY_DIR: CONFIGURED"
+          else
+            echo "::error::REMOTE_DEPLOY_DIR: EMPTY"
+            exit 1
+          fi
+
+          if [ -s "$LOCAL_ENV_PATH" ]; then
+            echo "Local .env: FOUND"
+          else
+            echo "::error::Local .env: NOT FOUND"
+            exit 1
+          fi
+
+      # ====================================
+      # 3. Validate deployment configuration
       # ====================================
       - name: Validate configuration
         run: |
@@ -54,7 +84,7 @@ jobs:
           : "${REMOTE_DEPLOY_DIR:?REMOTE_DEPLOY_DIR is missing}"
 
           if [ ! -s "$LOCAL_ENV_PATH" ]; then
-            echo "::error::Local .env missing or empty: $LOCAL_ENV_PATH"
+            echo "::error::Local .env missing or empty"
             exit 1
           fi
 
@@ -76,18 +106,15 @@ jobs:
             exit 1
           fi
 
-          # Restrict path to one safe directory inside $HOME.
           if [[ ! "$REMOTE_DEPLOY_DIR" =~ ^[A-Za-z0-9_-]+$ ]]; then
             echo "::error::Invalid remote deployment directory"
             exit 1
           fi
 
-          echo "Local .env verified"
-          echo "Deployment script verified"
           echo "Configuration validated successfully"
 
       # ====================================
-      # 3. Configure secure SSH
+      # 4. Configure secure SSH
       # ====================================
       - name: Configure SSH
         env:
@@ -113,7 +140,8 @@ jobs:
           printf '%s\n' "$SSH_KEY" > "$SSH_DIR/id_deploy"
           printf '%s\n' "$KNOWN_HOSTS" > "$SSH_DIR/known_hosts"
 
-          chmod 600 "$SSH_DIR/id_deploy" "$SSH_DIR/known_hosts"
+          chmod 600 "$SSH_DIR/id_deploy"
+          chmod 600 "$SSH_DIR/known_hosts"
 
           {
             echo "Host cpanel-deploy"
@@ -135,7 +163,7 @@ jobs:
           echo "SSH configured successfully"
 
       # ====================================
-      # 4. Test server connection
+      # 5. Test SSH connection
       # ====================================
       - name: Test SSH connection
         run: |
@@ -146,7 +174,7 @@ jobs:
             'echo "SSH connection successful"'
 
       # ====================================
-      # 5. Package application source
+      # 6. Package application source
       # ====================================
       - name: Package source code
         run: |
@@ -162,7 +190,7 @@ jobs:
           echo "Source archive created"
 
       # ====================================
-      # 6. Prepare remote directory
+      # 7. Prepare remote directory
       # ====================================
       - name: Prepare server directory
         run: |
@@ -175,7 +203,7 @@ jobs:
           echo "Server directory ready"
 
       # ====================================
-      # 7. Upload application source
+      # 8. Upload application source
       # ====================================
       - name: Upload application
         run: |
@@ -191,7 +219,7 @@ jobs:
           echo "Source uploaded successfully"
 
       # ====================================
-      # 8. Upload local environment
+      # 9. Upload local environment
       # ====================================
       - name: Upload local .env
         run: |
@@ -207,7 +235,7 @@ jobs:
           echo ".env uploaded successfully"
 
       # ====================================
-      # 9. Execute project deployment
+      # 10. Execute project deployment
       # ====================================
       - name: Deploy application
         run: |
@@ -226,21 +254,21 @@ jobs:
           echo "Starting application deployment"
           echo "=================================="
 
-          # 1. Validate uploads
+          # 1. Validate uploaded files
           test -s .release-upload.tar.gz
           test -s .env.upload
 
-          # 2. Extract source
+          # 2. Extract source code
           echo "Extracting source code"
           tar -xzf .release-upload.tar.gz
 
-          # 3. Install environment file
+          # 3. Configure environment
           echo "Installing environment file"
           chmod 600 .env.upload
           mv -f .env.upload .env
           chmod 600 .env
 
-          # 4. Check deployment script
+          # 4. Validate deployment script
           if [ ! -f scripts/deploy.sh ]; then
             echo "ERROR: scripts/deploy.sh missing"
             exit 1
@@ -248,11 +276,11 @@ jobs:
 
           bash -n scripts/deploy.sh
 
-          # 5. Execute framework-specific deployment
+          # 5. Execute project-specific deployment
           echo "Executing project deployment script"
           bash scripts/deploy.sh
 
-          # 6. Cleanup
+          # 6. Cleanup uploaded archive
           rm -f .release-upload.tar.gz
 
           echo "=================================="
@@ -261,7 +289,7 @@ jobs:
           REMOTE
 
       # ====================================
-      # 10. Cleanup local temporary files
+      # 11. Cleanup local temporary files
       # ====================================
       - name: Cleanup temporary files
         if: always()
