@@ -10,76 +10,148 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: laravel-staging
+  cancel-in-progress: false
+
 jobs:
   deploy:
-    name: Deploy to Development Server
-    runs-on: ubuntu-latest
+    name: Deploy Laravel to cPanel
+    runs-on: [self-hosted, linux, x64]
 
     steps:
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.2.0
+      - name: Validate local environment
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          LOCAL_ENV="$HOME/projects/lendsystem/.env"
+
+          if [ ! -s "$LOCAL_ENV" ]; then
+            echo "ERROR: Local .env file missing or empty"
+            exit 1
+          fi
+
+          command -v ssh
+          command -v scp
+
+          echo "Local environment file found"
+
+      - name: Update repository on server
+        shell: bash
         env:
           REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
-        with:
-          host: ${{ secrets.DEV_SERVER_HOST }}
-          username: ${{ secrets.DEV_SERVER_USER }}
-          key: ${{ secrets.DEV_SERVER_SSH_KEY }}
-          port: ${{ secrets.DEV_SERVER_PORT }}
-          envs: REPO_URL
-          command_timeout: 10m
-          script: |
-            set -e
+        run: |
+          set -euo pipefail
 
-            export PATH="/opt/cpanel/ea-php84/root/usr/bin:$HOME/.local/bin:$PATH"
+          ssh -o BatchMode=yes cpanel-staging \
+            "REPO_URL='$REPO_URL' bash -se" <<'REMOTE'
+          set -eu
 
-            echo "Connected to server"
-            whoami
+          DEPLOY_PATH="$HOME/backend-api"
+          mkdir -p "$DEPLOY_PATH"
+          cd "$DEPLOY_PATH"
 
-            DEPLOY_PATH="$HOME/backend-api"
-
-            mkdir -p "$DEPLOY_PATH"
-            cd "$DEPLOY_PATH"
-
-            echo "Deploying to $DEPLOY_PATH"
-
-            if [ ! -d .git ]; then
-              if [ -n "$(ls -A)" ]; then
-                echo "ERROR: Directory is not empty"
-                exit 1
-              fi
-
-              echo "Cloning repository"
-              git clone --branch staging \
-                --single-branch "$REPO_URL" .
-            else
-              echo "Updating repository"
-              git fetch origin staging
-              git reset --hard origin/staging
+          if [ ! -d .git ]; then
+            if [ -n "$(ls -A)" ]; then
+              echo "ERROR: Directory is not empty"
+              exit 1
             fi
 
-            test -f artisan || {
-              echo "ERROR: Laravel project not found"
-              exit 1
-            }
+            git clone --branch staging \
+              --single-branch "$REPO_URL" .
+          else
+            git fetch origin staging
+            git reset --hard origin/staging
+          fi
 
-            test -f .env || {
-              echo "ERROR: .env file missing"
-              echo "Please configure .env on server"
-              exit 1
-            }
+          test -f artisan || exit 1
 
-            echo "Checking PHP"
-            php -v
+          if git ls-files --error-unmatch .env \
+              >/dev/null 2>&1; then
+            echo "ERROR: .env must not be tracked in Git"
+            exit 1
+          fi
 
-            echo "Installing dependencies"
-            composer install \
-              --no-dev \
-              --prefer-dist \
-              --no-interaction \
-              --optimize-autoloader
+          echo "Repository updated successfully"
+          REMOTE
 
-            echo "Optimizing Laravel"
-            php artisan config:clear
-            php artisan config:cache
+      - name: Upload local .env to server
+        shell: bash
+        run: |
+          set -euo pipefail
 
-            echo "Development deployment successful"
+          LOCAL_ENV="$HOME/projects/lendsystem/.env"
+
+          ssh -o BatchMode=yes cpanel-staging \
+            'umask 077; mkdir -p "$HOME/backend-api"'
+
+          scp -q -o BatchMode=yes \
+            "$LOCAL_ENV" \
+            "cpanel-staging:backend-api/.env.upload"
+
+          ssh -o BatchMode=yes cpanel-staging \
+            'set -eu
+             cd "$HOME/backend-api"
+             chmod 600 .env.upload
+             test -s .env.upload
+             mv -f .env.upload .env'
+
+          echo "Environment synchronized securely"
+
+      - name: Install and deploy Laravel
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ssh -o BatchMode=yes cpanel-staging \
+            'bash -se' <<'REMOTE'
+          set -eu
+
+          export PATH="/opt/cpanel/ea-php84/root/usr/bin:$HOME/.local/bin:$PATH"
+
+          cd "$HOME/backend-api"
+
+          echo "Checking PHP and Composer"
+          php -v
+          composer --version
+
+          echo "Preparing directories"
+          mkdir -p \
+            storage/app/public \
+            storage/framework/cache/data \
+            storage/framework/sessions \
+            storage/framework/views \
+            storage/logs \
+            bootstrap/cache
+
+          chmod -R u+rwX storage bootstrap/cache
+
+          echo "Installing dependencies"
+          composer install \
+            --no-dev \
+            --prefer-dist \
+            --no-interaction \
+            --no-progress \
+            --optimize-autoloader
+
+          echo "Clearing config"
+          php artisan config:clear
+
+          echo "Running migrations"
+          php artisan migrate \
+            --force \
+            --no-interaction
+
+          echo "Linking storage"
+          php artisan storage:link
+
+          echo "Optimizing application"
+          php artisan config:cache
+          php artisan view:cache
+
+          echo "Verifying application"
+          php artisan --version
+
+          echo "Deployment successful"
+          REMOTE
