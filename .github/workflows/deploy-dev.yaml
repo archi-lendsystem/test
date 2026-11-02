@@ -17,7 +17,7 @@ concurrency:
 jobs:
   deploy:
     name: Deploy Laravel to cPanel
-    runs-on: [self-hosted, macOS]
+    runs-on: ubuntu-latest
     timeout-minutes: 30
 
     defaults:
