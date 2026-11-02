@@ -250,42 +250,21 @@ jobs:
           DEPLOY_DIR="$1"
           cd "$HOME/$DEPLOY_DIR"
 
-          echo "=================================="
-          echo "Starting application deployment"
-          echo "=================================="
-
-          # 1. Validate uploaded files
           test -s .release-upload.tar.gz
           test -s .env.upload
 
-          # 2. Extract source code
-          echo "Extracting source code"
           tar -xzf .release-upload.tar.gz
 
-          # 3. Configure environment
-          echo "Installing environment file"
           chmod 600 .env.upload
           mv -f .env.upload .env
           chmod 600 .env
 
-          # 4. Validate deployment script
-          if [ ! -f scripts/deploy.sh ]; then
-            echo "ERROR: scripts/deploy.sh missing"
-            exit 1
-          fi
-
           bash -n scripts/deploy.sh
-
-          # 5. Execute project-specific deployment
-          echo "Executing project deployment script"
           bash scripts/deploy.sh
 
-          # 6. Cleanup uploaded archive
           rm -f .release-upload.tar.gz
 
-          echo "=================================="
           echo "Application deployment successful"
-          echo "=================================="
           REMOTE
 
       # ====================================
