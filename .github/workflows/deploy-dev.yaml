@@ -1,5 +1,5 @@
 
-name: Deploy Laravel Development
+name: Universal CI/CD Deployment
 
 on:
   push:
@@ -11,12 +11,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: laravel-staging-deploy
+  group: deploy-${{ github.repository }}-staging
   cancel-in-progress: false
 
 jobs:
   deploy:
-    name: Deploy Laravel to cPanel
+    name: Deploy Application to cPanel
     runs-on: [self-hosted, macOS, ARM64]
     timeout-minutes: 30
 
@@ -25,43 +25,43 @@ jobs:
         shell: bash
 
     env:
-      DEPLOY_PATH: backend-api
+      LOCAL_ENV_PATH: ${{ vars.LOCAL_ENV_PATH }}
+      REMOTE_DEPLOY_DIR: ${{ vars.REMOTE_DEPLOY_DIR }}
 
     steps:
       # ====================================
-      # 1. Checkout staging branch
+      # 1. Checkout source code
       # ====================================
-      - name: Checkout Laravel project
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: staging
           persist-credentials: false
+          fetch-depth: 1
 
       # ====================================
-      # 2. Verify local .env
+      # 2. Validate deployment configuration
       # ====================================
-      
-      - name: Validate local .env
+      - name: Validate configuration
         run: |
           set -euo pipefail
 
-          LOCAL_PROJECT="/Users/archirastogi/Documents/GitHub/test"
-          LOCAL_ENV="$LOCAL_PROJECT/.env"
+          echo "Validating deployment configuration"
 
-          echo "Checking local Laravel environment"
+          : "${LOCAL_ENV_PATH:?LOCAL_ENV_PATH is missing}"
+          : "${REMOTE_DEPLOY_DIR:?REMOTE_DEPLOY_DIR is missing}"
 
-          if [ ! -f "$LOCAL_PROJECT/artisan" ]; then
-            echo "::error::Laravel artisan file missing"
-            exit 1
-          fi
-
-          if [ ! -s "$LOCAL_ENV" ]; then
+          if [ ! -s "$LOCAL_ENV_PATH" ]; then
             echo "::error::Local .env missing or empty"
             exit 1
           fi
 
-          if [ ! -r "$LOCAL_ENV" ]; then
+          if [ ! -r "$LOCAL_ENV_PATH" ]; then
             echo "::error::Cannot read local .env"
+            exit 1
+          fi
+
+          if [ ! -f scripts/deploy.sh ]; then
+            echo "::error::scripts/deploy.sh missing"
             exit 1
           fi
 
@@ -71,36 +71,44 @@ jobs:
             exit 1
           fi
 
-          echo "LOCAL_ENV=$LOCAL_ENV" >> "$GITHUB_ENV"
+          # Allow only a single safe directory name
+          if [[ ! "$REMOTE_DEPLOY_DIR" =~ ^[A-Za-z0-9_-]+$ ]]; then
+            echo "::error::Invalid deployment directory"
+            exit 1
+          fi
 
-          echo "Local .env verified successfully"
+          echo "Configuration validated successfully"
 
       # ====================================
-      # 3. Configure secure SSH
+      # 3. Configure SSH
       # ====================================
-      
-      - name: Configure SSH
+      - name: Configure secure SSH
         env:
           SSH_HOST: ${{ secrets.DEV_SERVER_HOST }}
           SSH_USER: ${{ secrets.DEV_SERVER_USER }}
           SSH_PORT: ${{ secrets.DEV_SERVER_PORT }}
           SSH_KEY: ${{ secrets.DEV_SERVER_SSH_KEY }}
-          SSH_HOST_KEY: ${{ secrets.DEV_SERVER_KNOWN_HOSTS }}
+          KNOWN_HOSTS: ${{ secrets.DEV_SERVER_KNOWN_HOSTS }}
         run: |
           set -euo pipefail
 
-          SSH_DIR="$RUNNER_TEMP/laravel-ssh"
+          echo "Configuring SSH"
+
+          : "${SSH_HOST:?SSH host missing}"
+          : "${SSH_USER:?SSH username missing}"
+          : "${SSH_KEY:?SSH key missing}"
+          : "${KNOWN_HOSTS:?Known hosts missing}"
+
+          SSH_DIR="$RUNNER_TEMP/deploy-ssh"
+
           mkdir -p "$SSH_DIR"
           chmod 700 "$SSH_DIR"
 
-          if [ -z "$SSH_HOST" ] || [ -z "$SSH_USER" ] ||
-             [ -z "$SSH_KEY" ] || [ -z "$SSH_HOST_KEY" ]; then
-            echo "::error::Required SSH settings are missing"
-            exit 1
-          fi
+          printf '%s\n' "$SSH_KEY" \
+            > "$SSH_DIR/id_deploy"
 
-          printf '%s\n' "$SSH_KEY" > "$SSH_DIR/id_deploy"
-          printf '%s\n' "$SSH_HOST_KEY" > "$SSH_DIR/known_hosts"
+          printf '%s\n' "$KNOWN_HOSTS" \
+            > "$SSH_DIR/known_hosts"
 
           chmod 600 "$SSH_DIR/id_deploy"
           chmod 600 "$SSH_DIR/known_hosts"
@@ -115,226 +123,146 @@ jobs:
             echo "  StrictHostKeyChecking yes"
             echo "  IdentitiesOnly yes"
             echo "  BatchMode yes"
+            echo "  ConnectTimeout 15"
           } > "$SSH_DIR/config"
 
           chmod 600 "$SSH_DIR/config"
 
-          echo "SSH configured successfully"
+          echo "SSH configuration completed"
 
       # ====================================
-      # 4. Verify server connection
+      # 4. Test SSH connection
       # ====================================
-      - name: Test SSH connection
+      - name: Test server connection
         run: |
           set -euo pipefail
 
-          ssh -F "$RUNNER_TEMP/laravel-ssh/config" \
+          ssh -F "$RUNNER_TEMP/deploy-ssh/config" \
             cpanel-deploy \
-            'echo "Connected to cPanel server"'
+            'echo "SSH connection successful"'
 
       # ====================================
-      # 5. Package source code
+      # 5. Package application
       # ====================================
-      - name: Package Laravel source
+      - name: Package source code
         run: |
           set -euo pipefail
 
-          echo "Creating deployment archive"
+          echo "Packaging application"
 
           git archive --format=tar HEAD \
-            | gzip > "$RUNNER_TEMP/laravel-release.tar.gz"
+            | gzip > "$RUNNER_TEMP/app-release.tar.gz"
 
-          test -s "$RUNNER_TEMP/laravel-release.tar.gz"
+          test -s "$RUNNER_TEMP/app-release.tar.gz"
 
-          echo "Source archive created"
+          echo "Application package created"
 
       # ====================================
-      # 6. Prepare server directories
+      # 6. Prepare deployment directory
       # ====================================
-      - name: Prepare cPanel directories
+      - name: Prepare server directory
         run: |
           set -euo pipefail
 
-          ssh -F "$RUNNER_TEMP/laravel-ssh/config" \
-            cpanel-deploy 'sh -se' <<'REMOTE'
-          set -eu
-          umask 077
+          ssh -F "$RUNNER_TEMP/deploy-ssh/config" \
+            cpanel-deploy \
+            "mkdir -p \"\$HOME/$REMOTE_DEPLOY_DIR\""
 
-          mkdir -p "$HOME/backend-api"
-          mkdir -p "$HOME/backend-api/storage"
-          mkdir -p "$HOME/backend-api/bootstrap/cache"
-
-          echo "Server directories ready"
-          REMOTE
+          echo "Server directory ready"
 
       # ====================================
-      # 7. Upload Laravel source code
+      # 7. Upload application source
       # ====================================
-      - name: Upload source to cPanel
+      - name: Upload application
         run: |
           set -euo pipefail
+
+          echo "Uploading application source"
 
           scp -q \
-            -F "$RUNNER_TEMP/laravel-ssh/config" \
-            "$RUNNER_TEMP/laravel-release.tar.gz" \
-            "cpanel-deploy:backend-api/.release-upload.tar.gz"
+            -F "$RUNNER_TEMP/deploy-ssh/config" \
+            "$RUNNER_TEMP/app-release.tar.gz" \
+            "cpanel-deploy:$REMOTE_DEPLOY_DIR/.release-upload.tar.gz"
 
-          echo "Source uploaded successfully"
+          echo "Application uploaded"
 
       # ====================================
       # 8. Upload local .env
       # ====================================
-      - name: Upload local environment
+      - name: Upload environment
         run: |
           set -euo pipefail
 
-          echo "Synchronizing local .env to cPanel"
+          echo "Uploading local environment"
 
           scp -q \
-            -F "$RUNNER_TEMP/laravel-ssh/config" \
-            "$LOCAL_ENV" \
-            "cpanel-deploy:backend-api/.env.upload"
+            -F "$RUNNER_TEMP/deploy-ssh/config" \
+            "$LOCAL_ENV_PATH" \
+            "cpanel-deploy:$REMOTE_DEPLOY_DIR/.env.upload"
 
-          echo ".env transferred securely"
+          echo "Environment uploaded successfully"
 
       # ====================================
-      # 9. Deploy and configure Laravel
+      # 9. Execute remote deployment
       # ====================================
-      - name: Deploy Laravel application
+      - name: Deploy application
         run: |
           set -euo pipefail
 
-          ssh -F "$RUNNER_TEMP/laravel-ssh/config" \
-            cpanel-deploy 'bash -se' <<'REMOTE'
+          ssh -F "$RUNNER_TEMP/deploy-ssh/config" \
+            cpanel-deploy \
+            "bash -se -- '$REMOTE_DEPLOY_DIR'" <<'REMOTE'
 
           set -euo pipefail
           umask 077
 
-          export PATH="/opt/cpanel/ea-php84/root/usr/bin:$HOME/.local/bin:$PATH"
-
-          DEPLOY_PATH="$HOME/backend-api"
-          cd "$DEPLOY_PATH"
+          DEPLOY_DIR="$1"
+          cd "$HOME/$DEPLOY_DIR"
 
           echo "=================================="
-          echo "Starting Laravel deployment"
+          echo "Starting application deployment"
           echo "=================================="
 
-          # -------------------------------
-          # 1. Validate uploaded files
-          # -------------------------------
+          # Validate uploaded files
           test -s .release-upload.tar.gz
           test -s .env.upload
 
-          # -------------------------------
-          # 2. Extract new code
-          # -------------------------------
-          echo "Extracting Laravel source"
-
+          # Extract application
+          echo "Extracting source files"
           tar -xzf .release-upload.tar.gz
 
-          test -f artisan
-          test -f composer.json
-
-          # -------------------------------
-          # 3. Configure environment
-          # -------------------------------
-          echo "Configuring Laravel .env"
-
+          # Configure environment
+          echo "Configuring environment"
           chmod 600 .env.upload
           mv -f .env.upload .env
           chmod 600 .env
 
-          # -------------------------------
-          # 4. Check PHP and Composer
-          # -------------------------------
-          echo "Checking PHP"
-          php -v
+          # Execute framework-specific script
+          if [ ! -f scripts/deploy.sh ]; then
+            echo "ERROR: Deployment script missing"
+            exit 1
+          fi
 
-          echo "Checking Composer"
-          composer --version
+          echo "Executing deployment script"
 
-          # -------------------------------
-          # 5. Prepare Laravel directories
-          # -------------------------------
-          echo "Preparing storage directories"
+          bash scripts/deploy.sh
 
-          mkdir -p \
-            storage/app/public \
-            storage/framework/cache/data \
-            storage/framework/sessions \
-            storage/framework/views \
-            storage/logs \
-            bootstrap/cache
+          echo "Framework deployment completed"
 
-          chmod -R u+rwX storage bootstrap/cache
-
-          # -------------------------------
-          # 6. Install Composer packages
-          # -------------------------------
-          echo "Installing dependencies"
-
-          composer install \
-            --no-dev \
-            --prefer-dist \
-            --no-interaction \
-            --no-progress \
-            --optimize-autoloader
-
-          # -------------------------------
-          # 7. Clear configuration cache
-          # -------------------------------
-          echo "Clearing configuration"
-
-          php artisan config:clear
-
-          # -------------------------------
-          # 8. Run migrations
-          # -------------------------------
-          echo "Running database migrations"
-
-          php artisan migrate \
-            --force \
-            --no-interaction
-
-          # -------------------------------
-          # 9. Link public storage
-          # -------------------------------
-          echo "Linking storage"
-
-          php artisan storage:link
-
-          # -------------------------------
-          # 10. Optimize Laravel
-          # -------------------------------
-          echo "Optimizing application"
-
-          php artisan config:cache
-          php artisan view:cache
-
-          # -------------------------------
-          # 11. Verify deployment
-          # -------------------------------
-          echo "Verifying application"
-
-          php artisan --version
-          php artisan migrate:status
-
-          # -------------------------------
-          # 12. Cleanup uploaded archive
-          # -------------------------------
+          # Cleanup uploaded archive
           rm -f .release-upload.tar.gz
 
           echo "=================================="
-          echo "Laravel deployment successful"
+          echo "Deployment successful"
           echo "=================================="
 
           REMOTE
 
       # ====================================
-      # 10. Clean local temporary files
+      # 10. Cleanup temporary files
       # ====================================
-      - name: Cleanup deployment files
+      - name: Cleanup temporary files
         if: always()
         run: |
-          rm -rf "$RUNNER_TEMP/laravel-ssh"
-          rm -f "$RUNNER_TEMP/laravel-release.tar.gz"
+          rm -rf "$RUNNER_TEMP/deploy-ssh"
+          rm -f "$RUNNER_TEMP/app-release.tar.gz"
