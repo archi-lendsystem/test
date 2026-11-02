@@ -17,7 +17,7 @@ concurrency:
 jobs:
   deploy:
     name: Deploy Laravel to cPanel
-    runs-on: [self-hosted, macOS]
+    runs-on: [self-hosted, macOS, ARM64]
     timeout-minutes: 30
 
     defaults:
@@ -40,15 +40,20 @@ jobs:
       # ====================================
       # 2. Verify local .env
       # ====================================
+      
       - name: Validate local .env
         run: |
           set -euo pipefail
 
-          # CHANGE THIS TO YOUR LOCAL PROJECT PATH
-          LOCAL_PROJECT="/Users/YOUR_USERNAME/path/to/test"
+          LOCAL_PROJECT="/Users/archirastogi/Documents/GitHub/test"
           LOCAL_ENV="$LOCAL_PROJECT/.env"
 
-          echo "Checking local environment"
+          echo "Checking local Laravel environment"
+
+          if [ ! -f "$LOCAL_PROJECT/artisan" ]; then
+            echo "::error::Laravel artisan file missing"
+            exit 1
+          fi
 
           if [ ! -s "$LOCAL_ENV" ]; then
             echo "::error::Local .env missing or empty"
@@ -68,7 +73,7 @@ jobs:
 
           echo "LOCAL_ENV=$LOCAL_ENV" >> "$GITHUB_ENV"
 
-          echo "Local .env verified"
+          echo "Local .env verified successfully"
 
       # ====================================
       # 3. Configure secure SSH
