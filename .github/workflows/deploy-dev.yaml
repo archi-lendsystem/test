@@ -237,35 +237,35 @@ jobs:
       # ====================================
       # 10. Execute project deployment
       # ====================================
-      - name: Deploy application
-        run: |
-          set -euo pipefail
+      # - name: Deploy application
+      #   run: |
+      #     set -euo pipefail
 
-          ssh -F "$RUNNER_TEMP/deploy-ssh/config" \
-            cpanel-deploy \
-            "bash -se -- '$REMOTE_DEPLOY_DIR'" <<'REMOTE'
-          set -euo pipefail
-          umask 077
+      #     ssh -F "$RUNNER_TEMP/deploy-ssh/config" \
+      #       cpanel-deploy \
+      #       "bash -se -- '$REMOTE_DEPLOY_DIR'" <<'REMOTE'
+      #     set -euo pipefail
+      #     umask 077
 
-          DEPLOY_DIR="$1"
-          cd "$HOME/$DEPLOY_DIR"
+      #     DEPLOY_DIR="$1"
+      #     cd "$HOME/$DEPLOY_DIR"
 
-          test -s .release-upload.tar.gz
-          test -s .env.upload
+      #     test -s .release-upload.tar.gz
+      #     test -s .env.upload
 
-          tar -xzf .release-upload.tar.gz
+      #     tar -xzf .release-upload.tar.gz
 
-          chmod 600 .env.upload
-          mv -f .env.upload .env
-          chmod 600 .env
+      #     chmod 600 .env.upload
+      #     mv -f .env.upload .env
+      #     chmod 600 .env
 
-          bash -n scripts/deploy.sh
-          bash scripts/deploy.sh
+      #     bash -n scripts/deploy.sh
+      #     bash scripts/deploy.sh
 
-          rm -f .release-upload.tar.gz
+      #     rm -f .release-upload.tar.gz
 
-          echo "Application deployment successful"
-          REMOTE
+      #     echo "Application deployment successful"
+      #     REMOTE
 
       # ====================================
       # 11. Cleanup local temporary files
@@ -275,4 +275,4 @@ jobs:
         run: |
           rm -rf "$RUNNER_TEMP/deploy-ssh"
           rm -f "$RUNNER_TEMP/app-release.tar.gz"
-          
+
