@@ -1,11 +1,20 @@
 
 name: Universal CI/CD Deployment
 
+
 on:
   push:
     branches:
       - staging
+
   workflow_dispatch:
+    inputs:
+      run_initial_seeders:
+        description: 'Run initial user database seeder'
+        required: true
+        type: boolean
+        default: false
+
 
 permissions:
   contents: read
@@ -238,29 +247,35 @@ jobs:
       # 10. Execute project deployment
       # ====================================
       
+      
+      # ====================================
+      # 10. Execute project deployment
+      # ====================================
       - name: Deploy application
+        env:
+          RUN_INITIAL_SEEDERS: ${{ inputs.run_initial_seeders || 'false' }}
         run: |
           set -euo pipefail
 
           ssh -F "$RUNNER_TEMP/deploy-ssh/config" \
             cpanel-deploy \
-            "bash -se -- '$REMOTE_DEPLOY_DIR'" <<'REMOTE'
+            "bash -se -- '$REMOTE_DEPLOY_DIR' '$RUN_INITIAL_SEEDERS'" <<'REMOTE'
           set -euo pipefail
           umask 077
 
           DEPLOY_DIR="$1"
+          RUN_INITIAL_SEEDERS="$2"
+
           cd "$HOME/$DEPLOY_DIR"
 
           echo "STEP 1: Checking uploaded files"
-          ls -la
-
           test -s .release-upload.tar.gz
           test -s .env.upload
 
           echo "STEP 2: Extracting application"
           tar -xzf .release-upload.tar.gz
 
-          echo "STEP 3: Installing .env"
+          echo "STEP 3: Installing environment"
           chmod 600 .env.upload
           mv -f .env.upload .env
           chmod 600 .env
@@ -270,13 +285,16 @@ jobs:
           bash -n scripts/deploy.sh
 
           echo "STEP 5: Running Laravel deployment"
+          export RUN_INITIAL_SEEDERS
+
           bash scripts/deploy.sh
 
-          echo "STEP 6: Cleaning up"
+          echo "STEP 6: Cleanup"
           rm -f .release-upload.tar.gz
 
           echo "Application deployment successful"
           REMOTE
+
 
 
       # ====================================

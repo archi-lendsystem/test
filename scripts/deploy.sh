@@ -100,11 +100,42 @@ echo "Laravel API routes registered successfully"
 # ======================================
 # 6. Database migrations
 # ======================================
+
+# ======================================
+# 6. Database migrations
+# ======================================
 echo "Running database migrations"
 
 "$PHP_BIN" artisan migrate \
   --force \
   --no-interaction
+
+echo "Database migrations completed"
+
+# ======================================
+# 7. Initial database seeding
+# ======================================
+
+RUN_INITIAL_SEEDERS="${RUN_INITIAL_SEEDERS:-false}"
+
+if [ "$RUN_INITIAL_SEEDERS" = "true" ]; then
+
+    echo "======================================"
+    echo "Running initial database seeders"
+    echo "======================================"
+
+    "$PHP_BIN" artisan db:seed \
+      --class='Modules\UserManagement\Database\Seeders\UserSeeder' \
+      --force \
+      --no-interaction
+
+    echo "Initial database seeding completed"
+
+else
+
+    echo "Skipping database seeders"
+
+fi
 
 # ======================================
 # 7. Laravel storage link
