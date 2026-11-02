@@ -16,107 +16,242 @@ concurrency:
 
 jobs:
   deploy:
-    name: Deploy Laravel to cPanel
-    runs-on: ubuntu-latest
+    name: Deploying backend 
+
+    # Must be a runner installed on your Mac
+    runs-on: [self-hosted, macOS]
+
+    timeout-minutes: 20
+
+    defaults:
+      run:
+        shell: bash
+
+    env:
+      DEPLOY_DIR: backend-api
+      BRANCH: staging
 
     steps:
-      - name: Validate local environment
-        shell: bash
+      # --------------------------------------
+      # 1. Checkout staging branch
+      # --------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: staging
+          persist-credentials: false
+
+      # --------------------------------------
+      # 2. Locate local Laravel .env
+      # --------------------------------------
+      - name: Validate local Laravel .env
+        id: local_env
         run: |
           set -euo pipefail
 
-          LOCAL_ENV="$HOME/projects/lendsystem/.env"
+          echo "Checking local Laravel environment"
+
+          # Set this to the absolute path of
+          # your existing local 'test' project.
+          LOCAL_PROJECT="/Users/YOUR_MAC_USERNAME/path/to/test"
+          LOCAL_ENV="$LOCAL_PROJECT/.env"
 
           if [ ! -s "$LOCAL_ENV" ]; then
-            echo "ERROR: Local .env file missing or empty"
+            echo "::error::Local .env missing or empty"
+            echo "Check LOCAL_PROJECT in workflow"
             exit 1
           fi
 
-          command -v ssh
-          command -v scp
+          if [ ! -r "$LOCAL_ENV" ]; then
+            echo "::error::Runner cannot read .env"
+            exit 1
+          fi
 
-          echo "Local environment file found"
+          echo "LOCAL_ENV=$LOCAL_ENV" >> "$GITHUB_ENV"
 
-      - name: Update repository on server
-        shell: bash
+          echo "Local .env verified"
+
+      # --------------------------------------
+      # 3. Setup SSH
+      # --------------------------------------
+      - name: Configure SSH
         env:
-          REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
+          SSH_PRIVATE_KEY: ${{ secrets.DEV_SERVER_SSH_KEY }}
+          SSH_HOST: ${{ secrets.DEV_SERVER_HOST }}
+          SSH_USER: ${{ secrets.DEV_SERVER_USER }}
+          SSH_PORT: ${{ secrets.DEV_SERVER_PORT }}
+          SSH_HOST_KEY: ${{ secrets.DEV_SERVER_HOST_KEY }}
         run: |
           set -euo pipefail
 
-          ssh -o BatchMode=yes cpanel-staging \
-            "REPO_URL='$REPO_URL' bash -se" <<'REMOTE'
-          set -eu
+          mkdir -p "$RUNNER_TEMP/deploy-ssh"
+          chmod 700 "$RUNNER_TEMP/deploy-ssh"
 
-          DEPLOY_PATH="$HOME/backend-api"
-          mkdir -p "$DEPLOY_PATH"
-          cd "$DEPLOY_PATH"
+          KEY_FILE="$RUNNER_TEMP/deploy-ssh/id_deploy"
+          KNOWN_HOSTS="$RUNNER_TEMP/deploy-ssh/known_hosts"
 
-          if [ ! -d .git ]; then
-            if [ -n "$(ls -A)" ]; then
-              echo "ERROR: Directory is not empty"
-              exit 1
-            fi
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$KEY_FILE"
+          chmod 600 "$KEY_FILE"
 
-            git clone --branch staging \
-              --single-branch "$REPO_URL" .
-          else
-            git fetch origin staging
-            git reset --hard origin/staging
-          fi
-
-          test -f artisan || exit 1
-
-          if git ls-files --error-unmatch .env \
-              >/dev/null 2>&1; then
-            echo "ERROR: .env must not be tracked in Git"
+          if [ -z "$SSH_HOST_KEY" ]; then
+            echo "::error::DEV_SERVER_HOST_KEY missing"
             exit 1
           fi
 
-          echo "Repository updated successfully"
-          REMOTE
+          printf '%s\n' "$SSH_HOST_KEY" > "$KNOWN_HOSTS"
 
-      - name: Upload local .env to server
-        shell: bash
+          {
+            echo "Host cpanel-deploy"
+            echo "  HostName $SSH_HOST"
+            echo "  User $SSH_USER"
+            echo "  Port ${SSH_PORT:-22}"
+            echo "  IdentityFile $KEY_FILE"
+            echo "  UserKnownHostsFile $KNOWN_HOSTS"
+            echo "  StrictHostKeyChecking yes"
+            echo "  IdentitiesOnly yes"
+            echo "  BatchMode yes"
+          } > "$RUNNER_TEMP/deploy-ssh/config"
+
+          chmod 600 "$RUNNER_TEMP/deploy-ssh/config"
+
+          echo "SSH configuration complete"
+
+      # --------------------------------------
+      # 4. Test SSH connection
+      # --------------------------------------
+      - name: Test server connection
         run: |
           set -euo pipefail
 
-          LOCAL_ENV="$HOME/projects/lendsystem/.env"
+          ssh -F "$RUNNER_TEMP/deploy-ssh/config" \
+            cpanel-deploy \
+            'echo "Connected to cPanel"'
 
-          ssh -o BatchMode=yes cpanel-staging \
-            'umask 077; mkdir -p "$HOME/backend-api"'
+      # --------------------------------------
+      # 5. Prepare remote directory
+      # --------------------------------------
+      - name: Prepare deployment directory
+        run: |
+          set -euo pipefail
 
-          scp -q -o BatchMode=yes \
+          ssh -F "$RUNNER_TEMP/deploy-ssh/config" \
+            cpanel-deploy \
+            'mkdir -p "$HOME/backend-api"'
+
+      # --------------------------------------
+      # 6. Sync .env from Mac to cPanel
+      # --------------------------------------
+      - name: Upload local .env
+        run: |
+          set -euo pipefail
+
+          echo "Uploading Laravel .env securely"
+
+          scp -q \
+            -F "$RUNNER_TEMP/deploy-ssh/config" \
             "$LOCAL_ENV" \
-            "cpanel-staging:backend-api/.env.upload"
+            "cpanel-deploy:backend-api/.env.upload"
 
-          ssh -o BatchMode=yes cpanel-staging \
+          ssh -F "$RUNNER_TEMP/deploy-ssh/config" \
+            cpanel-deploy \
             'set -eu
              cd "$HOME/backend-api"
              chmod 600 .env.upload
              test -s .env.upload
              mv -f .env.upload .env'
 
-          echo "Environment synchronized securely"
+          echo "Laravel .env uploaded successfully"
 
-      - name: Install and deploy Laravel
-        shell: bash
+      # --------------------------------------
+      # 7. Update code on server
+      # --------------------------------------
+      - name: Update Laravel repository
+        env:
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
         run: |
           set -euo pipefail
 
-          ssh -o BatchMode=yes cpanel-staging \
-            'bash -se' <<'REMOTE'
+          # Pass the public repository URL as data
+          ssh -F "$RUNNER_TEMP/deploy-ssh/config" \
+            cpanel-deploy \
+            "REPO_URL='$REPO_URL' bash -se" <<'REMOTE'
+
+          set -eu
+
+          cd "$HOME/backend-api"
+
+          if [ ! -d .git ]; then
+
+            echo "Cloning Laravel repository"
+
+            # Keep .env safe during first clone
+            mv .env "$HOME/.laravel-env-backup"
+
+            git clone --branch staging \
+              --single-branch \
+              "$REPO_URL" \
+              "$HOME/backend-api-repo-tmp"
+
+            cp -R "$HOME/backend-api-repo-tmp/." .
+
+            rm -rf "$HOME/backend-api-repo-tmp"
+
+            mv "$HOME/.laravel-env-backup" .env
+            chmod 600 .env
+
+          else
+
+            echo "Fetching latest staging code"
+
+            git fetch origin staging
+            git reset --hard origin/staging
+
+          fi
+
+          test -f artisan || {
+            echo "ERROR: artisan missing"
+            exit 1
+          }
+
+          test -s .env || {
+            echo "ERROR: .env missing"
+            exit 1
+          }
+
+          if git ls-files --error-unmatch .env \
+              >/dev/null 2>&1; then
+            echo "ERROR: .env is tracked by Git"
+            exit 1
+          fi
+
+          echo "Repository updated"
+
+          REMOTE
+
+      # --------------------------------------
+      # 8. Deploy Laravel
+      # --------------------------------------
+      - name: Install and optimize Laravel
+        run: |
+          set -euo pipefail
+
+          ssh -F "$RUNNER_TEMP/deploy-ssh/config" \
+            cpanel-deploy 'bash -se' <<'REMOTE'
+
           set -eu
 
           export PATH="/opt/cpanel/ea-php84/root/usr/bin:$HOME/.local/bin:$PATH"
 
           cd "$HOME/backend-api"
 
-          echo "Checking PHP and Composer"
+          echo "Checking PHP"
           php -v
+
+          echo "Checking Composer"
           composer --version
 
-          echo "Preparing directories"
+          echo "Preparing Laravel directories"
+
           mkdir -p \
             storage/app/public \
             storage/framework/cache/data \
@@ -127,7 +262,8 @@ jobs:
 
           chmod -R u+rwX storage bootstrap/cache
 
-          echo "Installing dependencies"
+          echo "Installing Composer dependencies"
+
           composer install \
             --no-dev \
             --prefer-dist \
@@ -135,23 +271,35 @@ jobs:
             --no-progress \
             --optimize-autoloader
 
-          echo "Clearing config"
+          echo "Clearing Laravel configuration"
           php artisan config:clear
 
-          echo "Running migrations"
+          echo "Running database migrations"
+
           php artisan migrate \
             --force \
             --no-interaction
 
-          echo "Linking storage"
+          echo "Linking public storage"
+
           php artisan storage:link
 
-          echo "Optimizing application"
+          echo "Caching configuration"
+
           php artisan config:cache
           php artisan view:cache
 
-          echo "Verifying application"
+          echo "Checking Laravel version"
           php artisan --version
 
-          echo "Deployment successful"
+          echo "Deployment completed successfully"
+
           REMOTE
+
+      # --------------------------------------
+      # 9. Cleanup runner SSH files
+      # --------------------------------------
+      - name: Cleanup temporary SSH files
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP/deploy-ssh"
