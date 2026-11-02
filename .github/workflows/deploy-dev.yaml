@@ -78,13 +78,14 @@ jobs:
       # ====================================
       # 3. Configure secure SSH
       # ====================================
+      
       - name: Configure SSH
         env:
           SSH_HOST: ${{ secrets.DEV_SERVER_HOST }}
           SSH_USER: ${{ secrets.DEV_SERVER_USER }}
           SSH_PORT: ${{ secrets.DEV_SERVER_PORT }}
           SSH_KEY: ${{ secrets.DEV_SERVER_SSH_KEY }}
-          SSH_HOST_KEY: ${{ secrets.DEV_SERVER_HOST_KEY }}
+          SSH_HOST_KEY: ${{ secrets.DEV_SERVER_KNOWN_HOSTS }}
         run: |
           set -euo pipefail
 
@@ -92,8 +93,9 @@ jobs:
           mkdir -p "$SSH_DIR"
           chmod 700 "$SSH_DIR"
 
-          if [ -z "$SSH_KEY" ] || [ -z "$SSH_HOST_KEY" ]; then
-            echo "::error::SSH key or host verification missing"
+          if [ -z "$SSH_HOST" ] || [ -z "$SSH_USER" ] ||
+             [ -z "$SSH_KEY" ] || [ -z "$SSH_HOST_KEY" ]; then
+            echo "::error::Required SSH settings are missing"
             exit 1
           fi
 
@@ -117,7 +119,7 @@ jobs:
 
           chmod 600 "$SSH_DIR/config"
 
-          echo "SSH configured"
+          echo "SSH configured successfully"
 
       # ====================================
       # 4. Verify server connection
