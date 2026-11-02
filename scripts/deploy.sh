@@ -97,9 +97,6 @@ fi
 echo "Laravel API routes registered successfully"
 
 
-# ======================================
-# 6. Database migrations
-# ======================================
 
 # ======================================
 # 6. Database migrations
@@ -113,7 +110,61 @@ echo "Running database migrations"
 echo "Database migrations completed"
 
 # ======================================
-# 7. Initial database seeding
+# 7. One-time user database seeding
+# ======================================
+echo "Checking initial user seeding"
+
+SEED_MARKER="$APP_DIR/storage/.initial-user-seed-completed"
+
+if [ ! -f "$SEED_MARKER" ]; then
+
+    echo "======================================"
+    echo "Running initial UserSeeder"
+    echo "======================================"
+
+    "$PHP_BIN" artisan db:seed \
+      --class='Modules\UserManagement\Database\Seeders\UserSeeder' \
+      --force \
+      --no-interaction
+
+    echo "Verifying seeded user"
+
+    SEED_EMAIL='shubham@thelendsystem.com' \
+    "$PHP_BIN" -r '
+        require "vendor/autoload.php";
+        $app = require "bootstrap/app.php";
+        $app->make(
+            Illuminate\Contracts\Console\Kernel::class
+        )->bootstrap();
+
+        $exists = Modules\UserManagement\Models\User::where(
+            "user_email",
+            getenv("SEED_EMAIL")
+        )->exists();
+
+        if (!$exists) {
+            fwrite(STDERR, "Seed verification failed\n");
+            exit(1);
+        }
+
+        echo "Seed verification successful\n";
+    '
+
+    touch "$SEED_MARKER"
+    chmod 600 "$SEED_MARKER"
+
+    echo "Initial user seeding completed"
+
+else
+
+    echo "Initial user seeding already completed"
+    echo "Skipping UserSeeder"
+
+fi
+
+
+# ======================================
+# 8. Initial database seeding
 # ======================================
 
 RUN_INITIAL_SEEDERS="${RUN_INITIAL_SEEDERS:-false}"
@@ -138,21 +189,21 @@ else
 fi
 
 # ======================================
-# 7. Laravel storage link
+# 9. Laravel storage link
 # ======================================
 echo "Creating storage link"
 
 "$PHP_BIN" artisan storage:link
 
 # ======================================
-# 8. Cache configuration
+# 10. Cache configuration
 # ======================================
 echo "Caching Laravel configuration"
 
 "$PHP_BIN" artisan config:cache
 
 # ======================================
-# 9. Prepare web root
+# 11. Prepare web root
 # ======================================
 echo "Preparing public web directory"
 
@@ -168,7 +219,7 @@ if [ -f "$WEB_ROOT/.env" ]; then
 fi
 
 # ======================================
-# 10. Publish public files
+# 12. Publish public files
 # ======================================
 echo "Publishing Laravel public files"
 
@@ -184,7 +235,7 @@ if [ -f "$WEB_ROOT/index.html" ]; then
 fi
 
 # ======================================
-# 11. Configure Laravel index.php
+# 13. Configure Laravel index.php
 # ======================================
 echo "Updating Laravel entry-point paths"
 
@@ -266,7 +317,7 @@ echo "Laravel entry point configured\n";
 PHP
 
 # ======================================
-# 12. Fix web file permissions
+# 14. Fix web file permissions
 # ======================================
 echo "Setting web permissions"
 
@@ -280,7 +331,7 @@ chmod 644 "$WEB_ROOT/index.php"
 chmod 644 "$WEB_ROOT/.htaccess"
 
 # ======================================
-# 13. Verify deployment
+# 15. Verify deployment
 # ======================================
 echo "Verifying deployment"
 
