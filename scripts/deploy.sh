@@ -144,11 +144,11 @@ log "Running database migrations"
 # 7. Cache config, routes, events and views
 # ------------------------------------------------------------
 log "Optimizing Laravel"
-"$PHP_BIN" artisan optimize
-
-log "Signalling queue workers to restart"
-"$PHP_BIN" artisan queue:restart \
-  || printf 'WARNING: queue:restart failed (ignore if you do not use queues)\n'
+"$PHP_BIN" artisan config:cache
+"$PHP_BIN" artisan event:cache
+"$PHP_BIN" artisan route:cache
+"$PHP_BIN" artisan view:cache \
+  || printf 'WARNING: view:cache failed; views will compile on first request\n'
 
 # ------------------------------------------------------------
 # 8. Prepare web root
