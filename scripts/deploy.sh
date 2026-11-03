@@ -43,47 +43,51 @@ log "Clearing Laravel caches"
 "$PHP_BIN" artisan view:clear
 "$PHP_BIN" artisan event:clear
 
-
 # 5. Verify Laravel API routes
 log "Checking API routes"
 
-HEALTH_ROUTES="$("$PHP_BIN" artisan route:list --path=api/health --json)"
-AUTH_ROUTES="$("$PHP_BIN" artisan route:list --path=api/v1/auth --json)"
-
-if ! printf '%s' "$HEALTH_ROUTES" | "$PHP_BIN" -r '
+"$PHP_BIN" artisan route:list --json | "$PHP_BIN" -r '
 $routes = json_decode(stream_get_contents(STDIN), true);
 
-if (!is_array($routes)) exit(1);
-
-foreach ($routes as $route) {
-    if (($route["uri"] ?? "") === "api/health") {
-        exit(0);
-    }
+if (!is_array($routes)) {
+    fwrite(STDERR, "ERROR: Invalid Laravel route JSON\n");
+    exit(1);
 }
 
-exit(1);
-'; then
-    fail "Health API route missing"
-fi
+$required = [
+    "api/health" => "GET",
+    "api/v1/auth/send/otp" => "POST",
+];
 
-if ! printf '%s' "$AUTH_ROUTES" | "$PHP_BIN" -r '
-$routes = json_decode(stream_get_contents(STDIN), true);
+foreach ($required as $uri => $method) {
+    $found = false;
 
-if (!is_array($routes)) exit(1);
+    foreach ($routes as $route) {
+        $routeUri = $route["uri"] ?? "";
+        $methods = explode("|", $route["method"] ?? "");
 
-foreach ($routes as $route) {
-    if (($route["uri"] ?? "") === "api/v1/auth/send/otp") {
-        exit(0);
+        if (
+            $routeUri === $uri &&
+            in_array($method, $methods, true)
+        ) {
+            $found = true;
+            break;
+        }
     }
-}
 
-exit(1);
-'; then
-    fail "OTP API route missing"
-fi
+    if (!$found) {
+        fwrite(
+            STDERR,
+            "ERROR: Required route missing: $method $uri\n"
+        );
+        exit(1);
+    }
+
+    echo "Verified: $method $uri\n";
+}
+' || fail "Laravel API route verification failed"
 
 log "Laravel API routes registered successfully"
-
 
 # 6. Migrations
 log "Running database migrations"
