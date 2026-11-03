@@ -1,3 +1,4 @@
+
 #!/usr/bin/env bash
 set -euo pipefail
 umask 027
@@ -42,7 +43,6 @@ log "Clearing Laravel caches"
 "$PHP_BIN" artisan config:clear
 "$PHP_BIN" artisan view:clear
 "$PHP_BIN" artisan event:clear
-
 
 # 5. Verify Laravel API routes
 log "Checking API routes"
@@ -121,98 +121,26 @@ echo "Laravel API routes verified successfully\n";
 rm -f "$ROUTES_FILE"
 trap - EXIT
 
-
 # 6. Migrations
 log "Running database migrations"
 "$PHP_BIN" artisan migrate --force --no-interaction
 
-
-# 7. Initial user database seeding
-log "Checking initial user seeding"
-
-RUN_INITIAL_SEEDERS="${RUN_INITIAL_SEEDERS:-false}"
-
-if [[ "$RUN_INITIAL_SEEDERS" == "true" ]]; then
-
-    log "Initial seeding requested"
-
-    # Seed user types first.
-    # Replace with the actual existing seeder class.
-    "$PHP_BIN" artisan db:seed \
-      --class='Modules\UserManagement\Database\Seeders\UserTypeSeeder' \
-      --force \
-      --no-interaction
-
-    # Ensure the configured foreign key exists.
-    "$PHP_BIN" -r '
-    require "vendor/autoload.php";
-    $app = require "bootstrap/app.php";
-    $app->make(
-        Illuminate\Contracts\Console\Kernel::class
-    )->bootstrap();
-
-    if (!Illuminate\Support\Facades\DB::table("user_types")
-        ->where("id", 1)->exists()) {
-        fwrite(STDERR,
-            "ERROR: user_types ID 1 does not exist\n"
-        );
-        exit(1);
-    }
-
-    echo "User type ID 1 verified\n";
-    '
-
-    log "Running UserSeeder"
-
-    "$PHP_BIN" artisan db:seed \
-      --class='Modules\UserManagement\Database\Seeders\UserSeeder' \
-      --force \
-      --no-interaction
-
-    log "Verifying initial user"
-
-    SEED_EMAIL='shubham@thelendsystem.com' "$PHP_BIN" -r '
-    require "vendor/autoload.php";
-    $app = require "bootstrap/app.php";
-    $app->make(
-        Illuminate\Contracts\Console\Kernel::class
-    )->bootstrap();
-
-    $exists = Modules\UserManagement\Models\User::where(
-        "user_email",
-        getenv("SEED_EMAIL")
-    )->exists();
-
-    if (!$exists) {
-        fwrite(STDERR, "ERROR: Seeded user not found\n");
-        exit(1);
-    }
-
-    echo "Initial user verified\n";
-    '
-
-    log "Initial user seeding completed"
-
-else
-    log "Initial seeding not requested; skipping"
-fi
-
-# 8. Create Laravel storage link
+# 7. Create Laravel storage link
 log "Creating Laravel storage link"
 "$PHP_BIN" artisan storage:link
 
-# 9. Cache configuration
+# 8. Cache configuration
 log "Caching Laravel configuration"
 "$PHP_BIN" artisan config:cache
 
-# 10. Prepare web root
+# 9. Prepare web root
 log "Preparing public web directory"
 [[ "$WEB_ROOT" != "$APP_DIR" ]] || fail "Web root cannot equal application directory"
 mkdir -p "$WEB_ROOT"
 chmod 755 "$WEB_ROOT"
 [[ ! -e "$WEB_ROOT/.env" ]] || fail "Unsafe .env detected in web root"
 
-# 11. Publish public assets
+# 10. Publish public assets
 log "Publishing Laravel public files"
 cp -R "$APP_DIR/public/." "$WEB_ROOT/"
 if [[ -f "$WEB_ROOT/index.html" ]]; then
@@ -220,7 +148,7 @@ if [[ -f "$WEB_ROOT/index.html" ]]; then
   mv "$WEB_ROOT/index.html" "$APP_DIR/.deploy-backups/index.html.$(date +%Y%m%d%H%M%S)"
 fi
 
-# 12. Adjust public index.php paths
+# 11. Adjust public index.php paths
 log "Updating Laravel entry-point paths"
 "$PHP_BIN" <<'PHP'
 <?php
@@ -261,7 +189,7 @@ if (!rename($tempFile, $targetFile)) {
 echo "Laravel entry point configured\n";
 PHP
 
-# 13. Set permissions
+# 12. Set permissions
 log "Setting web permissions"
 find "$APP_DIR/public" -type d -exec chmod 755 {} +
 find "$APP_DIR/public" -type f -exec chmod 644 {} +
@@ -269,7 +197,7 @@ find "$WEB_ROOT" -type d -exec chmod 755 {} +
 find "$WEB_ROOT" -type f -exec chmod 644 {} +
 chmod 644 "$WEB_ROOT/index.php" "$WEB_ROOT/.htaccess"
 
-# 14. Verify
+# 13. Verify
 log "Verifying deployment"
 [[ -f "$WEB_ROOT/index.php" ]] || fail "Missing published index.php"
 [[ -f "$WEB_ROOT/.htaccess" ]] || fail "Missing published .htaccess"

@@ -3,12 +3,6 @@ name: Deploy Development
 
 on:
   workflow_dispatch:
-    inputs:
-      run_initial_seeders:
-        description: 'Run initial user database seeder'
-        required: true
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -30,7 +24,6 @@ jobs:
     env:
       LOCAL_ENV_PATH: ${{ vars.LOCAL_ENV_PATH || '/Users/archirastogi/Documents/GitHub/test/.env' }}
       REMOTE_DEPLOY_DIR: ${{ vars.REMOTE_DEPLOY_DIR || 'backend-api' }}
-      RUN_INITIAL_SEEDERS: ${{ inputs.run_initial_seeders || 'false' }}
 
     steps:
 
@@ -169,8 +162,6 @@ jobs:
       # ====================================
       # 5. Test SSH connection
       # ====================================
-      
-      
       - name: Test SSH connection
         env:
           SSH_HOST: ${{ secrets.DEV_SERVER_HOST }}
@@ -254,25 +245,17 @@ jobs:
       # ====================================
       # 10. Execute project deployment
       # ====================================
-      
-      
-      # ====================================
-      # 10. Execute project deployment
-      # ====================================
       - name: Deploy application
-        env:
-          RUN_INITIAL_SEEDERS: ${{ inputs.run_initial_seeders || 'false' }}
         run: |
           set -euo pipefail
 
           ssh -F "$RUNNER_TEMP/deploy-ssh/config" \
             cpanel-deploy \
-            "bash -se -- '$REMOTE_DEPLOY_DIR' '$RUN_INITIAL_SEEDERS'" <<'REMOTE'
+            "bash -se -- '$REMOTE_DEPLOY_DIR'" <<'REMOTE'
           set -euo pipefail
           umask 077
 
           DEPLOY_DIR="$1"
-          RUN_INITIAL_SEEDERS="$2"
 
           cd "$HOME/$DEPLOY_DIR"
 
@@ -293,8 +276,6 @@ jobs:
           bash -n scripts/deploy.sh
 
           echo "STEP 5: Running Laravel deployment"
-          export RUN_INITIAL_SEEDERS
-
           bash scripts/deploy.sh
 
           echo "STEP 6: Cleanup"
@@ -302,8 +283,6 @@ jobs:
 
           echo "Application deployment successful"
           REMOTE
-
-
 
       # ====================================
       # 11. Cleanup local temporary files
@@ -313,4 +292,3 @@ jobs:
         run: |
           rm -rf "$RUNNER_TEMP/deploy-ssh"
           rm -f "$RUNNER_TEMP/app-release.tar.gz"
-        
