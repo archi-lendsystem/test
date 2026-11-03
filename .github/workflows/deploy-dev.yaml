@@ -1,6 +1,5 @@
 
-name: Universal CI/CD Deployment
-
+name: Deploy Development
 
 on:
   push:
@@ -14,7 +13,6 @@ on:
         required: true
         type: boolean
         default: false
-
 
 permissions:
   contents: read
@@ -36,6 +34,7 @@ jobs:
     env:
       LOCAL_ENV_PATH: ${{ vars.LOCAL_ENV_PATH || '/Users/archirastogi/Documents/GitHub/test/.env' }}
       REMOTE_DEPLOY_DIR: ${{ vars.REMOTE_DEPLOY_DIR || 'backend-api' }}
+      RUN_INITIAL_SEEDERS: ${{ inputs.run_initial_seeders || 'false' }}
 
     steps:
 
