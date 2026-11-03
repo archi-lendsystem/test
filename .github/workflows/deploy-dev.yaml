@@ -22,11 +22,12 @@ jobs:
         shell: bash
 
     env:
-      LOCAL_ENV_PATH: ${{ vars.LOCAL_ENV_PATH }}
-      REMOTE_DEPLOY_DIR: ${{ vars.REMOTE_DEPLOY_DIR }}
-      REMOTE_WEB_ROOT: ${{ vars.REMOTE_WEB_ROOT }}
-      BACKEND_URL: ${{ vars.BACKEND_URL }}
-
+      
+    env:
+      LOCAL_ENV_PATH: ${{ secrets.LOCAL_ENV_PATH }}
+      REMOTE_DEPLOY_DIR: ${{ secrets.REMOTE_DEPLOY_DIR }}
+      REMOTE_WEB_ROOT: ${{ secrets.REMOTE_WEB_ROOT }}
+      BACKEND_URL: ${{ secrets.BACKEND_URL }}
 
     steps:
 
