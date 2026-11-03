@@ -43,13 +43,47 @@ log "Clearing Laravel caches"
 "$PHP_BIN" artisan view:clear
 "$PHP_BIN" artisan event:clear
 
-# 5. Verify routes without SIGPIPE-prone pipelines
+
+# 5. Verify Laravel API routes
 log "Checking API routes"
+
 HEALTH_ROUTES="$("$PHP_BIN" artisan route:list --path=api/health --json)"
 AUTH_ROUTES="$("$PHP_BIN" artisan route:list --path=api/v1/auth --json)"
-[[ "$HEALTH_ROUTES" == *'"uri":"api/health"'* ]] || fail "Health API route missing"
-[[ "$AUTH_ROUTES" == *'"uri":"api/v1/auth/send/otp"'* ]] || fail "OTP API route missing"
+
+if ! printf '%s' "$HEALTH_ROUTES" | "$PHP_BIN" -r '
+$routes = json_decode(stream_get_contents(STDIN), true);
+
+if (!is_array($routes)) exit(1);
+
+foreach ($routes as $route) {
+    if (($route["uri"] ?? "") === "api/health") {
+        exit(0);
+    }
+}
+
+exit(1);
+'; then
+    fail "Health API route missing"
+fi
+
+if ! printf '%s' "$AUTH_ROUTES" | "$PHP_BIN" -r '
+$routes = json_decode(stream_get_contents(STDIN), true);
+
+if (!is_array($routes)) exit(1);
+
+foreach ($routes as $route) {
+    if (($route["uri"] ?? "") === "api/v1/auth/send/otp") {
+        exit(0);
+    }
+}
+
+exit(1);
+'; then
+    fail "OTP API route missing"
+fi
+
 log "Laravel API routes registered successfully"
+
 
 # 6. Migrations
 log "Running database migrations"
