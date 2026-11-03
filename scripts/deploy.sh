@@ -126,30 +126,54 @@ trap - EXIT
 log "Running database migrations"
 "$PHP_BIN" artisan migrate --force --no-interaction
 
+
 # 7. Initial user database seeding
 log "Checking initial user seeding"
-
-SEED_MARKER="$APP_DIR/storage/.initial-user-seed-completed"
-SEEDER_CLASS='Modules\UserManagement\Database\Seeders\UserSeeder'
 
 RUN_INITIAL_SEEDERS="${RUN_INITIAL_SEEDERS:-false}"
 
 if [[ "$RUN_INITIAL_SEEDERS" == "true" ]]; then
 
-  log "Initial seeding requested"
+    log "Initial seeding requested"
 
-  "$PHP_BIN" artisan db:seed \
-    --class="$SEEDER_CLASS" \
-    --force \
-    --no-interaction
+    # Seed user types first.
+    # Replace with the actual existing seeder class.
+    "$PHP_BIN" artisan db:seed \
+      --class='Modules\UserManagement\Database\Seeders\UserTypeSeeder' \
+      --force \
+      --no-interaction
 
-  log "Verifying seeded account"
-
-  SEED_EMAIL='shubham@thelendsystem.com' "$PHP_BIN" -r '
+    # Ensure the configured foreign key exists.
+    "$PHP_BIN" -r '
     require "vendor/autoload.php";
-
     $app = require "bootstrap/app.php";
+    $app->make(
+        Illuminate\Contracts\Console\Kernel::class
+    )->bootstrap();
 
+    if (!Illuminate\Support\Facades\DB::table("user_types")
+        ->where("id", 1)->exists()) {
+        fwrite(STDERR,
+            "ERROR: user_types ID 1 does not exist\n"
+        );
+        exit(1);
+    }
+
+    echo "User type ID 1 verified\n";
+    '
+
+    log "Running UserSeeder"
+
+    "$PHP_BIN" artisan db:seed \
+      --class='Modules\UserManagement\Database\Seeders\UserSeeder' \
+      --force \
+      --no-interaction
+
+    log "Verifying initial user"
+
+    SEED_EMAIL='shubham@thelendsystem.com' "$PHP_BIN" -r '
+    require "vendor/autoload.php";
+    $app = require "bootstrap/app.php";
     $app->make(
         Illuminate\Contracts\Console\Kernel::class
     )->bootstrap();
@@ -160,26 +184,18 @@ if [[ "$RUN_INITIAL_SEEDERS" == "true" ]]; then
     )->exists();
 
     if (!$exists) {
-        fwrite(
-            STDERR,
-            "ERROR: Initial user was not found\n"
-        );
+        fwrite(STDERR, "ERROR: Seeded user not found\n");
         exit(1);
     }
 
     echo "Initial user verified\n";
-  '
+    '
 
-  ( umask 077; : > "$SEED_MARKER" )
-
-  log "Initial user seeding completed"
+    log "Initial user seeding completed"
 
 else
-
-  log "Initial seeding not requested; skipping"
-
+    log "Initial seeding not requested; skipping"
 fi
-
 
 # 8. Create Laravel storage link
 log "Creating Laravel storage link"
