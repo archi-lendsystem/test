@@ -22,8 +22,11 @@ jobs:
         shell: bash
 
     env:
-      LOCAL_ENV_PATH: ${{ vars.LOCAL_ENV_PATH || '/Users/archirastogi/Documents/GitHub/test/.env' }}
-      REMOTE_DEPLOY_DIR: ${{ vars.REMOTE_DEPLOY_DIR || 'backend-api' }}
+      LOCAL_ENV_PATH: ${{ vars.LOCAL_ENV_PATH }}
+      REMOTE_DEPLOY_DIR: ${{ vars.REMOTE_DEPLOY_DIR }}
+      REMOTE_WEB_ROOT: ${{ vars.REMOTE_WEB_ROOT }}
+      BACKEND_URL: ${{ vars.BACKEND_URL }}
+
 
     steps:
 
