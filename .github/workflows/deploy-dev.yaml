@@ -242,6 +242,7 @@ jobs:
 
           echo ".env uploaded successfully"
 
+      
       # ====================================
       # 10. Execute project deployment
       # ====================================
@@ -251,11 +252,12 @@ jobs:
 
           ssh -F "$RUNNER_TEMP/deploy-ssh/config" \
             cpanel-deploy \
-            "bash -se -- '$REMOTE_DEPLOY_DIR'" <<'REMOTE'
+            "bash -se -- '$REMOTE_DEPLOY_DIR' '$REMOTE_WEB_ROOT'" <<'REMOTE'
           set -euo pipefail
           umask 077
 
           DEPLOY_DIR="$1"
+          REMOTE_WEB_ROOT="$2"
 
           cd "$HOME/$DEPLOY_DIR"
 
@@ -276,6 +278,7 @@ jobs:
           bash -n scripts/deploy.sh
 
           echo "STEP 5: Running Laravel deployment"
+          export REMOTE_WEB_ROOT
           bash scripts/deploy.sh
 
           echo "STEP 6: Cleanup"
@@ -284,11 +287,38 @@ jobs:
           echo "Application deployment successful"
           REMOTE
 
+      
       # ====================================
-      # 11. Cleanup local temporary files
+      # 11. Verify backend domain
+      # ====================================
+      - name: Verify backend domain
+        run: |
+          set -euo pipefail
+
+          echo "Checking backend: $BACKEND_URL/api/health"
+
+          HTTP_CODE="$(curl -sS -L \
+            --connect-timeout 15 \
+            --max-time 30 \
+            -o "$RUNNER_TEMP/backend-health-response.txt" \
+            -w '%{http_code}' \
+            "$BACKEND_URL/api/health")"
+
+          echo "HTTP Status: $HTTP_CODE"
+
+          if [[ "$HTTP_CODE" != "200" ]]; then
+            echo "::error::Backend health check failed"
+            exit 1
+          fi
+
+          echo "Backend health check passed"
+
+      # ====================================
+      # 12. Cleanup local temporary files
       # ====================================
       - name: Cleanup temporary files
         if: always()
         run: |
           rm -rf "$RUNNER_TEMP/deploy-ssh"
           rm -f "$RUNNER_TEMP/app-release.tar.gz"
+
