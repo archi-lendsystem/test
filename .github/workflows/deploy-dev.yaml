@@ -2,10 +2,6 @@
 name: Deploy Development
 
 on:
-  push:
-    branches:
-      - staging
-
   workflow_dispatch:
     inputs:
       run_initial_seeders:
