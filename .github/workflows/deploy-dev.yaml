@@ -170,17 +170,25 @@ jobs:
       # 5. Test SSH connection
       # ====================================
       
+      
       - name: Test SSH connection
+        env:
+          SSH_HOST: ${{ secrets.DEV_SERVER_HOST }}
+          SSH_PORT: ${{ secrets.DEV_SERVER_PORT }}
         run: |
           set -euo pipefail
 
-          echo "Testing SSH connectivity"
+          echo "Checking SSH connectivity"
 
-          ssh -v \
+          echo "Runner: $(hostname)"
+          echo "SSH port configured: ${SSH_PORT:+YES}"
+
+          ssh -vv \
+            -o ConnectTimeout=20 \
+            -o ConnectionAttempts=3 \
             -F "$RUNNER_TEMP/deploy-ssh/config" \
             cpanel-deploy \
             'echo "SSH connection successful"'
-
 
       # ====================================
       # 6. Package application source
@@ -305,5 +313,4 @@ jobs:
         run: |
           rm -rf "$RUNNER_TEMP/deploy-ssh"
           rm -f "$RUNNER_TEMP/app-release.tar.gz"
-        
         
