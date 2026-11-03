@@ -1,4 +1,3 @@
-
 name: Deploy Development
 
 on:
@@ -15,12 +14,12 @@ jobs:
   deploy:
     name: Deploy Application to cPanel
     runs-on: [self-hosted, macOS, ARM64]
-    timeout-minutes: 45
+    timeout-minutes: 30
 
     defaults:
       run:
         shell: bash
-      
+
     env:
       LOCAL_ENV_PATH: ${{ secrets.LOCAL_ENV_PATH }}
       REMOTE_DEPLOY_DIR: ${{ secrets.REMOTE_DEPLOY_DIR }}
@@ -39,9 +38,9 @@ jobs:
           fetch-depth: 1
 
       # ====================================
-      # 2. Debug deployment configuration
+      # 2. Validate deployment configuration
       # ====================================
-      - name: Debug deployment configuration
+      - name: Validate configuration
         run: |
           set -euo pipefail
 
@@ -49,71 +48,54 @@ jobs:
           echo "Branch: $GITHUB_REF_NAME"
           echo "Commit: $GITHUB_SHA"
 
-          if [ -n "${LOCAL_ENV_PATH:-}" ]; then
-            echo "LOCAL_ENV_PATH: CONFIGURED"
-          else
-            echo "::error::LOCAL_ENV_PATH: EMPTY"
-            exit 1
-          fi
-
-          if [ -n "${REMOTE_DEPLOY_DIR:-}" ]; then
-            echo "REMOTE_DEPLOY_DIR: CONFIGURED"
-          else
-            echo "::error::REMOTE_DEPLOY_DIR: EMPTY"
-            exit 1
-          fi
-
-          if [ -s "$LOCAL_ENV_PATH" ]; then
-            echo "Local .env: FOUND"
-          else
-            echo "::error::Local .env: NOT FOUND"
-            exit 1
-          fi
-
-      # ====================================
-      # 3. Validate deployment configuration
-      # ====================================
-      - name: Validate configuration
-        run: |
-          set -euo pipefail
-
-          echo "Validating deployment configuration"
-
           : "${LOCAL_ENV_PATH:?LOCAL_ENV_PATH is missing}"
           : "${REMOTE_DEPLOY_DIR:?REMOTE_DEPLOY_DIR is missing}"
+          : "${BACKEND_URL:?BACKEND_URL is missing}"
 
-          if [ ! -s "$LOCAL_ENV_PATH" ]; then
+          if [[ ! -s "$LOCAL_ENV_PATH" ]]; then
             echo "::error::Local .env missing or empty"
             exit 1
           fi
 
-          if [ ! -r "$LOCAL_ENV_PATH" ]; then
+          if [[ ! -r "$LOCAL_ENV_PATH" ]]; then
             echo "::error::Cannot read local .env"
             exit 1
           fi
 
-          if [ ! -f scripts/deploy.sh ]; then
+          if [[ ! -f scripts/deploy.sh ]]; then
             echo "::error::scripts/deploy.sh is missing"
             exit 1
           fi
 
           bash -n scripts/deploy.sh
 
-          if git ls-files --error-unmatch .env \
-              >/dev/null 2>&1; then
+          if git ls-files --error-unmatch .env >/dev/null 2>&1; then
             echo "::error::.env must not be tracked in Git"
             exit 1
           fi
 
           if [[ ! "$REMOTE_DEPLOY_DIR" =~ ^[A-Za-z0-9_-]+$ ]]; then
-            echo "::error::Invalid remote deployment directory"
+            echo "::error::Invalid REMOTE_DEPLOY_DIR"
+            exit 1
+          fi
+
+          if [[ -n "${REMOTE_WEB_ROOT:-}" ]]; then
+            if [[ ! "$REMOTE_WEB_ROOT" =~ ^[A-Za-z0-9_][A-Za-z0-9_./-]*$ ]] \
+                || [[ "$REMOTE_WEB_ROOT" == *..* ]]; then
+              echo "::error::Invalid REMOTE_WEB_ROOT"
+              exit 1
+            fi
+          fi
+
+          if [[ ! "$BACKEND_URL" =~ ^https?://[^[:space:]]+$ ]]; then
+            echo "::error::Invalid BACKEND_URL"
             exit 1
           fi
 
           echo "Configuration validated successfully"
 
       # ====================================
-      # 4. Configure secure SSH
+      # 3. Configure secure SSH
       # ====================================
       - name: Configure SSH
         env:
@@ -139,8 +121,7 @@ jobs:
           printf '%s\n' "$SSH_KEY" > "$SSH_DIR/id_deploy"
           printf '%s\n' "$KNOWN_HOSTS" > "$SSH_DIR/known_hosts"
 
-          chmod 600 "$SSH_DIR/id_deploy"
-          chmod 600 "$SSH_DIR/known_hosts"
+          chmod 600 "$SSH_DIR/id_deploy" "$SSH_DIR/known_hosts"
 
           {
             echo "Host cpanel-deploy"
@@ -153,6 +134,7 @@ jobs:
             echo "  IdentitiesOnly yes"
             echo "  BatchMode yes"
             echo "  ConnectTimeout 15"
+            echo "  ConnectionAttempts 3"
             echo "  ServerAliveInterval 30"
             echo "  ServerAliveCountMax 5"
           } > "$SSH_DIR/config"
@@ -162,91 +144,52 @@ jobs:
           echo "SSH configured successfully"
 
       # ====================================
-      # 5. Test SSH connection
+      # 4. Test SSH + prepare remote directory
       # ====================================
-      - name: Test SSH connection
-        env:
-          SSH_HOST: ${{ secrets.DEV_SERVER_HOST }}
-          SSH_PORT: ${{ secrets.DEV_SERVER_PORT }}
-        run: |
-          set -euo pipefail
-
-          echo "Checking SSH connectivity"
-
-          echo "Runner: $(hostname)"
-          echo "SSH port configured: ${SSH_PORT:+YES}"
-
-          ssh -vv \
-            -o ConnectTimeout=20 \
-            -o ConnectionAttempts=3 \
-            -F "$RUNNER_TEMP/deploy-ssh/config" \
-            cpanel-deploy \
-            'echo "SSH connection successful"'
-
-      # ====================================
-      # 6. Package application source
-      # ====================================
-      - name: Package source code
-        run: |
-          set -euo pipefail
-
-          echo "Creating source archive"
-
-          git archive --format=tar HEAD \
-            | gzip > "$RUNNER_TEMP/app-release.tar.gz"
-
-          test -s "$RUNNER_TEMP/app-release.tar.gz"
-
-          echo "Source archive created"
-
-      # ====================================
-      # 7. Prepare remote directory
-      # ====================================
-      - name: Prepare server directory
+      - name: Connect and prepare server directory
         run: |
           set -euo pipefail
 
           ssh -F "$RUNNER_TEMP/deploy-ssh/config" \
             cpanel-deploy \
-            "mkdir -p \"\$HOME/$REMOTE_DEPLOY_DIR\""
-
-          echo "Server directory ready"
+            "mkdir -p \"\$HOME/$REMOTE_DEPLOY_DIR\" && echo 'SSH connection OK, directory ready'"
 
       # ====================================
-      # 8. Upload application source
+      # 5. Package application source
       # ====================================
-      - name: Upload application
+      - name: Package source code
         run: |
           set -euo pipefail
 
-          echo "Uploading application source"
+          git archive --format=tar HEAD \
+            | gzip -6 > "$RUNNER_TEMP/app-release.tar.gz"
+
+          test -s "$RUNNER_TEMP/app-release.tar.gz"
+
+          echo "Source archive created ($(du -h "$RUNNER_TEMP/app-release.tar.gz" | cut -f1))"
+
+      # ====================================
+      # 6. Upload source + .env (single connection)
+      # ====================================
+      - name: Upload release files
+        run: |
+          set -euo pipefail
+          umask 077
+
+          cp "$LOCAL_ENV_PATH" "$RUNNER_TEMP/.env.upload"
 
           scp -q \
             -F "$RUNNER_TEMP/deploy-ssh/config" \
             "$RUNNER_TEMP/app-release.tar.gz" \
-            "cpanel-deploy:$REMOTE_DEPLOY_DIR/.release-upload.tar.gz"
+            "$RUNNER_TEMP/.env.upload" \
+            "cpanel-deploy:$REMOTE_DEPLOY_DIR/"
 
-          echo "Source uploaded successfully"
+          rm -f "$RUNNER_TEMP/.env.upload"
+
+          echo "Release files uploaded successfully"
 
       # ====================================
-      # 9. Upload local environment
-      # ====================================
-      - name: Upload local .env
-        run: |
-          set -euo pipefail
-
-          echo "Uploading local .env"
-
-          scp -q \
-            -F "$RUNNER_TEMP/deploy-ssh/config" \
-            "$LOCAL_ENV_PATH" \
-            "cpanel-deploy:$REMOTE_DEPLOY_DIR/.env.upload"
-
-          echo ".env uploaded successfully"
-
-      
-      # ====================================
-      # 10. Execute project deployment
+      # 7. Execute project deployment
       # ====================================
       - name: Deploy application
         run: |
@@ -254,73 +197,109 @@ jobs:
 
           ssh -F "$RUNNER_TEMP/deploy-ssh/config" \
             cpanel-deploy \
-            "bash -se -- '$REMOTE_DEPLOY_DIR' '$REMOTE_WEB_ROOT'" <<'REMOTE'
+            "bash -se -- '$REMOTE_DEPLOY_DIR' '${REMOTE_WEB_ROOT:-}'" <<'REMOTE'
           set -euo pipefail
           umask 077
 
           DEPLOY_DIR="$1"
-          REMOTE_WEB_ROOT="$2"
+          REMOTE_WEB_ROOT="${2:-}"
+          PHP_BIN="/opt/cpanel/ea-php84/root/usr/bin/php"
 
           cd "$HOME/$DEPLOY_DIR"
 
           echo "STEP 1: Checking uploaded files"
-          test -s .release-upload.tar.gz
+          test -s app-release.tar.gz
           test -s .env.upload
+          tar -tzf app-release.tar.gz >/dev/null
 
-          echo "STEP 2: Extracting application"
-          tar -xzf .release-upload.tar.gz
+          echo "STEP 2: Enabling maintenance mode"
+          if [ -f artisan ] && [ -f vendor/autoload.php ] && [ -x "$PHP_BIN" ]; then
+            "$PHP_BIN" artisan down --retry=15 \
+              || echo "WARNING: Could not enable maintenance mode"
+          else
+            echo "First deployment detected, skipping maintenance mode"
+          fi
 
-          echo "STEP 3: Installing environment"
+          echo "STEP 3: Extracting application"
+          tar -tzf app-release.tar.gz | sed '/\/$/d' | LC_ALL=C sort > .release-manifest.new
+          tar -xzf app-release.tar.gz
+
+          echo "STEP 4: Removing files deleted from Git"
+          if [ -f .release-manifest ]; then
+            LC_ALL=C comm -23 .release-manifest .release-manifest.new \
+              | while IFS= read -r file; do
+                  case "$file" in
+                    ""|/*|*..*) continue ;;
+                  esac
+                  if [ -f "$file" ] || [ -L "$file" ]; then
+                    rm -f -- "$file"
+                    echo "Removed: $file"
+                  fi
+                done
+          else
+            echo "No previous manifest, skipping"
+          fi
+          mv -f .release-manifest.new .release-manifest
+
+          echo "STEP 5: Installing environment"
           chmod 600 .env.upload
           mv -f .env.upload .env
-          chmod 600 .env
 
-          echo "STEP 4: Checking deployment script"
+          echo "STEP 6: Checking deployment script"
           test -f scripts/deploy.sh
           bash -n scripts/deploy.sh
 
-          echo "STEP 5: Running Laravel deployment"
+          echo "STEP 7: Running Laravel deployment"
           export REMOTE_WEB_ROOT
           bash scripts/deploy.sh
 
-          echo "STEP 6: Cleanup"
-          rm -f .release-upload.tar.gz
+          echo "STEP 8: Cleanup"
+          rm -f app-release.tar.gz .release-upload.tar.gz
 
           echo "Application deployment successful"
           REMOTE
 
-      
       # ====================================
-      # 11. Verify backend domain
+      # 8. Verify backend domain
       # ====================================
       - name: Verify backend domain
         run: |
           set -euo pipefail
 
-          echo "Checking backend: $BACKEND_URL/api/health"
+          HEALTH_URL="${BACKEND_URL%/}/api/health"
+          RESPONSE_FILE="$RUNNER_TEMP/backend-health-response.txt"
+
+          echo "Checking backend: $HEALTH_URL"
 
           HTTP_CODE="$(curl -sS -L \
+            --retry 5 \
+            --retry-delay 3 \
+            --retry-all-errors \
             --connect-timeout 15 \
             --max-time 30 \
-            -o "$RUNNER_TEMP/backend-health-response.txt" \
+            -o "$RESPONSE_FILE" \
             -w '%{http_code}' \
-            "$BACKEND_URL/api/health")"
+            "$HEALTH_URL")"
 
           echo "HTTP Status: $HTTP_CODE"
 
           if [[ "$HTTP_CODE" != "200" ]]; then
-            echo "::error::Backend health check failed"
+            echo "::error::Backend health check failed ($HTTP_CODE)"
+            echo "Response (first 1000 bytes):"
+            head -c 1000 "$RESPONSE_FILE" || true
+            echo
             exit 1
           fi
 
           echo "Backend health check passed"
 
       # ====================================
-      # 12. Cleanup local temporary files
+      # 9. Cleanup local temporary files
       # ====================================
       - name: Cleanup temporary files
         if: always()
         run: |
           rm -rf "$RUNNER_TEMP/deploy-ssh"
           rm -f "$RUNNER_TEMP/app-release.tar.gz"
-
+          rm -f "$RUNNER_TEMP/.env.upload"
+          rm -f "$RUNNER_TEMP/backend-health-response.txt"
