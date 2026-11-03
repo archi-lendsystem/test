@@ -174,13 +174,18 @@ jobs:
       # ====================================
       # 5. Test SSH connection
       # ====================================
+      
       - name: Test SSH connection
         run: |
           set -euo pipefail
 
-          ssh -F "$RUNNER_TEMP/deploy-ssh/config" \
+          echo "Testing SSH connectivity"
+
+          ssh -v \
+            -F "$RUNNER_TEMP/deploy-ssh/config" \
             cpanel-deploy \
             'echo "SSH connection successful"'
+
 
       # ====================================
       # 6. Package application source
