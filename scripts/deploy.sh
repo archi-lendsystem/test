@@ -181,19 +181,9 @@ else
 fi
 
 
-# 8. Upload application source
-- name: Upload application
-  run: |
-    set -euo pipefail
-
-    echo "Uploading application source"
-
-    scp -O -v \
-      -F "$RUNNER_TEMP/deploy-ssh/config" \
-      "$RUNNER_TEMP/app-release.tar.gz" \
-      "cpanel-deploy:$REMOTE_DEPLOY_DIR/.release-upload.tar.gz"
-
-    echo "Source uploaded successfully"
+# 8. Create Laravel storage link
+log "Creating Laravel storage link"
+"$PHP_BIN" artisan storage:link
 
 # 9. Cache configuration
 log "Caching Laravel configuration"
