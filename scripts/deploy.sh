@@ -55,32 +55,58 @@ log "Laravel API routes registered successfully"
 log "Running database migrations"
 "$PHP_BIN" artisan migrate --force --no-interaction
 
-# 7. First-time user seed. Marker retained outside git archive.
+# 7. Initial user database seeding
 log "Checking initial user seeding"
+
 SEED_MARKER="$APP_DIR/storage/.initial-user-seed-completed"
 SEEDER_CLASS='Modules\UserManagement\Database\Seeders\UserSeeder'
-if [[ ! -f "$SEED_MARKER" ]]; then
-  log "Running initial UserSeeder"
-  "$PHP_BIN" artisan db:seed --class="$SEEDER_CLASS" --force --no-interaction
+
+RUN_INITIAL_SEEDERS="${RUN_INITIAL_SEEDERS:-false}"
+
+if [[ "$RUN_INITIAL_SEEDERS" == "true" ]]; then
+
+  log "Initial seeding requested"
+
+  "$PHP_BIN" artisan db:seed \
+    --class="$SEEDER_CLASS" \
+    --force \
+    --no-interaction
 
   log "Verifying seeded account"
+
   SEED_EMAIL='shubham@thelendsystem.com' "$PHP_BIN" -r '
     require "vendor/autoload.php";
+
     $app = require "bootstrap/app.php";
-    $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+
+    $app->make(
+        Illuminate\Contracts\Console\Kernel::class
+    )->bootstrap();
+
     $exists = Modules\UserManagement\Models\User::where(
-      "user_email", getenv("SEED_EMAIL")
+        "user_email",
+        getenv("SEED_EMAIL")
     )->exists();
+
     if (!$exists) {
-      fwrite(STDERR, "ERROR: Initial user was not found after seeding\n");
-      exit(1);
+        fwrite(
+            STDERR,
+            "ERROR: Initial user was not found\n"
+        );
+        exit(1);
     }
+
     echo "Initial user verified\n";
   '
+
   ( umask 077; : > "$SEED_MARKER" )
-  log "Initial UserSeeder completed"
+
+  log "Initial user seeding completed"
+
 else
-  log "Initial UserSeeder already completed; skipping"
+
+  log "Initial seeding not requested; skipping"
+
 fi
 
 # 8. Storage link
