@@ -20,8 +20,6 @@ jobs:
     defaults:
       run:
         shell: bash
-
-    env:
       
     env:
       LOCAL_ENV_PATH: ${{ secrets.LOCAL_ENV_PATH }}
