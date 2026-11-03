@@ -43,14 +43,30 @@ log "Clearing Laravel caches"
 "$PHP_BIN" artisan view:clear
 "$PHP_BIN" artisan event:clear
 
+
 # 5. Verify Laravel API routes
 log "Checking API routes"
 
-"$PHP_BIN" artisan route:list --json | "$PHP_BIN" -r '
-$routes = json_decode(stream_get_contents(STDIN), true);
+ROUTES_FILE="$(mktemp)"
+trap 'rm -f "$ROUTES_FILE"' EXIT
+
+if ! "$PHP_BIN" artisan route:list --json > "$ROUTES_FILE"; then
+    fail "Laravel route:list command failed"
+fi
+
+"$PHP_BIN" -r '
+$file = $argv[1];
+
+$json = file_get_contents($file);
+$routes = json_decode($json, true);
 
 if (!is_array($routes)) {
     fwrite(STDERR, "ERROR: Invalid Laravel route JSON\n");
+    fwrite(STDERR, "JSON error: " . json_last_error_msg() . "\n");
+    fwrite(STDERR, "Output length: " . strlen($json) . " bytes\n");
+    fwrite(STDERR, "Output prefix: " . bin2hex(substr($json, 0, 32)) . "\n");
+    fwrite(STDERR, "Output preview:\n");
+    fwrite(STDERR, substr($json, 0, 500) . "\n");
     exit(1);
 }
 
@@ -63,11 +79,10 @@ foreach ($required as $uri => $method) {
     $found = false;
 
     foreach ($routes as $route) {
-        $routeUri = $route["uri"] ?? "";
         $methods = explode("|", $route["method"] ?? "");
 
         if (
-            $routeUri === $uri &&
+            ($route["uri"] ?? "") === $uri &&
             in_array($method, $methods, true)
         ) {
             $found = true;
@@ -76,18 +91,19 @@ foreach ($required as $uri => $method) {
     }
 
     if (!$found) {
-        fwrite(
-            STDERR,
-            "ERROR: Required route missing: $method $uri\n"
-        );
+        fwrite(STDERR, "ERROR: Missing route: $method $uri\n");
         exit(1);
     }
 
     echo "Verified: $method $uri\n";
 }
-' || fail "Laravel API route verification failed"
 
-log "Laravel API routes registered successfully"
+echo "Laravel API routes verified successfully\n";
+' "$ROUTES_FILE" || fail "Laravel API route verification failed"
+
+rm -f "$ROUTES_FILE"
+trap - EXIT
+
 
 # 6. Migrations
 log "Running database migrations"
