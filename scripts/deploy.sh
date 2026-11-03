@@ -58,7 +58,24 @@ fi
 $file = $argv[1];
 
 $json = file_get_contents($file);
+
+if ($json === false) {
+    fwrite(STDERR, "ERROR: Cannot read routes JSON\n");
+    exit(1);
+}
+
+// Remove UTF-8 BOM
+if (str_starts_with($json, "\xEF\xBB\xBF")) {
+    $json = substr($json, 3);
+}
+
 $routes = json_decode($json, true);
+
+if (!is_array($routes)) {
+    fwrite(STDERR, "ERROR: Invalid Laravel route JSON\n");
+    fwrite(STDERR, "JSON error: " . json_last_error_msg() . "\n");
+    exit(1);
+}
 
 if (!is_array($routes)) {
     fwrite(STDERR, "ERROR: Invalid Laravel route JSON\n");
