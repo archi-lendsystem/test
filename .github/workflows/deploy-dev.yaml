@@ -391,3 +391,4 @@ jobs:
           rm -f "$RUNNER_TEMP/backend-health-response.txt"
 
           echo "Local temporary files cleaned"
+
