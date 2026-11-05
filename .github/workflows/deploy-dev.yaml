@@ -1,3 +1,4 @@
+
 name: Deploy Development
 
 on:
@@ -27,19 +28,18 @@ jobs:
       BACKEND_URL: ${{ secrets.BACKEND_URL }}
 
     steps:
-
-      # ====================================
+      # ==========================================================
       # 1. Checkout source code
-      # ====================================
+      # ==========================================================
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           persist-credentials: false
           fetch-depth: 1
 
-      # ====================================
+      # ==========================================================
       # 2. Validate deployment configuration
-      # ====================================
+      # ==========================================================
       - name: Validate configuration
         run: |
           set -euo pipefail
@@ -94,9 +94,26 @@ jobs:
 
           echo "Configuration validated successfully"
 
-      # ====================================
-      # 3. Configure secure SSH
-      # ====================================
+      # ==========================================================
+      # 3. SECURITY: Validate local environment for UAT
+      # ==========================================================
+      - name: Validate environment security
+        run: |
+          set -euo pipefail
+
+          echo "Checking environment for forbidden UAT references"
+
+          if LC_ALL=C grep -iq 'uat' "$LOCAL_ENV_PATH"; then
+            echo "::error::Deployment blocked: .env contains UAT references"
+            exit 1
+          fi
+
+          echo "Environment security validation passed"
+          echo "No UAT references found"
+
+      # ==========================================================
+      # 4. Configure secure SSH
+      # ==========================================================
       - name: Configure SSH
         env:
           SSH_HOST: ${{ secrets.DEV_SERVER_HOST }}
@@ -123,6 +140,18 @@ jobs:
 
           chmod 600 "$SSH_DIR/id_deploy" "$SSH_DIR/known_hosts"
 
+          if [[ ! "${SSH_PORT:-22}" =~ ^[0-9]+$ ]] \
+              || (( 10#${SSH_PORT:-22} < 1 || 10#${SSH_PORT:-22} > 65535 )); then
+            echo "::error::Invalid SSH port"
+            exit 1
+          fi
+
+          if [[ "$SSH_HOST" =~ [[:space:]] ]] \
+              || [[ "$SSH_USER" =~ [[:space:]] ]]; then
+            echo "::error::Invalid SSH host or user"
+            exit 1
+          fi
+
           {
             echo "Host cpanel-deploy"
             echo "  HostName $SSH_HOST"
@@ -143,9 +172,9 @@ jobs:
 
           echo "SSH configured successfully"
 
-      # ====================================
-      # 4. Test SSH + prepare remote directory
-      # ====================================
+      # ==========================================================
+      # 5. Test SSH and prepare remote directory
+      # ==========================================================
       - name: Connect and prepare server directory
         run: |
           set -euo pipefail
@@ -154,9 +183,9 @@ jobs:
             cpanel-deploy \
             "mkdir -p \"\$HOME/$REMOTE_DEPLOY_DIR\" && echo 'SSH connection OK, directory ready'"
 
-      # ====================================
-      # 5. Package application source
-      # ====================================
+      # ==========================================================
+      # 6. Package application source
+      # ==========================================================
       - name: Package source code
         run: |
           set -euo pipefail
@@ -168,15 +197,21 @@ jobs:
 
           echo "Source archive created ($(du -h "$RUNNER_TEMP/app-release.tar.gz" | cut -f1))"
 
-      # ====================================
-      # 6. Upload source + .env (single connection)
-      # ====================================
+      # ==========================================================
+      # 7. Upload source and environment file
+      # ==========================================================
       - name: Upload release files
         run: |
           set -euo pipefail
           umask 077
 
           cp "$LOCAL_ENV_PATH" "$RUNNER_TEMP/.env.upload"
+
+          # Validate the exact environment copy being uploaded.
+          if LC_ALL=C grep -iq 'uat' "$RUNNER_TEMP/.env.upload"; then
+            echo "::error::UAT reference found in upload environment"
+            exit 1
+          fi
 
           scp -q \
             -F "$RUNNER_TEMP/deploy-ssh/config" \
@@ -188,9 +223,9 @@ jobs:
 
           echo "Release files uploaded successfully"
 
-      # ====================================
-      # 7. Execute project deployment
-      # ====================================
+      # ==========================================================
+      # 8. Execute Laravel deployment
+      # ==========================================================
       - name: Deploy application
         run: |
           set -euo pipefail
@@ -203,16 +238,37 @@ jobs:
 
           DEPLOY_DIR="$1"
           REMOTE_WEB_ROOT="${2:-}"
+
           PHP_BIN="/opt/cpanel/ea-php84/root/usr/bin/php"
 
           cd "$HOME/$DEPLOY_DIR"
 
+          # ------------------------------------------------------
+          # STEP 1: Check uploaded files
+          # ------------------------------------------------------
           echo "STEP 1: Checking uploaded files"
+
           test -s app-release.tar.gz
           test -s .env.upload
           tar -tzf app-release.tar.gz >/dev/null
 
-          echo "STEP 2: Enabling maintenance mode"
+          # ------------------------------------------------------
+          # STEP 2: Validate remote environment before deployment
+          # ------------------------------------------------------
+          echo "STEP 2: Validating remote environment"
+
+          if LC_ALL=C grep -iq 'uat' .env.upload; then
+            echo "ERROR: Deployment blocked: remote .env contains UAT references" >&2
+            exit 1
+          fi
+
+          echo "Remote environment security validation passed"
+
+          # ------------------------------------------------------
+          # STEP 3: Enable maintenance mode
+          # ------------------------------------------------------
+          echo "STEP 3: Enabling maintenance mode"
+
           if [ -f artisan ] && [ -f vendor/autoload.php ] && [ -x "$PHP_BIN" ]; then
             "$PHP_BIN" artisan down --retry=15 \
               || echo "WARNING: Could not enable maintenance mode"
@@ -220,17 +276,29 @@ jobs:
             echo "First deployment detected, skipping maintenance mode"
           fi
 
-          echo "STEP 3: Extracting application"
-          tar -tzf app-release.tar.gz | sed '/\/$/d' | LC_ALL=C sort > .release-manifest.new
+          # ------------------------------------------------------
+          # STEP 4: Extract application
+          # ------------------------------------------------------
+          echo "STEP 4: Extracting application"
+
+          tar -tzf app-release.tar.gz \
+            | sed '/\/$/d' \
+            | LC_ALL=C sort > .release-manifest.new
+
           tar -xzf app-release.tar.gz
 
-          echo "STEP 4: Removing files deleted from Git"
+          # ------------------------------------------------------
+          # STEP 5: Remove files deleted from Git
+          # ------------------------------------------------------
+          echo "STEP 5: Removing files deleted from Git"
+
           if [ -f .release-manifest ]; then
             LC_ALL=C comm -23 .release-manifest .release-manifest.new \
               | while IFS= read -r file; do
                   case "$file" in
                     ""|/*|*..*) continue ;;
                   esac
+
                   if [ -f "$file" ] || [ -L "$file" ]; then
                     rm -f -- "$file"
                     echo "Removed: $file"
@@ -239,29 +307,46 @@ jobs:
           else
             echo "No previous manifest, skipping"
           fi
+
           mv -f .release-manifest.new .release-manifest
 
-          echo "STEP 5: Installing environment"
+          # ------------------------------------------------------
+          # STEP 6: Install environment
+          # ------------------------------------------------------
+          echo "STEP 6: Installing environment"
+
           chmod 600 .env.upload
           mv -f .env.upload .env
 
-          echo "STEP 6: Checking deployment script"
+          # ------------------------------------------------------
+          # STEP 7: Validate deployment script
+          # ------------------------------------------------------
+          echo "STEP 7: Checking deployment script"
+
           test -f scripts/deploy.sh
           bash -n scripts/deploy.sh
 
-          echo "STEP 7: Running Laravel deployment"
+          # ------------------------------------------------------
+          # STEP 8: Execute Laravel deployment
+          # ------------------------------------------------------
+          echo "STEP 8: Running Laravel deployment and API security checks"
+
           export REMOTE_WEB_ROOT
           bash scripts/deploy.sh
 
-          echo "STEP 8: Cleanup"
+          # ------------------------------------------------------
+          # STEP 9: Cleanup
+          # ------------------------------------------------------
+          echo "STEP 9: Cleanup"
+
           rm -f app-release.tar.gz .release-upload.tar.gz
 
           echo "Application deployment successful"
           REMOTE
 
-      # ====================================
-      # 8. Verify backend domain
-      # ====================================
+      # ==========================================================
+      # 9. Verify backend health endpoint
+      # ==========================================================
       - name: Verify backend domain
         run: |
           set -euo pipefail
@@ -286,6 +371,7 @@ jobs:
           if [[ "$HTTP_CODE" != "200" ]]; then
             echo "::error::Backend health check failed ($HTTP_CODE)"
             echo "Response (first 1000 bytes):"
+
             head -c 1000 "$RESPONSE_FILE" || true
             echo
             exit 1
@@ -293,9 +379,9 @@ jobs:
 
           echo "Backend health check passed"
 
-      # ====================================
-      # 9. Cleanup local temporary files
-      # ====================================
+      # ==========================================================
+      # 10. Cleanup local temporary files
+      # ==========================================================
       - name: Cleanup temporary files
         if: always()
         run: |
@@ -303,3 +389,5 @@ jobs:
           rm -f "$RUNNER_TEMP/app-release.tar.gz"
           rm -f "$RUNNER_TEMP/.env.upload"
           rm -f "$RUNNER_TEMP/backend-health-response.txt"
+
+          echo "Local temporary files cleaned"
