@@ -329,7 +329,7 @@ jobs:
           # ------------------------------------------------------
           # STEP 8: Execute Laravel deployment
           # ------------------------------------------------------
-          echo "STEP 8: Running Laravel deployment and API security checks"
+          echo "STEP 8: Running Laravel deployment"
 
           export REMOTE_WEB_ROOT
           bash scripts/deploy.sh
