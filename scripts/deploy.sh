@@ -114,7 +114,7 @@ log "Clearing Laravel caches"
 "$PHP_BIN" artisan event:clear
 
 # ============================================================
-# 6. SECURITY: Verify API routes and authentication middleware
+# 6. SECURITY: Verify all API routes have auth middleware
 # ============================================================
 log "Checking API routes and authentication middleware"
 
@@ -157,21 +157,8 @@ $requiredRoutes = [
 ];
 
 // ------------------------------------------------------------
-// Explicit public API exceptions
-//
-// These routes may be accessed without authentication.
-// All other API routes must have approved auth middleware.
-// ------------------------------------------------------------
-$publicRoutes = [
-    "GET api/health",
-    "HEAD api/health",
-    "POST api/v1/auth/send/otp",
-];
-
-// ------------------------------------------------------------
-// Accepted authentication middleware
-//
-// Add other approved authentication middleware if necessary.
+// Approved authentication middleware
+// No public API route exceptions are permitted.
 // ------------------------------------------------------------
 $allowedAuthMiddleware = [
     "auth",
@@ -185,7 +172,6 @@ $allowedAuthMiddleware = [
 $errors = [];
 $totalApiRoutes = 0;
 $protectedRoutes = 0;
-$publicRouteCount = 0;
 
 // ------------------------------------------------------------
 // Verify required API routes
@@ -227,13 +213,13 @@ foreach ($routes as $route) {
     $uri = $route["uri"] ?? "";
     $methodString = $route["method"] ?? "";
 
-    // Only validate routes within the api/ namespace.
+    // Validate every registered route under the api/ prefix.
+    // Inherited group middleware is included in route:list.
     if (!str_starts_with($uri, "api/")) {
         continue;
     }
 
     $methods = explode("|", $methodString);
-
     $middleware = $route["middleware"] ?? [];
 
     if (is_string($middleware)) {
@@ -249,7 +235,7 @@ foreach ($routes as $route) {
         $middleware
     );
 
-    // Detect only specifically approved auth middleware.
+    // Require one of the approved auth middleware entries.
     $hasAuth = false;
 
     foreach ($middleware as $item) {
@@ -268,13 +254,6 @@ foreach ($routes as $route) {
 
         $totalApiRoutes++;
         $routeKey = "$method $uri";
-
-        // Allow public routes by exact HTTP method and URI.
-        if (in_array($routeKey, $publicRoutes, true)) {
-            echo "PUBLIC ALLOWED: $routeKey\n";
-            $publicRouteCount++;
-            continue;
-        }
 
         if (!$hasAuth) {
             $errors[] = "Unprotected API route: $routeKey";
@@ -295,7 +274,6 @@ echo "========================================\n";
 
 echo "Total API method-route pairs: $totalApiRoutes\n";
 echo "Protected method-route pairs: $protectedRoutes\n";
-echo "Allowed public method-route pairs: $publicRouteCount\n";
 echo "Security errors: " . count($errors) . "\n";
 
 if ($totalApiRoutes === 0) {

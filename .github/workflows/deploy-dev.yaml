@@ -345,18 +345,24 @@ jobs:
           REMOTE
 
       # ==========================================================
-      # 9. Verify backend health endpoint
+      # 9. Verify backend health endpoint (authenticated)
       # ==========================================================
       - name: Verify backend domain
+        env:
+          HEALTH_CHECK_TOKEN: ${{ secrets.HEALTH_CHECK_TOKEN }}
         run: |
           set -euo pipefail
+
+          : "${HEALTH_CHECK_TOKEN:?HEALTH_CHECK_TOKEN secret is missing}"
 
           HEALTH_URL="${BACKEND_URL%/}/api/health"
           RESPONSE_FILE="$RUNNER_TEMP/backend-health-response.txt"
 
           echo "Checking backend: $HEALTH_URL"
 
-          HTTP_CODE="$(curl -sS -L \
+          HTTP_CODE="$(curl -sS \
+            --header "Authorization: Bearer $HEALTH_CHECK_TOKEN" \
+            --header 'Accept: application/json' \
             --retry 5 \
             --retry-delay 3 \
             --retry-all-errors \
@@ -370,10 +376,7 @@ jobs:
 
           if [[ "$HTTP_CODE" != "200" ]]; then
             echo "::error::Backend health check failed ($HTTP_CODE)"
-            echo "Response (first 1000 bytes):"
-
-            head -c 1000 "$RESPONSE_FILE" || true
-            echo
+            echo "Health endpoint returned a non-200 response; response body withheld from logs"
             exit 1
           fi
 
@@ -391,4 +394,3 @@ jobs:
           rm -f "$RUNNER_TEMP/backend-health-response.txt"
 
           echo "Local temporary files cleaned"
-
