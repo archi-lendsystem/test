@@ -1,0 +1,11 @@
+{
+    "name": "DemandReport",
+    "alias": "demandreport",
+    "description": "Upcoming/current EMI-due report for collection follow-up.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\DemandReport\\Providers\\DemandReportServiceProvider"
+    ],
+    "files": []
+}

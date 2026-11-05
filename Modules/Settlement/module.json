@@ -1,0 +1,11 @@
+{
+    "name": "Settlement",
+    "alias": "settlement",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Settlement\\Providers\\SettlementServiceProvider"
+    ],
+    "files": []
+}

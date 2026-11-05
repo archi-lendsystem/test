@@ -1,0 +1,30 @@
+{
+    "name": "nwidart/blamortization",
+    "description": "",
+    "authors": [
+        {
+            "name": "Nicolas Widart",
+            "email": "n.widart@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\BLAmortization\\": "app/",
+            "Modules\\BLAmortization\\Database\\Factories\\": "database/factories/",
+            "Modules\\BLAmortization\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\BLAmortization\\Tests\\": "tests/"
+        }
+    }
+}

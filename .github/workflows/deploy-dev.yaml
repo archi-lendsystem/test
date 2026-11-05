@@ -2,326 +2,395 @@
 name: Deploy Development
 
 on:
-  push:
-    branches:
-      - staging
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: development-deployment
+  group: deploy-${{ github.repository }}-staging
   cancel-in-progress: false
 
 jobs:
   deploy:
-    if: github.ref == 'refs/heads/staging'
-    name: Build and Deploy React Vite
-    runs-on: ubuntu-latest
+    name: Deploy Application to cPanel
+    runs-on: [self-hosted, macOS, ARM64]
     timeout-minutes: 30
-
-    environment:
-      name: development
-      url: https://test.thelendsystem.com
-
-    env:
-      SERVER_HOST: ${{ secrets.DEV_SERVER_HOST }}
-      SERVER_USER: ${{ secrets.DEV_SERVER_USER }}
-      SERVER_PORT: ${{ secrets.DEV_SERVER_PORT }}
-      WEBSITE_URL: https://test.thelendsystem.com
 
     defaults:
       run:
         shell: bash
 
+    env:
+      LOCAL_ENV_PATH: ${{ secrets.LOCAL_ENV_PATH }}
+      REMOTE_DEPLOY_DIR: ${{ secrets.REMOTE_DEPLOY_DIR }}
+      REMOTE_WEB_ROOT: ${{ secrets.REMOTE_WEB_ROOT }}
+      BACKEND_URL: ${{ secrets.BACKEND_URL }}
+
     steps:
-      # Step 1: Checkout exact commit
-      - name: Checkout Repository
+      # ==========================================================
+      # 1. Checkout source code
+      # ==========================================================
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           persist-credentials: false
+          fetch-depth: 1
 
-      # Step 2: Setup Node.js
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-
-      # Step 3: Install dependencies
-      - name: Install Dependencies
-        run: npm ci
-
-      # Step 4: Run lint and tests
-      - name: Lint and Test
+      # ==========================================================
+      # 2. Validate deployment configuration
+      # ==========================================================
+      - name: Validate configuration
         run: |
           set -euo pipefail
 
-          npm run lint --if-present
+          echo "Repository: $GITHUB_REPOSITORY"
+          echo "Branch: $GITHUB_REF_NAME"
+          echo "Commit: $GITHUB_SHA"
 
-          if npm run | grep -qE '^[[:space:]]+test$'; then
-            npm test -- --run
-          else
-            echo "No test script configured"
+          : "${LOCAL_ENV_PATH:?LOCAL_ENV_PATH is missing}"
+          : "${REMOTE_DEPLOY_DIR:?REMOTE_DEPLOY_DIR is missing}"
+          : "${BACKEND_URL:?BACKEND_URL is missing}"
+
+          if [[ ! -s "$LOCAL_ENV_PATH" ]]; then
+            echo "::error::Local .env missing or empty"
+            exit 1
           fi
 
-      # Step 5: Build React Vite
-      - name: Build Application
-        env:
-          # Optional: configure this repository variable
-          VITE_API_URL: ${{ vars.VITE_API_URL }}
+          if [[ ! -r "$LOCAL_ENV_PATH" ]]; then
+            echo "::error::Cannot read local .env"
+            exit 1
+          fi
+
+          if [[ ! -f scripts/deploy.sh ]]; then
+            echo "::error::scripts/deploy.sh is missing"
+            exit 1
+          fi
+
+          bash -n scripts/deploy.sh
+
+          if git ls-files --error-unmatch .env >/dev/null 2>&1; then
+            echo "::error::.env must not be tracked in Git"
+            exit 1
+          fi
+
+          if [[ ! "$REMOTE_DEPLOY_DIR" =~ ^[A-Za-z0-9_-]+$ ]]; then
+            echo "::error::Invalid REMOTE_DEPLOY_DIR"
+            exit 1
+          fi
+
+          if [[ -n "${REMOTE_WEB_ROOT:-}" ]]; then
+            if [[ ! "$REMOTE_WEB_ROOT" =~ ^[A-Za-z0-9_][A-Za-z0-9_./-]*$ ]] \
+                || [[ "$REMOTE_WEB_ROOT" == *..* ]]; then
+              echo "::error::Invalid REMOTE_WEB_ROOT"
+              exit 1
+            fi
+          fi
+
+          if [[ ! "$BACKEND_URL" =~ ^https?://[^[:space:]]+$ ]]; then
+            echo "::error::Invalid BACKEND_URL"
+            exit 1
+          fi
+
+          echo "Configuration validated successfully"
+
+      # ==========================================================
+      # 3. SECURITY: Validate local environment for UAT
+      # ==========================================================
+      - name: Validate environment security
         run: |
           set -euo pipefail
 
-          echo "Building commit: $GITHUB_SHA"
+          echo "Checking environment for forbidden UAT references"
 
-          npm run build
+          if LC_ALL=C grep -iq 'uat' "$LOCAL_ENV_PATH"; then
+            echo "::error::Deployment blocked: .env contains UAT references"
+            exit 1
+          fi
 
-          test -s dist/index.html
-          test -d dist/assets
+          echo "Environment security validation passed"
+          echo "No UAT references found"
 
-          echo "=== Build files ==="
-          find dist -maxdepth 2 -type f
-
-          echo "Build completed successfully"
-
-      # Step 6: Prepare deployment metadata
-      - name: Prepare Deployment Version
-        run: |
-          set -euo pipefail
-
-          printf '%s\n' "$GITHUB_SHA" \
-            > dist/deployment-version.txt
-
-          echo "Deployment commit: $GITHUB_SHA"
-
-      # Step 7: Create shared rsync exclusions
-      - name: Prepare Rsync Exclusions
-        run: |
-          set -euo pipefail
-
-          cat > "$RUNNER_TEMP/rsync-exclude.txt" <<'EOF'
-          .htaccess
-          .user.ini
-          php.ini
-          .well-known/
-          cgi-bin/
-          EOF
-
-          echo "Shared rsync exclusions created"
-
-      # Step 8: Configure SSH
+      # ==========================================================
+      # 4. Configure secure SSH
+      # ==========================================================
       - name: Configure SSH
         env:
-          SSH_PRIVATE_KEY: ${{ secrets.DEV_SERVER_SSH_KEY }}
-          SSH_KNOWN_HOSTS: ${{ secrets.DEV_SERVER_KNOWN_HOSTS }}
+          SSH_HOST: ${{ secrets.DEV_SERVER_HOST }}
+          SSH_USER: ${{ secrets.DEV_SERVER_USER }}
+          SSH_PORT: ${{ secrets.DEV_SERVER_PORT }}
+          SSH_KEY: ${{ secrets.DEV_SERVER_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEV_SERVER_KNOWN_HOSTS }}
         run: |
           set -euo pipefail
+          umask 077
 
-          test -n "$SERVER_HOST"
-          test -n "$SERVER_USER"
-          test -n "$SERVER_PORT"
-          test -n "$SSH_PRIVATE_KEY"
-          test -n "$SSH_KNOWN_HOSTS"
+          : "${SSH_HOST:?SSH host missing}"
+          : "${SSH_USER:?SSH username missing}"
+          : "${SSH_KEY:?SSH private key missing}"
+          : "${KNOWN_HOSTS:?SSH known hosts missing}"
 
-          mkdir -p "$HOME/.ssh"
-          chmod 700 "$HOME/.ssh"
+          SSH_DIR="$RUNNER_TEMP/deploy-ssh"
 
-          printf '%s\n' "$SSH_PRIVATE_KEY" \
-            > "$HOME/.ssh/deploy_key"
-          chmod 600 "$HOME/.ssh/deploy_key"
+          mkdir -p "$SSH_DIR"
+          chmod 700 "$SSH_DIR"
 
-          printf '%s\n' "$SSH_KNOWN_HOSTS" \
-            > "$HOME/.ssh/known_hosts"
-          chmod 600 "$HOME/.ssh/known_hosts"
+          printf '%s\n' "$SSH_KEY" > "$SSH_DIR/id_deploy"
+          printf '%s\n' "$KNOWN_HOSTS" > "$SSH_DIR/known_hosts"
 
-          ssh-keygen -y -P "" \
-            -f "$HOME/.ssh/deploy_key" \
-            > /dev/null
+          chmod 600 "$SSH_DIR/id_deploy" "$SSH_DIR/known_hosts"
 
-          cat > "$HOME/.ssh/config" <<EOF
-          Host deploy-server
-              HostName $SERVER_HOST
-              User $SERVER_USER
-              Port $SERVER_PORT
-              IdentityFile $HOME/.ssh/deploy_key
-              IdentitiesOnly yes
-              BatchMode yes
-              StrictHostKeyChecking yes
-              UserKnownHostsFile $HOME/.ssh/known_hosts
-              ConnectTimeout 20
-              AddressFamily inet
-              ServerAliveInterval 15
-          EOF
-
-          chmod 600 "$HOME/.ssh/config"
-
-          echo "SSH configuration complete"
-
-      # Step 9: Test SSH connection
-      - name: Test SSH Connection
-        run: |
-          set -euo pipefail
-
-          nc -4 -vz -w 15 \
-            "$SERVER_HOST" "$SERVER_PORT"
-
-          ssh deploy-server \
-            'whoami && test -d "$HOME/public_html"'
-
-          echo "SSH connection successful"
-
-      # Step 10: Deploy assets and other files first
-      - name: Deploy Application Files
-        run: |
-          set -euo pipefail
-
-          echo "Phase 1: Uploading application files..."
-
-          rsync -avz \
-            --checksum \
-            --chmod=D755,F644 \
-            --exclude-from="$RUNNER_TEMP/rsync-exclude.txt" \
-            --exclude='/index.html' \
-            --exclude='/deployment-version.txt' \
-            dist/ \
-            deploy-server:public_html/
-
-          echo "Phase 1 completed"
-
-          echo "Phase 2: Publishing index.html..."
-
-          rsync -avz \
-            --checksum \
-            --chmod=D755,F644 \
-            dist/index.html \
-            deploy-server:public_html/index.html
-
-          echo "Publishing deployment version..."
-
-          rsync -avz \
-            --checksum \
-            --chmod=D755,F644 \
-            dist/deployment-version.txt \
-            deploy-server:public_html/deployment-version.txt
-
-          echo "Application deployment completed"
-
-      # Step 11: Verify uploaded files
-      - name: Verify Uploaded Files
-        run: |
-          set -euo pipefail
-
-          echo "Comparing build with server files..."
-
-          DIFF=$(rsync -rcn \
-            --out-format='%n' \
-            --exclude-from="$RUNNER_TEMP/rsync-exclude.txt" \
-            dist/ \
-            deploy-server:public_html/)
-
-          if [ -n "$DIFF" ]; then
-            echo "ERROR: Build files differ from server"
-            echo "$DIFF"
+          if [[ ! "${SSH_PORT:-22}" =~ ^[0-9]+$ ]] \
+              || (( 10#${SSH_PORT:-22} < 1 || 10#${SSH_PORT:-22} > 65535 )); then
+            echo "::error::Invalid SSH port"
             exit 1
           fi
 
-          echo "SUCCESS: Uploaded files match build"
+          if [[ "$SSH_HOST" =~ [[:space:]] ]] \
+              || [[ "$SSH_USER" =~ [[:space:]] ]]; then
+            echo "::error::Invalid SSH host or user"
+            exit 1
+          fi
 
-      
-      # Step 12: Verify live website
-      - name: Verify Live Website
+          {
+            echo "Host cpanel-deploy"
+            echo "  HostName $SSH_HOST"
+            echo "  User $SSH_USER"
+            echo "  Port ${SSH_PORT:-22}"
+            echo "  IdentityFile $SSH_DIR/id_deploy"
+            echo "  UserKnownHostsFile $SSH_DIR/known_hosts"
+            echo "  StrictHostKeyChecking yes"
+            echo "  IdentitiesOnly yes"
+            echo "  BatchMode yes"
+            echo "  ConnectTimeout 15"
+            echo "  ConnectionAttempts 3"
+            echo "  ServerAliveInterval 30"
+            echo "  ServerAliveCountMax 5"
+          } > "$SSH_DIR/config"
+
+          chmod 600 "$SSH_DIR/config"
+
+          echo "SSH configured successfully"
+
+      # ==========================================================
+      # 5. Test SSH and prepare remote directory
+      # ==========================================================
+      - name: Connect and prepare server directory
         run: |
           set -euo pipefail
 
-          fetch() {
-            curl \
-              -fLsS \
-              --retry 3 \
-              --retry-delay 5 \
-              --retry-all-errors \
-              --max-time 20 \
-              -H "Cache-Control: no-cache" \
-              "$@"
-          }
+          ssh -F "$RUNNER_TEMP/deploy-ssh/config" \
+            cpanel-deploy \
+            "mkdir -p \"\$HOME/$REMOTE_DEPLOY_DIR\" && echo 'SSH connection OK, directory ready'"
 
-          echo "Checking live website..."
-
-          fetch \
-            "$WEBSITE_URL/?sha=$GITHUB_SHA" \
-            -o live-index.html
-
-          echo "Checking live deployment commit..."
-
-          LIVE_COMMIT=$(fetch \
-            "$WEBSITE_URL/deployment-version.txt?sha=$GITHUB_SHA")
-
-          echo "Expected commit: $GITHUB_SHA"
-          echo "Live commit: $LIVE_COMMIT"
-
-          if [ "$LIVE_COMMIT" != "$GITHUB_SHA" ]; then
-            echo "ERROR: Live commit mismatch"
-            exit 1
-          fi
-
-          echo "Checking complete live HTML..."
-
-          if ! cmp -s dist/index.html live-index.html; then
-            echo "ERROR: Live HTML differs from build"
-            exit 1
-          fi
-
-          echo "SUCCESS: Live HTML matches build"
-
-          echo "Extracting build asset references..."
-
-          grep -oE "/assets/[^\"'[:space:]<>]+" \
-            dist/index.html > expected-assets.txt || true
-
-          grep -oE "/assets/[^\"'[:space:]<>]+" \
-            live-index.html > live-assets.txt || true
-
-          if ! diff -u expected-assets.txt live-assets.txt; then
-            echo "ERROR: Live HTML references incorrect assets"
-            exit 1
-          fi
-
-          echo "Checking JavaScript and CSS assets..."
-
-          while IFS= read -r asset; do
-            test -n "$asset" || continue
-
-            if [ ! -f "dist${asset}" ]; then
-              echo "ERROR: Asset not found in build: $asset"
-              exit 1
-            fi
-
-            fetch \
-              "$WEBSITE_URL$asset?sha=$GITHUB_SHA" \
-              -o live-asset.tmp
-
-            if ! cmp -s "dist${asset}" live-asset.tmp; then
-              echo "ERROR: Live asset differs: $asset"
-              exit 1
-            fi
-
-            echo "Verified: $asset"
-
-          done < expected-assets.txt
-
-          echo "SUCCESS: Live website matches build"
-
-
-      # Step 13: Deployment Summary
-      - name: Deployment Summary
-        if: success()
+      # ==========================================================
+      # 6. Package application source
+      # ==========================================================
+      - name: Package source code
         run: |
-          echo "## Deployment Successful" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Website: $WEBSITE_URL" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Branch: $GITHUB_REF_NAME" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Commit: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Environment: development" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Framework: React + Vite" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Document root: public_html" >> "$GITHUB_STEP_SUMMARY"
+          set -euo pipefail
+
+          git archive --format=tar HEAD \
+            | gzip -6 > "$RUNNER_TEMP/app-release.tar.gz"
+
+          test -s "$RUNNER_TEMP/app-release.tar.gz"
+
+          echo "Source archive created ($(du -h "$RUNNER_TEMP/app-release.tar.gz" | cut -f1))"
+
+      # ==========================================================
+      # 7. Upload source and environment file
+      # ==========================================================
+      - name: Upload release files
+        run: |
+          set -euo pipefail
+          umask 077
+
+          cp "$LOCAL_ENV_PATH" "$RUNNER_TEMP/.env.upload"
+
+          # Validate the exact environment copy being uploaded.
+          if LC_ALL=C grep -iq 'uat' "$RUNNER_TEMP/.env.upload"; then
+            echo "::error::UAT reference found in upload environment"
+            exit 1
+          fi
+
+          scp -q \
+            -F "$RUNNER_TEMP/deploy-ssh/config" \
+            "$RUNNER_TEMP/app-release.tar.gz" \
+            "$RUNNER_TEMP/.env.upload" \
+            "cpanel-deploy:$REMOTE_DEPLOY_DIR/"
+
+          rm -f "$RUNNER_TEMP/.env.upload"
+
+          echo "Release files uploaded successfully"
+
+      # ==========================================================
+      # 8. Execute Laravel deployment
+      # ==========================================================
+      - name: Deploy application
+        run: |
+          set -euo pipefail
+
+          ssh -F "$RUNNER_TEMP/deploy-ssh/config" \
+            cpanel-deploy \
+            "bash -se -- '$REMOTE_DEPLOY_DIR' '${REMOTE_WEB_ROOT:-}'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+
+          DEPLOY_DIR="$1"
+          REMOTE_WEB_ROOT="${2:-}"
+
+          PHP_BIN="/opt/cpanel/ea-php84/root/usr/bin/php"
+
+          cd "$HOME/$DEPLOY_DIR"
+
+          # ------------------------------------------------------
+          # STEP 1: Check uploaded files
+          # ------------------------------------------------------
+          echo "STEP 1: Checking uploaded files"
+
+          test -s app-release.tar.gz
+          test -s .env.upload
+          tar -tzf app-release.tar.gz >/dev/null
+
+          # ------------------------------------------------------
+          # STEP 2: Validate remote environment before deployment
+          # ------------------------------------------------------
+          echo "STEP 2: Validating remote environment"
+
+          if LC_ALL=C grep -iq 'uat' .env.upload; then
+            echo "ERROR: Deployment blocked: remote .env contains UAT references" >&2
+            exit 1
+          fi
+
+          echo "Remote environment security validation passed"
+
+          # ------------------------------------------------------
+          # STEP 3: Enable maintenance mode
+          # ------------------------------------------------------
+          echo "STEP 3: Enabling maintenance mode"
+
+          if [ -f artisan ] && [ -f vendor/autoload.php ] && [ -x "$PHP_BIN" ]; then
+            "$PHP_BIN" artisan down --retry=15 \
+              || echo "WARNING: Could not enable maintenance mode"
+          else
+            echo "First deployment detected, skipping maintenance mode"
+          fi
+
+          # ------------------------------------------------------
+          # STEP 4: Extract application
+          # ------------------------------------------------------
+          echo "STEP 4: Extracting application"
+
+          tar -tzf app-release.tar.gz \
+            | sed '/\/$/d' \
+            | LC_ALL=C sort > .release-manifest.new
+
+          tar -xzf app-release.tar.gz
+
+          # ------------------------------------------------------
+          # STEP 5: Remove files deleted from Git
+          # ------------------------------------------------------
+          echo "STEP 5: Removing files deleted from Git"
+
+          if [ -f .release-manifest ]; then
+            LC_ALL=C comm -23 .release-manifest .release-manifest.new \
+              | while IFS= read -r file; do
+                  case "$file" in
+                    ""|/*|*..*) continue ;;
+                  esac
+
+                  if [ -f "$file" ] || [ -L "$file" ]; then
+                    rm -f -- "$file"
+                    echo "Removed: $file"
+                  fi
+                done
+          else
+            echo "No previous manifest, skipping"
+          fi
+
+          mv -f .release-manifest.new .release-manifest
+
+          # ------------------------------------------------------
+          # STEP 6: Install environment
+          # ------------------------------------------------------
+          echo "STEP 6: Installing environment"
+
+          chmod 600 .env.upload
+          mv -f .env.upload .env
+
+          # ------------------------------------------------------
+          # STEP 7: Validate deployment script
+          # ------------------------------------------------------
+          echo "STEP 7: Checking deployment script"
+
+          test -f scripts/deploy.sh
+          bash -n scripts/deploy.sh
+
+          # ------------------------------------------------------
+          # STEP 8: Execute Laravel deployment
+          # ------------------------------------------------------
+          echo "STEP 8: Running Laravel deployment"
+
+          export REMOTE_WEB_ROOT
+          bash scripts/deploy.sh
+
+          # ------------------------------------------------------
+          # STEP 9: Cleanup
+          # ------------------------------------------------------
+          echo "STEP 9: Cleanup"
+
+          rm -f app-release.tar.gz .release-upload.tar.gz
+
+          echo "Application deployment successful"
+          REMOTE
+
+      # ==========================================================
+      # 9. Verify backend health endpoint (authenticated)
+      # ==========================================================
+      - name: Verify backend domain
+        env:
+          HEALTH_CHECK_TOKEN: ${{ secrets.HEALTH_CHECK_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          : "${HEALTH_CHECK_TOKEN:?HEALTH_CHECK_TOKEN secret is missing}"
+
+          HEALTH_URL="${BACKEND_URL%/}/api/health"
+          RESPONSE_FILE="$RUNNER_TEMP/backend-health-response.txt"
+
+          echo "Checking backend: $HEALTH_URL"
+
+          HTTP_CODE="$(curl -sS \
+            --header "Authorization: Bearer $HEALTH_CHECK_TOKEN" \
+            --header 'Accept: application/json' \
+            --retry 5 \
+            --retry-delay 3 \
+            --retry-all-errors \
+            --connect-timeout 15 \
+            --max-time 30 \
+            -o "$RESPONSE_FILE" \
+            -w '%{http_code}' \
+            "$HEALTH_URL")"
+
+          echo "HTTP Status: $HTTP_CODE"
+
+          if [[ "$HTTP_CODE" != "200" ]]; then
+            echo "::error::Backend health check failed ($HTTP_CODE)"
+            echo "Health endpoint returned a non-200 response; response body withheld from logs"
+            exit 1
+          fi
+
+          echo "Backend health check passed"
+
+      # ==========================================================
+      # 10. Cleanup local temporary files
+      # ==========================================================
+      - name: Cleanup temporary files
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP/deploy-ssh"
+          rm -f "$RUNNER_TEMP/app-release.tar.gz"
+          rm -f "$RUNNER_TEMP/.env.upload"
+          rm -f "$RUNNER_TEMP/backend-health-response.txt"
+
+          echo "Local temporary files cleaned"

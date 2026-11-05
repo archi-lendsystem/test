@@ -1,0 +1,11 @@
+{
+    "name": "Pan",
+    "alias": "pan",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Pan\\Providers\\PanServiceProvider"
+    ],
+    "files": []
+}

@@ -1,0 +1,11 @@
+{
+    "name": "DltSms",
+    "alias": "dltsms",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\DltSms\\Providers\\DltSmsServiceProvider"
+    ],
+    "files": []
+}

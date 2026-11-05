@@ -1,0 +1,11 @@
+{
+    "name": "Charges",
+    "alias": "charges",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Charges\\Providers\\ChargesServiceProvider"
+    ],
+    "files": []
+}

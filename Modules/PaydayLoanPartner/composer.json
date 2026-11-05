@@ -1,0 +1,30 @@
+{
+    "name": "nwidart/paydayloanpartner",
+    "description": "",
+    "authors": [
+        {
+            "name": "Nicolas Widart",
+            "email": "n.widart@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\PaydayLoanPartner\\": "app/",
+            "Modules\\PaydayLoanPartner\\Database\\Factories\\": "database/factories/",
+            "Modules\\PaydayLoanPartner\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\PaydayLoanPartner\\Tests\\": "tests/"
+        }
+    }
+}

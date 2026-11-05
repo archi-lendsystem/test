@@ -1,0 +1,30 @@
+{
+    "name": "nwidart/overduecollection",
+    "description": "",
+    "authors": [
+        {
+            "name": "Nicolas Widart",
+            "email": "n.widart@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\OverdueCollection\\": "app/",
+            "Modules\\OverdueCollection\\Database\\Factories\\": "database/factories/",
+            "Modules\\OverdueCollection\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\OverdueCollection\\Tests\\": "tests/"
+        }
+    }
+}

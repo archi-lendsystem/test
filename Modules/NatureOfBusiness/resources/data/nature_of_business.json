@@ -1,0 +1,1651 @@
+{
+  "field": "id_bd_nature_of_business",
+  "name": "id_bd_nature_of_business",
+  "label": "Nature of Business",
+  "options": [
+    {
+      "label": "Agricultural and Natural Products",
+      "options": [
+        {
+          "value": "coffee",
+          "label": "Coffee"
+        },
+        {
+          "value": "edible_oils",
+          "label": "Edible Oils"
+        },
+        {
+          "value": "spices",
+          "label": "Spices"
+        },
+        {
+          "value": "tea",
+          "label": "Tea"
+        },
+        {
+          "value": "flower_shop",
+          "label": "Flower Shop"
+        },
+        {
+          "value": "lawn_garden_supplies",
+          "label": "Lawn And Garden Supplies"
+        },
+        {
+          "value": "vegetables",
+          "label": "Vegetables"
+        },
+        {
+          "value": "cattle_feed",
+          "label": "Cattle Feed"
+        },
+        {
+          "value": "florists_plant",
+          "label": "Florists And Plant"
+        },
+        {
+          "value": "fruit_shop",
+          "label": "Fruit Shop"
+        },
+        {
+          "value": "roots_tubers",
+          "label": "Roots And Tubers"
+        },
+        {
+          "value": "timber",
+          "label": "Timber"
+        }
+      ]
+    },
+    {
+      "label": "FMCG",
+      "options": [
+        {
+          "value": "groceries",
+          "label": "Groceries"
+        },
+        {
+          "value": "related_products",
+          "label": "Related Products"
+        },
+        {
+          "value": "supermarket",
+          "label": "Supermarket"
+        },
+        {
+          "value": "fmcg_items",
+          "label": "FMCG Items"
+        },
+        {
+          "value": "agarbatti",
+          "label": "Agarbatti"
+        },
+        {
+          "value": "thread",
+          "label": "Thread"
+        }
+      ]
+    },
+    {
+      "label": "Liquor Shops and Bars",
+      "options": [
+        {
+          "value": "tobacco_products",
+          "label": "Tobacco Products"
+        },
+        {
+          "value": "permit_rooms",
+          "label": "Permit Rooms"
+        },
+        {
+          "value": "wine_shops",
+          "label": "Wine Shops"
+        },
+        {
+          "value": "beer_shops",
+          "label": "Beer Shops"
+        },
+        {
+          "value": "standalone_bars",
+          "label": "Standalone Bars"
+        },
+        {
+          "value": "hukkah_parlour",
+          "label": "Hukkah Parlour"
+        }
+      ]
+    },
+    {
+      "label": "Automobiles",
+      "options": [
+        {
+          "value": "two_wheelers",
+          "label": "Two Wheelers"
+        },
+        {
+          "value": "three_wheelers",
+          "label": "Three Wheelers"
+        },
+        {
+          "value": "tractors",
+          "label": "Tractors"
+        },
+        {
+          "value": "e_rickshaw",
+          "label": "E-Rickshaw"
+        },
+        {
+          "value": "cab_service_provider",
+          "label": "Cab Service Provider"
+        },
+        {
+          "value": "used_automobile_dealer",
+          "label": "Used Automobile Dealer"
+        },
+        {
+          "value": "cycle",
+          "label": "Cycle"
+        },
+        {
+          "value": "commercial_vehicles",
+          "label": "Commercial Vehicles (LCV/HCV)"
+        }
+      ]
+    },
+    {
+      "label": "Automobile Accessories",
+      "options": [
+        {
+          "value": "tyres",
+          "label": "Tyres"
+        },
+        {
+          "value": "cycle_accessories",
+          "label": "Cycle Accessories"
+        },
+        {
+          "value": "spare_parts",
+          "label": "Spare Parts"
+        },
+        {
+          "value": "helmet",
+          "label": "Helmet"
+        }
+      ]
+    },
+    {
+      "label": "Chemicals and Chemical Products",
+      "options": [
+        {
+          "value": "industrial_gases",
+          "label": "Industrial Gases"
+        },
+        {
+          "value": "pesticides",
+          "label": "Pesticides"
+        },
+        {
+          "value": "petrochemicals",
+          "label": "Petrochemicals"
+        },
+        {
+          "value": "polymers",
+          "label": "Polymers"
+        },
+        {
+          "value": "plastics_resins",
+          "label": "Plastics Resins"
+        },
+        {
+          "value": "fertilizers",
+          "label": "Fertilizers"
+        },
+        {
+          "value": "chemical",
+          "label": "Chemical"
+        },
+        {
+          "value": "fire_crackers",
+          "label": "Fire Crackers"
+        }
+      ]
+    },
+    {
+      "label": "Industrial Equipments",
+      "options": [
+        {
+          "value": "construction_equipment",
+          "label": "Construction Equipment"
+        },
+        {
+          "value": "construction_materials",
+          "label": "Construction Materials"
+        },
+        {
+          "value": "abrasives_grinding",
+          "label": "Abrasives & Grinding"
+        },
+        {
+          "value": "bearings",
+          "label": "Bearings"
+        },
+        {
+          "value": "compressors",
+          "label": "Compressors"
+        },
+        {
+          "value": "electrodes_graphite",
+          "label": "Electrodes Graphite"
+        },
+        {
+          "value": "engines",
+          "label": "Engines"
+        },
+        {
+          "value": "fasteners",
+          "label": "Fasteners"
+        },
+        {
+          "value": "industrial_furnaces",
+          "label": "Industrial Furnaces"
+        },
+        {
+          "value": "machine_tools",
+          "label": "Machine Tools"
+        },
+        {
+          "value": "motors_generators",
+          "label": "Motors & Generators"
+        },
+        {
+          "value": "prime_movers",
+          "label": "Prime Movers"
+        },
+        {
+          "value": "printing_machinery",
+          "label": "Printing Machinery"
+        },
+        {
+          "value": "pumps",
+          "label": "Pumps"
+        },
+        {
+          "value": "storage_batteries",
+          "label": "Storage Batteries"
+        },
+        {
+          "value": "transformers",
+          "label": "Transformers"
+        },
+        {
+          "value": "transmission_line_towers",
+          "label": "Transmission Line Towers"
+        },
+        {
+          "value": "turnkey_services",
+          "label": "Turnkey Services"
+        },
+        {
+          "value": "valves",
+          "label": "Valves"
+        },
+        {
+          "value": "welding_machinery",
+          "label": "Welding Machinery"
+        },
+        {
+          "value": "leather_manufacturer",
+          "label": "Leather Manufacturer"
+        },
+        {
+          "value": "scrap_dealer",
+          "label": "Scrap Dealer"
+        },
+        {
+          "value": "arms_ammunition",
+          "label": "Arms & Ammunition"
+        },
+        {
+          "value": "engineering_service",
+          "label": "Engineering Service"
+        },
+        {
+          "value": "fire_safety_products",
+          "label": "Fire Safety Products"
+        },
+        {
+          "value": "machinery_renting_leasing",
+          "label": "Machinery Renting And Leasing"
+        },
+        {
+          "value": "agricultural_equipments",
+          "label": "Agricultural Equipments"
+        },
+        {
+          "value": "airlines_financing_aircraft_component",
+          "label": "Airlines Or Financing Of Aircraft Component"
+        },
+        {
+          "value": "road_studs",
+          "label": "Road Studs"
+        },
+        {
+          "value": "convex_mirrors",
+          "label": "Convex Mirrors"
+        },
+        {
+          "value": "wheel_stopper",
+          "label": "Wheel Stopper"
+        },
+        {
+          "value": "road_delineators",
+          "label": "Road Delineators"
+        },
+        {
+          "value": "embroidery_dyeing_handloom",
+          "label": "Embroidery Work, Dyeing, Handloom"
+        },
+        {
+          "value": "fabrications",
+          "label": "Fabrications"
+        },
+        {
+          "value": "films",
+          "label": "Films"
+        },
+        {
+          "value": "plastic_works",
+          "label": "Plastic Works"
+        },
+        {
+          "value": "road_safety_mirrors_signs",
+          "label": "Road Safety Mirrors / Road Signs"
+        },
+        {
+          "value": "steel_products",
+          "label": "Steel Products"
+        }
+      ]
+    },
+    {
+      "label": "Durables and Installations",
+      "options": [
+        {
+          "value": "professional_commercial_equipment",
+          "label": "Professional & Commercial Equipment"
+        },
+        {
+          "value": "steel_tubes_pipes",
+          "label": "Steel Tubes & Pipes"
+        },
+        {
+          "value": "wires_cables",
+          "label": "Wires And Cables"
+        },
+        {
+          "value": "electrical_goods_fittings",
+          "label": "Electrical Goods/Fittings"
+        },
+        {
+          "value": "hardware",
+          "label": "Hardware"
+        },
+        {
+          "value": "plumbing_heating_equipment",
+          "label": "Plumbing & Heating Equipment"
+        },
+        {
+          "value": "inverters",
+          "label": "Inverters"
+        },
+        {
+          "value": "led_lighting",
+          "label": "LED Lighting"
+        }
+      ]
+    },
+    {
+      "label": "Energy and Petroleum Products",
+      "options": [
+        {
+          "value": "refineries",
+          "label": "Refineries"
+        },
+        {
+          "value": "petroleum_products",
+          "label": "Petroleum Products"
+        },
+        {
+          "value": "solar_related_products",
+          "label": "Solar And Related Products"
+        },
+        {
+          "value": "petrol_pumps",
+          "label": "Petrol Pumps"
+        },
+        {
+          "value": "lpg_agency",
+          "label": "LPG Agency"
+        },
+        {
+          "value": "cng_station",
+          "label": "CNG Station"
+        }
+      ]
+    },
+    {
+      "label": "Entertainment and Leisure",
+      "options": [
+        {
+          "value": "bands_orchestra",
+          "label": "Bands & Orchestra"
+        },
+        {
+          "value": "casinos",
+          "label": "Casinos"
+        },
+        {
+          "value": "movie_theatres",
+          "label": "Movie Theatres"
+        },
+        {
+          "value": "motion_picture_production",
+          "label": "Motion Picture Production, Distribution & Exhibition"
+        },
+        {
+          "value": "service_apartments",
+          "label": "Service Apartments"
+        },
+        {
+          "value": "amusement_park_game_zone",
+          "label": "Amusement Park/Game Zone"
+        },
+        {
+          "value": "clubs",
+          "label": "Clubs"
+        },
+        {
+          "value": "cable_operators",
+          "label": "Cable Operators"
+        },
+        {
+          "value": "houses_of_worship",
+          "label": "Houses Of Worship - Churches, Mosques, Temples, Etc"
+        },
+        {
+          "value": "pirated_cd_dvd",
+          "label": "Pirated CD/DVD Sellers/Rentals"
+        },
+        {
+          "value": "video_game_arcades",
+          "label": "Video Game Arcades/Establishments"
+        },
+        {
+          "value": "carnivals",
+          "label": "Carnivals"
+        },
+        {
+          "value": "gymnasium",
+          "label": "Gymnasium"
+        },
+        {
+          "value": "massage_spa_salon",
+          "label": "Massage, Spa & Salon"
+        }
+      ]
+    },
+    {
+      "label": "Food and Food Products",
+      "options": [
+        {
+          "value": "packaged_food",
+          "label": "Packaged Food"
+        },
+        {
+          "value": "soft_drinks",
+          "label": "Soft Drinks"
+        },
+        {
+          "value": "bakery",
+          "label": "Bakery"
+        },
+        {
+          "value": "bottled_water",
+          "label": "Bottled Water"
+        },
+        {
+          "value": "food_processing",
+          "label": "Food Processing"
+        },
+        {
+          "value": "dry_fruits",
+          "label": "Dry Fruits"
+        },
+        {
+          "value": "sweet_shop",
+          "label": "Sweet Shop"
+        },
+        {
+          "value": "mutton_chicken_shop",
+          "label": "Mutton & Chicken Shop"
+        }
+      ]
+    },
+    {
+      "label": "Professional Services",
+      "options": [
+        {
+          "value": "industrial_services",
+          "label": "Industrial Services"
+        },
+        {
+          "value": "public_relations",
+          "label": "Public Relations"
+        },
+        {
+          "value": "real_estate_agent",
+          "label": "Real Estate Agent"
+        },
+        {
+          "value": "interior_designer",
+          "label": "Interior Designer"
+        },
+        {
+          "value": "general_contractors",
+          "label": "General Contractors - Non Government And Non Builder/Real Estate"
+        },
+        {
+          "value": "caterers",
+          "label": "Caterers"
+        },
+        {
+          "value": "human_resource_agencies",
+          "label": "Human Resource Agencies"
+        },
+        {
+          "value": "dry_cleaners_laundry",
+          "label": "Dry Cleaners And Laundry Services"
+        },
+        {
+          "value": "child_care_service",
+          "label": "Child Care Service (Day Care)"
+        },
+        {
+          "value": "news_paper_agencies",
+          "label": "News Paper Agencies"
+        },
+        {
+          "value": "consulting",
+          "label": "Consulting"
+        },
+        {
+          "value": "manpower_agencies_unskilled",
+          "label": "Manpower Agencies - Unskilled Employees"
+        },
+        {
+          "value": "manpower_agencies_skilled",
+          "label": "Manpower Agencies - Skilled Employees"
+        },
+        {
+          "value": "cyber_cafes",
+          "label": "Cyber Cafes"
+        },
+        {
+          "value": "call_center",
+          "label": "Call Center"
+        },
+        {
+          "value": "shifting_services",
+          "label": "Shifting Services"
+        },
+        {
+          "value": "garage_workshops",
+          "label": "Garage And Workshops"
+        },
+        {
+          "value": "clearing_forwarding_agents",
+          "label": "Clearing And Forwarding Agents"
+        },
+        {
+          "value": "contractors_govt_affiliated",
+          "label": "Contractors (Govt Affiliated)"
+        },
+        {
+          "value": "debt",
+          "label": "Debt"
+        },
+        {
+          "value": "import_export",
+          "label": "Import & Export"
+        },
+        {
+          "value": "auditing",
+          "label": "Auditing"
+        },
+        {
+          "value": "tour_travel_services",
+          "label": "Tour And Travel Services"
+        },
+        {
+          "value": "accounting",
+          "label": "Accounting"
+        },
+        {
+          "value": "commodity_trader",
+          "label": "Commodity Trader"
+        },
+        {
+          "value": "customer_service_point",
+          "label": "Customer Service Point Of Banks E Seva Kendra"
+        },
+        {
+          "value": "graphic_designer",
+          "label": "Graphic Designer"
+        },
+        {
+          "value": "marriage_bureau",
+          "label": "Marriage Bureau"
+        },
+        {
+          "value": "matrimonial_sites",
+          "label": "Matrimonial Sites"
+        },
+        {
+          "value": "personal_counseling_service",
+          "label": "Personal Counseling Service"
+        }
+      ]
+    },
+    {
+      "label": "Healthcare and Healthcare Providers",
+      "options": [
+        {
+          "value": "diagnostic_centres",
+          "label": "Diagnostic Centres"
+        },
+        {
+          "value": "hospitals",
+          "label": "Hospitals"
+        },
+        {
+          "value": "nursing_care_facilities",
+          "label": "Nursing And Personal Care Facilities"
+        },
+        {
+          "value": "healthcare_devices",
+          "label": "Healthcare Devices"
+        },
+        {
+          "value": "pathology_laboratory",
+          "label": "Pathology Laboratory"
+        },
+        {
+          "value": "dentists",
+          "label": "Dentists"
+        },
+        {
+          "value": "orthodontists",
+          "label": "Orthodontists"
+        }
+      ]
+    },
+    {
+      "label": "Educational Institutes",
+      "options": [
+        {
+          "value": "coaching_classes",
+          "label": "Coaching Classes"
+        },
+        {
+          "value": "hobby_classes",
+          "label": "Hobby Classes"
+        },
+        {
+          "value": "pre_nursery_schools",
+          "label": "Pre Nursery Schools"
+        },
+        {
+          "value": "schools",
+          "label": "Schools"
+        },
+        {
+          "value": "motor_driving_schools",
+          "label": "Motor Driving Schools"
+        }
+      ]
+    },
+    {
+      "label": "Media and Advertising",
+      "options": [
+        {
+          "value": "advertising",
+          "label": "Advertising"
+        },
+        {
+          "value": "post_production_animation",
+          "label": "Post Production & Animation"
+        },
+        {
+          "value": "print_media",
+          "label": "Print Media-Publishers/Electronic Media / Billboards"
+        },
+        {
+          "value": "printing_publishing_agencies",
+          "label": "Printing And Publishing Agencies"
+        },
+        {
+          "value": "marketing_company",
+          "label": "Marketing Company"
+        },
+        {
+          "value": "xerox_shops",
+          "label": "Xerox Shops"
+        },
+        {
+          "value": "event_management",
+          "label": "Event Management"
+        }
+      ]
+    },
+    {
+      "label": "Metals products",
+      "options": [
+        {
+          "value": "publishing",
+          "label": "Publishing"
+        },
+        {
+          "value": "aluminium_products",
+          "label": "Aluminium Products"
+        },
+        {
+          "value": "copper_product",
+          "label": "Copper Product"
+        },
+        {
+          "value": "mining",
+          "label": "Mining"
+        }
+      ]
+    },
+    {
+      "label": "Paints",
+      "options": [
+        {
+          "value": "paints_varnishes",
+          "label": "Paints & Varnishes"
+        },
+        {
+          "value": "paints_equipment",
+          "label": "Paints Equipment"
+        }
+      ]
+    },
+    {
+      "label": "Paper and Pulp",
+      "options": [
+        {
+          "value": "paper_paper_products",
+          "label": "Paper & Paper Products"
+        }
+      ]
+    },
+    {
+      "label": "Plastic and Rubber",
+      "options": [
+        {
+          "value": "plastics_packaging_goods",
+          "label": "Plastics Packaging Goods"
+        },
+        {
+          "value": "rubber_rubber_products",
+          "label": "Rubber & Rubber Products"
+        },
+        {
+          "value": "plastic_products",
+          "label": "Plastic Products"
+        },
+        {
+          "value": "plastics_tubes_sheets",
+          "label": "Plastics Tubes & Sheets"
+        }
+      ]
+    },
+    {
+      "label": "Transport",
+      "options": [
+        {
+          "value": "water_transport",
+          "label": "Water Transport"
+        },
+        {
+          "value": "courier",
+          "label": "Courier"
+        },
+        {
+          "value": "goods_transport_services",
+          "label": "Goods Transport Services"
+        },
+        {
+          "value": "freight_carriers",
+          "label": "Freight Carriers"
+        },
+        {
+          "value": "delivery_fleet",
+          "label": "Delivery Fleet"
+        },
+        {
+          "value": "passenger_transport",
+          "label": "Passenger Transport"
+        },
+        {
+          "value": "bus_lines",
+          "label": "Bus Lines"
+        },
+        {
+          "value": "charters",
+          "label": "Charters"
+        },
+        {
+          "value": "tour_buses",
+          "label": "Tour Buses"
+        }
+      ]
+    },
+    {
+      "label": "Tourism and Hospitality",
+      "options": [
+        {
+          "value": "hostels",
+          "label": "Hostels"
+        },
+        {
+          "value": "guest_house",
+          "label": "Guest House"
+        },
+        {
+          "value": "vehicle_rental_leasing",
+          "label": "Vehicle - Rental & Leasing"
+        },
+        {
+          "value": "tourist_guide",
+          "label": "Tourist Guide"
+        },
+        {
+          "value": "hotels",
+          "label": "Hotels"
+        },
+        {
+          "value": "camping",
+          "label": "Camping"
+        },
+        {
+          "value": "tents_provider",
+          "label": "Tents Provider"
+        },
+        {
+          "value": "holiday_packaging",
+          "label": "Holiday Packaging"
+        },
+        {
+          "value": "tourist_attractions_museums",
+          "label": "Tourist Attractions And Museums"
+        },
+        {
+          "value": "tours_travel_agencies",
+          "label": "Tours And Travel Agencies (Non IATA Certified)"
+        }
+      ]
+    },
+    {
+      "label": "Arts, Gift Shops and Handicrafts",
+      "options": [
+        {
+          "value": "art_dealer_galleries",
+          "label": "Art Dealer & Galleries"
+        },
+        {
+          "value": "gifts",
+          "label": "Gifts"
+        },
+        {
+          "value": "antiques",
+          "label": "Antiques"
+        },
+        {
+          "value": "novelty_souvenir",
+          "label": "Novelty And Souvenir"
+        },
+        {
+          "value": "handicrafts",
+          "label": "Handicrafts"
+        },
+        {
+          "value": "home_decor",
+          "label": "Home Decor"
+        },
+        {
+          "value": "toys",
+          "label": "Toys"
+        },
+        {
+          "value": "festive_items",
+          "label": "Festive Items"
+        },
+        {
+          "value": "rakhi",
+          "label": "Rakhi"
+        },
+        {
+          "value": "holi_colours",
+          "label": "Holi Colours"
+        },
+        {
+          "value": "radio_cassette",
+          "label": "Radio Cassette"
+        },
+        {
+          "value": "bangles_store",
+          "label": "Bangles Store"
+        },
+        {
+          "value": "diwali_items",
+          "label": "Diwali Items"
+        },
+        {
+          "value": "musical_instrument",
+          "label": "Musical Instrument"
+        }
+      ]
+    },
+    {
+      "label": "Professionals",
+      "options": [
+        {
+          "value": "lawyer",
+          "label": "Lawyer"
+        },
+        {
+          "value": "policeman",
+          "label": "Policeman"
+        },
+        {
+          "value": "politician",
+          "label": "Politician"
+        },
+        {
+          "value": "astrologers",
+          "label": "Astrologers"
+        },
+        {
+          "value": "stock_broker",
+          "label": "Stock Broker"
+        },
+        {
+          "value": "tuitors",
+          "label": "Tuitors"
+        },
+        {
+          "value": "doctors",
+          "label": "Doctors"
+        },
+        {
+          "value": "architect",
+          "label": "Architect"
+        },
+        {
+          "value": "photographers",
+          "label": "Photographers"
+        },
+        {
+          "value": "tax_consultants",
+          "label": "Tax Consultants"
+        },
+        {
+          "value": "verification_agencies",
+          "label": "Verification Agencies"
+        },
+        {
+          "value": "dsa",
+          "label": "DSA"
+        },
+        {
+          "value": "collection_agency",
+          "label": "Collection Agency"
+        },
+        {
+          "value": "entertainers",
+          "label": "Entertainers"
+        },
+        {
+          "value": "share_broking_firms",
+          "label": "Share Broking Firms"
+        },
+        {
+          "value": "chits_fund",
+          "label": "Chits Fund"
+        },
+        {
+          "value": "finance_companies_money_lenders",
+          "label": "Finance Companies & Money Lenders"
+        },
+        {
+          "value": "finance_consultants",
+          "label": "Finance Consultants"
+        },
+        {
+          "value": "journalists",
+          "label": "Journalists"
+        }
+      ]
+    },
+    {
+      "label": "Recharge and Ticket booking Shops",
+      "options": [
+        {
+          "value": "railway_airline_ticket_booking_services",
+          "label": "Railway And Airline Ticket Booking Services"
+        },
+        {
+          "value": "mobile_recharge",
+          "label": "Mobile Recharge"
+        },
+        {
+          "value": "dth",
+          "label": "DTH"
+        }
+      ]
+    },
+    {
+      "label": "Personal Care",
+      "options": [
+        {
+          "value": "cosmetics",
+          "label": "Cosmetics"
+        },
+        {
+          "value": "salons",
+          "label": "Salons"
+        },
+        {
+          "value": "hair_wig",
+          "label": "Hair Wig"
+        },
+        {
+          "value": "baby_care",
+          "label": "Baby Care"
+        },
+        {
+          "value": "barber_shop",
+          "label": "Barber Shop"
+        },
+        {
+          "value": "beauty_parlours",
+          "label": "Beauty Parlours"
+        },
+        {
+          "value": "parlors",
+          "label": "Parlors"
+        }
+      ]
+    },
+    {
+      "label": "Personal Accessories",
+      "options": [
+        {
+          "value": "watches",
+          "label": "Watches"
+        },
+        {
+          "value": "sunglasses",
+          "label": "Sunglasses"
+        },
+        {
+          "value": "optics",
+          "label": "Optics"
+        },
+        {
+          "value": "contact_lenses",
+          "label": "Contact Lenses"
+        },
+        {
+          "value": "specs",
+          "label": "Specs"
+        },
+        {
+          "value": "footware",
+          "label": "Footwear"
+        },
+        {
+          "value": "jackets",
+          "label": "Jackets"
+        },
+        {
+          "value": "belts",
+          "label": "Belts"
+        },
+        {
+          "value": "suitcase",
+          "label": "Suitcase"
+        },
+        {
+          "value": "bags_wallets",
+          "label": "Bags, Wallets"
+        },
+        {
+          "value": "raincoat",
+          "label": "Raincoat"
+        },
+        {
+          "value": "sweater",
+          "label": "Sweater"
+        },
+        {
+          "value": "umbrella_raincoat",
+          "label": "Umbrella, Raincoat"
+        },
+        {
+          "value": "walletstravel",
+          "label": "Wallets & Travel"
+        }
+      ]
+    },
+    {
+      "label": "Home Furnishings and Furniture",
+      "options": [
+        {
+          "value": "crystal_glassware_utensils",
+          "label": "Crystal And Glassware / Utensils"
+        },
+        {
+          "value": "carpets",
+          "label": "Carpets"
+        },
+        {
+          "value": "rugs",
+          "label": "Rugs"
+        },
+        {
+          "value": "bedsheets",
+          "label": "Bedsheets"
+        },
+        {
+          "value": "curtains",
+          "label": "Curtains"
+        },
+        {
+          "value": "tables",
+          "label": "Tables"
+        },
+        {
+          "value": "chairs",
+          "label": "Chairs"
+        },
+        {
+          "value": "bed",
+          "label": "Bed"
+        },
+        {
+          "value": "desk",
+          "label": "Desk"
+        },
+        {
+          "value": "cupboard",
+          "label": "Cupboard"
+        },
+        {
+          "value": "plywood",
+          "label": "Plywood"
+        },
+        {
+          "value": "cabinets",
+          "label": "Cabinets"
+        }
+      ]
+    },
+    {
+      "label": "Pharmacy",
+      "options": [
+        {
+          "value": "ayurvedic_products",
+          "label": "Ayurvedic Products"
+        },
+        {
+          "value": "homeopathy",
+          "label": "Homeopathy"
+        },
+        {
+          "value": "surgical_equipments",
+          "label": "Surgical Equipments"
+        },
+        {
+          "value": "medical_stores",
+          "label": "Medical Stores"
+        }
+      ]
+    },
+    {
+      "label": "Consumer Electronic Appliances",
+      "options": [
+        {
+          "value": "appliance_repair_shops",
+          "label": "Appliance Repair Shops"
+        },
+        {
+          "value": "televisions",
+          "label": "Televisions"
+        },
+        {
+          "value": "microwaves",
+          "label": "Microwaves"
+        },
+        {
+          "value": "fridge",
+          "label": "Fridge"
+        }
+      ]
+    },
+    {
+      "label": "Fitness",
+      "options": [
+        {
+          "value": "gym",
+          "label": "Gym"
+        },
+        {
+          "value": "gym_equipment",
+          "label": "Gym Equipment"
+        },
+        {
+          "value": "gym_wear",
+          "label": "Gym Wear"
+        },
+        {
+          "value": "personal_fitness_accessories",
+          "label": "Personal Fitness Accessories"
+        }
+      ]
+    },
+    {
+      "label": "Animal Product",
+      "options": [
+        {
+          "value": "fish",
+          "label": "Fish"
+        },
+        {
+          "value": "meat",
+          "label": "Meat"
+        },
+        {
+          "value": "poultry",
+          "label": "Poultry"
+        },
+        {
+          "value": "egg_traders",
+          "label": "Egg Traders"
+        },
+        {
+          "value": "seafood",
+          "label": "Seafood"
+        }
+      ]
+    },
+    {
+      "label": "Cameras and Accessories",
+      "options": [
+        {
+          "value": "cameras",
+          "label": "Cameras"
+        },
+        {
+          "value": "lenses",
+          "label": "Lenses"
+        },
+        {
+          "value": "photography_studio",
+          "label": "Photography Studio"
+        }
+      ]
+    },
+    {
+      "label": "Ceramic Tiles and Sanitary ware",
+      "options": [
+        {
+          "value": "tiles",
+          "label": "Tiles"
+        },
+        {
+          "value": "sanitaryware",
+          "label": "Sanitaryware"
+        },
+        {
+          "value": "glasswares",
+          "label": "Glasswares"
+        },
+        {
+          "value": "sinks",
+          "label": "Sinks"
+        },
+        {
+          "value": "bathroom_toiletry",
+          "label": "Bathroom And Toiletry"
+        },
+        {
+          "value": "pipes_pipe_fittings",
+          "label": "Pipes And Pipe Fittings"
+        }
+      ]
+    },
+    {
+      "label": "Containers, Packaging and Storage",
+      "options": [
+        {
+          "value": "cardboard_boxes",
+          "label": "Cardboard Boxes"
+        },
+        {
+          "value": "bubble_wrap",
+          "label": "Bubble Wrap"
+        },
+        {
+          "value": "storage_warehousing",
+          "label": "Storage And Warehousing"
+        }
+      ]
+    },
+    {
+      "label": "Dairy products",
+      "options": [
+        {
+          "value": "ice_cream",
+          "label": "Ice Cream"
+        },
+        {
+          "value": "milk",
+          "label": "Milk"
+        },
+        {
+          "value": "cheese",
+          "label": "Cheese"
+        },
+        {
+          "value": "paneer",
+          "label": "Paneer"
+        },
+        {
+          "value": "dairy_products",
+          "label": "Dairy Products"
+        }
+      ]
+    },
+    {
+      "label": "Gems and Jewellery",
+      "options": [
+        {
+          "value": "artificial_jewellery_gems",
+          "label": "Artificial Jewellery And Gems"
+        },
+        {
+          "value": "real_jewellery_gems",
+          "label": "Real Jewellery And Gems"
+        },
+        {
+          "value": "diamonds",
+          "label": "Diamonds"
+        },
+        {
+          "value": "silver_jewellery",
+          "label": "Silver Jewellery"
+        },
+        {
+          "value": "gold_ornaments",
+          "label": "Gold Ornaments"
+        },
+        {
+          "value": "bullion_traders",
+          "label": "Bullion Traders"
+        },
+        {
+          "value": "gems_precious_stone",
+          "label": "Gems And Precious Stone"
+        }
+      ]
+    },
+    {
+      "label": "Laptop Computers and Accessories",
+      "options": [
+        {
+          "value": "laptops",
+          "label": "Laptops"
+        },
+        {
+          "value": "scanners",
+          "label": "Scanners"
+        },
+        {
+          "value": "computer_software",
+          "label": "Computer Software"
+        },
+        {
+          "value": "computer_peripherals",
+          "label": "Computer Peripherals"
+        },
+        {
+          "value": "computers",
+          "label": "Computers"
+        }
+      ]
+    },
+    {
+      "label": "Mobile Phones and Accessories",
+      "options": [
+        {
+          "value": "mobile_phones",
+          "label": "Mobile Phones"
+        },
+        {
+          "value": "tablets",
+          "label": "Tablets"
+        },
+        {
+          "value": "earphones",
+          "label": "Earphones"
+        },
+        {
+          "value": "mobile_accessories",
+          "label": "Mobile Accessories"
+        }
+      ]
+    },
+    {
+      "label": "Pet Products",
+      "options": [
+        {
+          "value": "pet_shop",
+          "label": "Pet Shop"
+        },
+        {
+          "value": "pet_food",
+          "label": "Pet Food"
+        },
+        {
+          "value": "pet_toys",
+          "label": "Pet Toys"
+        },
+        {
+          "value": "veterinary_supplies",
+          "label": "Veterinary Supplies"
+        }
+      ]
+    },
+    {
+      "label": "Raw Textiles",
+      "options": [
+        {
+          "value": "cotton",
+          "label": "Cotton"
+        },
+        {
+          "value": "wool",
+          "label": "Wool"
+        },
+        {
+          "value": "jute",
+          "label": "Jute"
+        },
+        {
+          "value": "yarn_silk",
+          "label": "Yarn & Silk"
+        }
+      ]
+    },
+    {
+      "label": "Ready Made Garments and Apparels",
+      "options": [
+        {
+          "value": "shirts",
+          "label": "Shirts"
+        },
+        {
+          "value": "ready_made_garments",
+          "label": "Ready Made Garments"
+        }
+      ]
+    },
+    {
+      "label": "Restaurant and Food stalls",
+      "options": [
+        {
+          "value": "cloud_kitchen",
+          "label": "Cloud Kitchen"
+        },
+        {
+          "value": "food_truck",
+          "label": "Food Truck"
+        },
+        {
+          "value": "restaurant",
+          "label": "Restaurant"
+        },
+        {
+          "value": "fast_food_studios",
+          "label": "Fast Food Studios"
+        }
+      ]
+    },
+    {
+      "label": "Stationery",
+      "options": [
+        {
+          "value": "pen",
+          "label": "Pen"
+        },
+        {
+          "value": "pencils",
+          "label": "Pencils"
+        },
+        {
+          "value": "books",
+          "label": "Books"
+        },
+        {
+          "value": "office_stationery",
+          "label": "Office Stationery"
+        }
+      ]
+    },
+    {
+      "label": "Job Work",
+      "options": [
+        {
+          "value": "contractors_with_police",
+          "label": "Contractors With Police/Legal/Law Departments"
+        },
+        {
+          "value": "security_guards",
+          "label": "Security Guards"
+        },
+        {
+          "value": "govt_contractor",
+          "label": "Govt Contractor"
+        }
+      ]
+    },
+    {
+      "label": "Customer Service",
+      "options": [
+        {
+          "value": "internet_broadband_services",
+          "label": "Internet And Broadband Services"
+        },
+        {
+          "value": "money_transfer",
+          "label": "Money Transfer"
+        },
+        {
+          "value": "csp_point",
+          "label": "CSP Point"
+        },
+        {
+          "value": "mini_atm",
+          "label": "Mini Atm"
+        },
+        {
+          "value": "vegetable_commission_agent",
+          "label": "Vegetable Commission Agent"
+        },
+        {
+          "value": "online_pan_card_aadhar_card",
+          "label": "Online Pan Card, Aadhar Card Etc"
+        },
+        {
+          "value": "commission_agent",
+          "label": "Commission Agent"
+        }
+      ]
+    },
+    {
+      "label": "Industrial Product",
+      "options": [
+        {
+          "value": "traffic_safety_equipment",
+          "label": "Traffic Safety Equipment"
+        },
+        {
+          "value": "lubricant_oil",
+          "label": "Lubricant & Oil"
+        }
+      ]
+    },
+    {
+      "label": "Indoor Sports and Recreation",
+      "options": [
+        {
+          "value": "board_games",
+          "label": "Board Games, Card, Video games"
+        }
+      ]
+    },
+    {
+      "label": "Sports Items",
+      "options": [
+        {
+          "value": "boots",
+          "label": "Boots"
+        },
+        {
+          "value": "sporting_goods",
+          "label": "Sporting Goods"
+        },
+        {
+          "value": "sports_wear",
+          "label": "Sports Wear"
+        },
+        {
+          "value": "turf_and_parks",
+          "label": "Turf And Parks"
+        }
+      ]
+    }
+  ]
+}

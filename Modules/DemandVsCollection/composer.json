@@ -1,0 +1,30 @@
+{
+    "name": "nwidart/demandvscollection",
+    "description": "",
+    "authors": [
+        {
+            "name": "Nicolas Widart",
+            "email": "n.widart@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\DemandVsCollection\\": "app/",
+            "Modules\\DemandVsCollection\\Database\\Factories\\": "database/factories/",
+            "Modules\\DemandVsCollection\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\DemandVsCollection\\Tests\\": "tests/"
+        }
+    }
+}

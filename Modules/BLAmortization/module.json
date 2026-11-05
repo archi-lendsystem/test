@@ -1,0 +1,11 @@
+{
+    "name": "BLAmortization",
+    "alias": "blamortization",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\BLAmortization\\Providers\\BLAmortizationServiceProvider"
+    ],
+    "files": []
+}

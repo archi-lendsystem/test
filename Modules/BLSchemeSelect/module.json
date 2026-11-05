@@ -1,0 +1,11 @@
+{
+    "name": "BLSchemeSelect",
+    "alias": "blschemeselect",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\BLSchemeSelect\\Providers\\BLSchemeSelectServiceProvider"
+    ],
+    "files": []
+}

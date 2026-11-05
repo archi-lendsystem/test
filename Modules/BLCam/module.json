@@ -1,0 +1,11 @@
+{
+    "name": "BLCam",
+    "alias": "blcam",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\BLCam\\Providers\\BLCamServiceProvider"
+    ],
+    "files": []
+}

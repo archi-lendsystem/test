@@ -1,0 +1,14 @@
+{
+    "name": "PaydayPartnerCases",
+    "alias": "paydaypartnercases",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\PaydayPartnerCases\\Providers\\PaydayPartnerCasesServiceProvider"
+    ],
+    
+    "files": []
+}
+
+

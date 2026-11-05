@@ -1,0 +1,11 @@
+{
+    "name": "BLIMDDetailsVerification",
+    "alias": "blimddetailsverification",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\BLIMDDetailsVerification\\Providers\\BLIMDDetailsVerificationServiceProvider"
+    ],
+    "files": []
+}

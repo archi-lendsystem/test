@@ -1,0 +1,11 @@
+{
+    "name": "BLJourney",
+    "alias": "bljourney",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\BLJourney\\Providers\\BLJourneyServiceProvider"
+    ],
+    "files": []
+}

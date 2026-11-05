@@ -1,0 +1,30 @@
+{
+    "name": "nwidart/productscheme",
+    "description": "",
+    "authors": [
+        {
+            "name": "Nicolas Widart",
+            "email": "n.widart@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\ProductScheme\\": "app/",
+            "Modules\\ProductScheme\\Database\\Factories\\": "database/factories/",
+            "Modules\\ProductScheme\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\ProductScheme\\Tests\\": "tests/"
+        }
+    }
+}

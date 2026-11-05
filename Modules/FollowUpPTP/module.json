@@ -1,0 +1,11 @@
+{
+    "name": "FollowUpPTP",
+    "alias": "followupptp",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\FollowUpPTP\\Providers\\FollowUpPTPServiceProvider"
+    ],
+    "files": []
+}

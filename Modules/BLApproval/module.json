@@ -1,0 +1,11 @@
+{
+    "name": "BLApproval",
+    "alias": "blapproval",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\BLApproval\\Providers\\BLApprovalServiceProvider"
+    ],
+    "files": []
+}

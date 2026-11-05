@@ -1,0 +1,11 @@
+{
+    "name": "Crif",
+    "alias": "crif",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Crif\\Providers\\CrifServiceProvider"
+    ],
+    "files": []
+}

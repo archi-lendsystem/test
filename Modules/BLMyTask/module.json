@@ -1,0 +1,11 @@
+{
+    "name": "BLMyTask",
+    "alias": "blmytask",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\BLMyTask\\Providers\\BLMyTaskServiceProvider"
+    ],
+    "files": []
+}

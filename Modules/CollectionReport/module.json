@@ -1,0 +1,11 @@
+{
+    "name": "CollectionReport",
+    "alias": "collectionreport",
+    "description": "Demand-vs-collection efficiency reporting, branch-wise.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\CollectionReport\\Providers\\CollectionReportServiceProvider"
+    ],
+    "files": []
+}

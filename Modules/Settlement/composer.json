@@ -1,0 +1,30 @@
+{
+    "name": "nwidart/settlement",
+    "description": "",
+    "authors": [
+        {
+            "name": "Nicolas Widart",
+            "email": "n.widart@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\Settlement\\": "app/",
+            "Modules\\Settlement\\Database\\Factories\\": "database/factories/",
+            "Modules\\Settlement\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\Settlement\\Tests\\": "tests/"
+        }
+    }
+}

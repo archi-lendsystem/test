@@ -1,0 +1,11 @@
+{
+    "name": "PaydayLoanPartner",
+    "alias": "paydayloanpartner",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\PaydayLoanPartner\\Providers\\PaydayLoanPartnerServiceProvider"
+    ],
+    "files": []
+}

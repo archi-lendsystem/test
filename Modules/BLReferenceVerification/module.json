@@ -1,0 +1,11 @@
+{
+    "name": "BLReferenceVerification",
+    "alias": "blreferenceverification",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\BLReferenceVerification\\Providers\\BLReferenceVerificationServiceProvider"
+    ],
+    "files": []
+}

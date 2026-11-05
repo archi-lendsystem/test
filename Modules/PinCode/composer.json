@@ -1,0 +1,30 @@
+{
+    "name": "nwidart/pincode",
+    "description": "",
+    "authors": [
+        {
+            "name": "Nicolas Widart",
+            "email": "n.widart@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\PinCode\\": "app/",
+            "Modules\\PinCode\\Database\\Factories\\": "database/factories/",
+            "Modules\\PinCode\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\PinCode\\Tests\\": "tests/"
+        }
+    }
+}

@@ -1,0 +1,30 @@
+{
+    "name": "nwidart/blworkflow",
+    "description": "",
+    "authors": [
+        {
+            "name": "Nicolas Widart",
+            "email": "n.widart@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\BLWorkflow\\": "app/",
+            "Modules\\BLWorkflow\\Database\\Factories\\": "database/factories/",
+            "Modules\\BLWorkflow\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\BLWorkflow\\Tests\\": "tests/"
+        }
+    }
+}

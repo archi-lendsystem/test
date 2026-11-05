@@ -1,0 +1,11 @@
+{
+    "name": "BLLeadAssignment",
+    "alias": "blleadassignment",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\BLLeadAssignment\\Providers\\BLLeadAssignmentServiceProvider"
+    ],
+    "files": []
+}

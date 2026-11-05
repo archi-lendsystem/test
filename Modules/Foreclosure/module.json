@@ -1,0 +1,11 @@
+{
+    "name": "Foreclosure",
+    "alias": "foreclosure",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Foreclosure\\Providers\\ForeclosureServiceProvider"
+    ],
+    "files": []
+}

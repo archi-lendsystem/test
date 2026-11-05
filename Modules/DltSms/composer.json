@@ -1,0 +1,30 @@
+{
+    "name": "nwidart/dltsms",
+    "description": "",
+    "authors": [
+        {
+            "name": "Nicolas Widart",
+            "email": "n.widart@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\DltSms\\": "app/",
+            "Modules\\DltSms\\Database\\Factories\\": "database/factories/",
+            "Modules\\DltSms\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\DltSms\\Tests\\": "tests/"
+        }
+    }
+}

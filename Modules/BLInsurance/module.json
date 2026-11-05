@@ -1,0 +1,11 @@
+{
+    "name": "BLInsurance",
+    "alias": "blinsurance",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\BLInsurance\\Providers\\BLInsuranceServiceProvider"
+    ],
+    "files": []
+}

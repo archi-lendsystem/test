@@ -1,0 +1,30 @@
+{
+    "name": "nwidart/blreferenceverification",
+    "description": "",
+    "authors": [
+        {
+            "name": "Nicolas Widart",
+            "email": "n.widart@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\BLReferenceVerification\\": "app/",
+            "Modules\\BLReferenceVerification\\Database\\Factories\\": "database/factories/",
+            "Modules\\BLReferenceVerification\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\BLReferenceVerification\\Tests\\": "tests/"
+        }
+    }
+}

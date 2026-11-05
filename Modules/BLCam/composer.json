@@ -1,0 +1,30 @@
+{
+    "name": "nwidart/blcam",
+    "description": "",
+    "authors": [
+        {
+            "name": "Nicolas Widart",
+            "email": "n.widart@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\BLCam\\": "app/",
+            "Modules\\BLCam\\Database\\Factories\\": "database/factories/",
+            "Modules\\BLCam\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\BLCam\\Tests\\": "tests/"
+        }
+    }
+}
