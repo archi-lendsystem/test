@@ -534,8 +534,8 @@ log "Validating environment isolation"
         exit(1);
     };
 
-    if (config("app.env") !== "development") {
-        $error("APP_ENV must be development");
+    if (config("app.env") !== "staging") {
+        $error("APP_ENV must be staging");
     }
 
     if (config("app.debug") !== false) {
