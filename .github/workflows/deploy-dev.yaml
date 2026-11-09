@@ -35,6 +35,7 @@ jobs:
           coverage: none
 
       
+      
       - name: Validate dependencies and run tests
         run: |
           set -euo pipefail
@@ -53,32 +54,32 @@ jobs:
           if [[ -d tests ]] && \
             find tests -type f -name '*Test.php' -print -quit | grep -q .; then
 
-            # Create a safe testing environment without production secrets.
-            if [[ -f .env.example ]]; then
-              cp .env.example .env
-            else
-              echo "::warning::.env.example missing; creating isolated testing environment"
-              touch .env
-            fi
+            # Isolated test environment; no server credentials.
+            cat > .env <<'ENV'
+          APP_NAME=Laravel
+          APP_ENV=testing
+          APP_KEY=
+          APP_DEBUG=true
+          APP_URL=http://localhost
 
-            {
-              echo "APP_ENV=testing"
-              echo "APP_DEBUG=true"
-              echo "DB_CONNECTION=sqlite"
-              echo "DB_DATABASE=:memory:"
-              echo "CACHE_STORE=array"
-              echo "SESSION_DRIVER=array"
-              echo "QUEUE_CONNECTION=sync"
-              echo "MAIL_MAILER=array"
-            } >> .env
+          DB_CONNECTION=sqlite
+          DB_DATABASE=:memory:
+
+          CACHE_STORE=array
+          SESSION_DRIVER=array
+          QUEUE_CONNECTION=sync
+          MAIL_MAILER=array
+          ENV
 
             php artisan key:generate --force
 
             php artisan test --stop-on-failure
 
           else
-            echo "::warning::No Laravel tests found"
+            echo "::error::No Laravel tests found"
+            exit 1
           fi
+
 
 
   # ==========================================================
