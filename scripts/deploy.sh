@@ -4,7 +4,9 @@
 set -Eeuo pipefail
 umask 077
 
-# Actions: preflight | deploy | rollback
+# Actions: preflight | bootstrap-preflight | deploy | bootstrap | rollback
+# Bootstrap requires explicit GitHub Actions manual dispatch authorization.
+# Bootstrap backs up populated database and public files but NEVER migrates.
 
 ACTION="${1:?Action required}"
 DEPLOY_DIR="${2:?Deployment directory required}"
@@ -14,7 +16,7 @@ EXPECTED_URL="${5:?Expected URL required}"
 EXPECTED_DB_HOST="${6:?Expected DB host required}"
 EXPECTED_DB_NAME="${7:?Expected DB name required}"
 
-[[ "$ACTION" =~ ^(preflight|deploy|rollback)$ ]] || exit 1
+[[ "$ACTION" =~ ^(preflight|bootstrap-preflight|deploy|bootstrap|rollback)$ ]] || exit 1
 [[ "$DEPLOY_DIR" =~ ^[A-Za-z0-9_-]+$ ]] || exit 1
 
 [[ "$WEB_DIR" =~ ^[A-Za-z0-9_][A-Za-z0-9_/-]*$ &&
@@ -187,11 +189,10 @@ check_config() {
           $bad("APP_DEBUG must be false");
       }
 
-      if (
-          !is_string(config("app.key")) ||
-          config("app.key") === ""
-      ) {
-          $bad("APP_KEY missing");
+      $key = config("app.key");
+      if (!is_string($key) || !str_starts_with($key, "base64:") ||
+          strlen(base64_decode(substr($key, 7), true) ?: "") !== 32) {
+          $bad("APP_KEY must be a valid 32-byte base64 Laravel key");
       }
 
       if (
@@ -365,6 +366,8 @@ restore_snapshot() {
       "$WEB_ROOT/.index.php.restore.$RELEASE_ID" \
       "$WEB_ROOT/index.php"
 
+  else
+    rm -f "$WEB_ROOT/index.php"
   fi
 
   # Restore public storage symlink.
@@ -410,41 +413,31 @@ recover() {
 
   trap - EXIT
 
-  if [[ "$ACTION" == deploy &&
-        "$code" -ne 0 &&
-        "$SUCCESS" -eq 0 ]]; then
+  if [[ "$ACTION" == deploy || "$ACTION" == bootstrap ]]; then
+    if [[ "$code" -ne 0 && "$SUCCESS" -eq 0 ]]; then
+      log 'Deployment failed: attempting recovery'
 
-    log 'Deployment failed: attempting recovery'
+      if (( SWITCH_STARTED )); then
+        restore_snapshot || log 'CRITICAL: Public rollback failed'
+      fi
 
-    if (( SWITCH_STARTED )); then
+      if (( MAINTENANCE_STARTED )) && [[ -n "$OLD_APP" ]]; then
+        (
+          cd "$OLD_APP"
+          "$PHP_BIN" artisan up
+        ) || log 'CRITICAL: Could not exit old maintenance mode'
+      fi
 
-      restore_snapshot \
-        || log 'CRITICAL: Public rollback failed'
+      if [[ -d "$RELEASE" &&
+            "$(cat "$ACTIVE" 2>/dev/null || true)" != "$RELEASE" ]]; then
+        rm -rf -- "$RELEASE" || true
+      fi
 
+      log 'Database schema changes are NOT automatically reversed'
     fi
-
-    if (( MAINTENANCE_STARTED )) && \
-       [[ -n "$OLD_APP" ]]; then
-
-      (
-        cd "$OLD_APP"
-        "$PHP_BIN" artisan up
-
-      ) || log 'CRITICAL: Could not exit old maintenance mode'
-
-    fi
-
-    if [[ -d "$RELEASE" &&
-          "$(cat "$ACTIVE" 2>/dev/null || true)" != "$RELEASE" ]]; then
-
-      rm -rf -- "$RELEASE" || true
-
-    fi
-
-    log 'Database schema changes are NOT automatically reversed'
   fi
 
-  if [[ "$ACTION" == deploy ]]; then
+  if [[ "$ACTION" == deploy || "$ACTION" == bootstrap ]]; then
 
     rm -f \
       "$SNAP"/.mysql.* \
@@ -469,28 +462,27 @@ if [[ "$ACTION" == rollback ]]; then
      "$(cat "$ACTIVE")" == "$RELEASE" ]] \
     || fail 'No applicable rollback snapshot'
 
-  [[ -f "$SNAP/old-app" ]] \
-    || fail 'Previous application snapshot missing'
+  if [[ -f "$SNAP/bootstrap" ]]; then
+    [[ ! -e "$SNAP/old-app" ]] || fail 'Invalid bootstrap snapshot'
+  else
+    [[ -s "$SNAP/old-app" ]] || fail 'Previous application snapshot missing'
+    OLD_APP="$(cat "$SNAP/old-app")"
+    [[ "$OLD_APP" == "$BASE" || "$OLD_APP" == "$RELEASES/"* ]] \
+      || fail 'Unsafe rollback target'
+    [[ -f "$OLD_APP/vendor/autoload.php" ]] \
+      || fail 'Rollback application missing'
+  fi
 
-  OLD_APP="$(cat "$SNAP/old-app")"
+  restore_snapshot || fail 'Failed to restore public files'
 
-  [[ "$OLD_APP" == "$BASE" ||
-     "$OLD_APP" == "$RELEASES/"* ]] \
-    || fail 'Unsafe rollback target'
+  if [[ -n "$OLD_APP" ]]; then
+    (
+      cd "$OLD_APP"
+      "$PHP_BIN" artisan up
+    ) || fail 'Could not bring old app online'
+  fi
 
-  [[ -f "$OLD_APP/vendor/autoload.php" ]] \
-    || fail 'Rollback application missing'
-
-  restore_snapshot \
-    || fail 'Failed to restore public files'
-
-  (
-    cd "$OLD_APP"
-    "$PHP_BIN" artisan up
-
-  ) || fail 'Could not bring old app online'
-
-  log 'Application code/public files restored'
+  log 'Prior public state restored; bootstrap rollback cannot restore missing backend'
   log 'Verify database schema compatibility manually'
 
   exit 0
@@ -500,40 +492,40 @@ fi
 # 9. Pre-deployment recovery readiness verification
 # ============================================================
 
-log 'Checking existing application and rollback readiness'
+log 'Checking application recovery readiness'
 
-identify_previous
+if [[ "$ACTION" == bootstrap-preflight || "$ACTION" == bootstrap ]]; then
+  # Bootstrap is deliberately only permitted without an existing Laravel app.
+  [[ ! -s "$ACTIVE" && ! -f "$BASE/artisan" ]] \
+    || fail 'A Laravel installation already exists; use normal deploy instead'
 
-check_config "$OLD_APP"
+  # Existing web contents may be broken; preserve them for forensics/rollback.
+  [[ ! -L "$WEB_ROOT/index.php" ]] || fail 'Symlinked public index.php is unsafe'
+  [[ ! -e "$WEB_ROOT/storage" || -L "$WEB_ROOT/storage" ]] \
+    || fail 'Public storage is an actual directory; manual review needed'
+  log 'One-time bootstrap allowed (no existing Laravel installation)'
+else
+  identify_previous
+  check_config "$OLD_APP"
 
-[[ -r "$OLD_APP/.env" ]] \
-  || fail 'Cannot read previous .env'
+  [[ -r "$OLD_APP/.env" ]] || fail 'Cannot read previous .env'
+  [[ -L "$WEB_ROOT/storage" ]] || fail 'Public storage symlink missing'
+  [[ -d "$(readlink -f "$WEB_ROOT/storage")" ]] \
+    || fail 'Public storage symlink target missing'
+  [[ "$(readlink -f "$WEB_ROOT/storage")" == "$(readlink -f "$BASE/storage/app/public")" ]] \
+    || fail 'Unexpected public storage target'
+fi
 
-[[ -d "$BASE/storage" &&
-   ! -L "$BASE/storage" ]] \
+[[ -d "$BASE/storage" && ! -L "$BASE/storage" ]] \
   || fail 'Persistent storage missing or unsafe'
 
-[[ -L "$WEB_ROOT/storage" ]] \
-  || fail 'Public storage symlink missing'
-
-[[ -d "$(readlink -f "$WEB_ROOT/storage")" ]] \
-  || fail 'Public storage symlink target missing'
-  
-[[ "$(readlink -f "$WEB_ROOT/storage")" == "$(readlink -f "$BASE/storage/app/public")" ]] \
-  || fail 'Unexpected public storage target'
-
 free="$(df -Pk "$BASE" | awk 'NR==2 {print $4}')"
-
-[[ "$free" =~ ^[0-9]+$ ]] &&
-  (( free >= 524288 )) \
+[[ "$free" =~ ^[0-9]+$ ]] && (( free >= 524288 )) \
   || fail 'Less than 512 MiB free'
+[[ -w "$BASE" ]] || fail 'Application base is not writable'
 
-[[ -w "$BASE" ]] \
-  || fail 'Application base is not writable'
-
-log 'Existing application is recoverable'
-
-if [[ "$ACTION" == preflight ]]; then
+log 'Preflight checks passed'
+if [[ "$ACTION" == preflight || "$ACTION" == bootstrap-preflight ]]; then
   exit 0
 fi
 
@@ -660,6 +652,13 @@ cp \
 
 chmod 600 "$RELEASE/.env"
 
+mkdir -p \
+  "$BASE/storage/app/public" \
+  "$BASE/storage/framework/cache/data" \
+  "$BASE/storage/framework/sessions" \
+  "$BASE/storage/framework/views" \
+  "$BASE/storage/logs"
+
 rm -rf "$RELEASE/storage"
 
 ln -s \
@@ -698,7 +697,11 @@ log 'Validating new environment and encryption key'
 
 check_config "$RELEASE"
 
-check_key_unchanged "$OLD_APP" "$RELEASE"
+if [[ "$ACTION" == deploy ]]; then
+  check_key_unchanged "$OLD_APP" "$RELEASE"
+else
+  log 'Bootstrap: existing database encryption-key compatibility cannot be proven automatically'
+fi
 
 # ============================================================
 # 15. Cache Laravel and verify required routes
@@ -774,17 +777,34 @@ log 'Backing up public files and database before migrations'
 mkdir -m 700 "$SNAP"
 mkdir -m 700 "$SNAP/old"
 
-printf '%s\n' "$OLD_APP" > "$SNAP/old-app"
+if [[ "$ACTION" == bootstrap ]]; then
+  : > "$SNAP/bootstrap"
+else
+  printf '%s\n' "$OLD_APP" > "$SNAP/old-app"
+fi
 
 if [[ -f "$ACTIVE" ]]; then
   cp -p "$ACTIVE" "$SNAP/active"
 fi
 
-cp -p "$WEB_ROOT/index.php" "$SNAP/index.php"
+if [[ -f "$WEB_ROOT/index.php" ]]; then
+  cp -p "$WEB_ROOT/index.php" "$SNAP/index.php"
+fi
 
-ln -s \
-  "$(readlink "$WEB_ROOT/storage")" \
-  "$SNAP/storage"
+if [[ -L "$WEB_ROOT/storage" ]]; then
+  ln -s "$(readlink "$WEB_ROOT/storage")" "$SNAP/storage"
+else
+  : > "$SNAP/no-storage"
+fi
+
+# Full public root archival backup, including existing files not in manifest.
+# Tar does not dereference storage symlinks.
+log 'Creating full public web-root backup'
+tar -czf "$SNAP/public-html-before.tar.gz" -C "$HOME" "$WEB_DIR"
+[[ -s "$SNAP/public-html-before.tar.gz" ]] && \
+  gzip -t "$SNAP/public-html-before.tar.gz" \
+  || fail 'Public web-root backup invalid'
+chmod 600 "$SNAP/public-html-before.tar.gz"
 
 (
   cd "$RELEASE/public"
@@ -872,8 +892,8 @@ DB_NAME_FILE="$(mktemp "$SNAP/.db.XXXXXXXX")"
     $s = "[client]\n";
 
     foreach (
-        ["host", "port", "username", "password"]
-        as $k
+        ["host" => "host", "port" => "port", "username" => "user", "password" => "password"]
+        as $k => $option
     ) {
 
         if (
@@ -881,7 +901,7 @@ DB_NAME_FILE="$(mktemp "$SNAP/.db.XXXXXXXX")"
             $c[$k] !== ""
         ) {
 
-            $s .= $k .
+            $s .= $option .
                 "=\"" .
                 $quote($c[$k]) .
                 "\"\n";
@@ -931,25 +951,21 @@ chmod 600 "$SNAP/database.sql.gz"
 # 18. Maintenance mode and database migrations
 # ============================================================
 
-log 'Entering maintenance mode and running migrations'
-
-# Mark before artisan down so partial failures trigger recovery.
-
-MAINTENANCE_STARTED=1
-
-(
-  cd "$OLD_APP"
-  "$PHP_BIN" artisan down --retry=15
-
-) || fail 'Maintenance command failed'
-
-(
-  cd "$RELEASE"
-
-  "$PHP_BIN" artisan migrate \
-    --force \
-    --no-interaction
-)
+if [[ "$ACTION" == bootstrap ]]; then
+  # Existing staging database is populated. Deliberately never migrate on bootstrap.
+  log 'Bootstrap mode: skipping migrations and maintenance-mode changes'
+else
+  log 'Entering maintenance mode and running migrations'
+  MAINTENANCE_STARTED=1
+  (
+    cd "$OLD_APP"
+    "$PHP_BIN" artisan down --retry=15
+  ) || fail 'Maintenance command failed'
+  (
+    cd "$RELEASE"
+    "$PHP_BIN" artisan migrate --force --no-interaction
+  )
+fi
 
 # ============================================================
 # 19. Publish public assets
@@ -1067,12 +1083,12 @@ mv -f \
   "$PHP_BIN" artisan up
 )
 
-(
-  cd "$OLD_APP"
-
-  "$PHP_BIN" artisan up
-
-) || log 'WARNING: Previous release maintenance flag not cleared'
+if [[ -n "$OLD_APP" ]]; then
+  (
+    cd "$OLD_APP"
+    "$PHP_BIN" artisan up
+  ) || log 'WARNING: Previous release maintenance flag not cleared'
+fi
 
 # ============================================================
 # 23. Verify database and background commands

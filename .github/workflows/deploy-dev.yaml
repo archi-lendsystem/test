@@ -3,6 +3,17 @@ name: Deploy Staging
 
 on:
   workflow_dispatch:
+    inputs:
+      bootstrap_staging:
+        description: 'ONE-TIME bootstrap: existing staging DB, no migrations'
+        type: boolean
+        required: true
+        default: false
+      bootstrap_confirmation:
+        description: 'For bootstrap type BOOTSTRAP_EXISTING_STAGING_DB'
+        type: string
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -96,6 +107,8 @@ jobs:
       SMOKE_TEST_PATH: ${{ vars.SMOKE_TEST_PATH }}
 
       RELEASE_ID: ${{ github.sha }}
+      BOOTSTRAP_REQUESTED: ${{ inputs.bootstrap_staging }}
+      BOOTSTRAP_CONFIRMATION: ${{ inputs.bootstrap_confirmation }}
 
     steps:
       # ======================================================
@@ -175,6 +188,27 @@ jobs:
 
           echo "Staging configuration validated"
 
+      - name: Select protected deployment mode
+        id: mode
+        run: |
+          set -euo pipefail
+
+          if [[ "${BOOTSTRAP_REQUESTED:-false}" == 'true' ]]; then
+            [[ "$BOOTSTRAP_CONFIRMATION" == 'BOOTSTRAP_EXISTING_STAGING_DB' ]] || {
+              echo '::error::One-time bootstrap confirmation is missing'
+              exit 1
+            }
+            echo 'preflight_action=bootstrap-preflight' >> "$GITHUB_OUTPUT"
+            echo 'deploy_action=bootstrap' >> "$GITHUB_OUTPUT"
+            echo 'rollback_action=rollback' >> "$GITHUB_OUTPUT"
+            echo 'One-time staging bootstrap selected. Database migrations will NOT run.'
+          else
+            echo 'preflight_action=preflight' >> "$GITHUB_OUTPUT"
+            echo 'deploy_action=deploy' >> "$GITHUB_OUTPUT"
+            echo 'rollback_action=rollback' >> "$GITHUB_OUTPUT"
+            echo 'Protected normal deployment selected.'
+          fi
+
       # ======================================================
       # 3. Configure verified SSH
       # ======================================================
@@ -243,7 +277,7 @@ jobs:
 
           ssh -F "$RUNNER_TEMP/deploy-ssh/config" \
             cpanel-deploy \
-            "bash -se -- preflight '$REMOTE_DEPLOY_DIR' '${REMOTE_WEB_ROOT:-public_html}' '$RELEASE_ID' '$BACKEND_URL' '$EXPECTED_DB_HOST' '$EXPECTED_DB_DATABASE'" \
+            "bash -se -- '${{ steps.mode.outputs.preflight_action }}' '$REMOTE_DEPLOY_DIR' '${REMOTE_WEB_ROOT:-public_html}' '$RELEASE_ID' '$BACKEND_URL' '$EXPECTED_DB_HOST' '$EXPECTED_DB_DATABASE'" \
             < scripts/deploy.sh
 
       # ======================================================
@@ -307,7 +341,7 @@ jobs:
 
           ssh -F "$RUNNER_TEMP/deploy-ssh/config" \
             cpanel-deploy \
-            "bash -se -- deploy '$REMOTE_DEPLOY_DIR' '${REMOTE_WEB_ROOT:-public_html}' '$RELEASE_ID' '$BACKEND_URL' '$EXPECTED_DB_HOST' '$EXPECTED_DB_DATABASE'" \
+            "bash -se -- '${{ steps.mode.outputs.deploy_action }}' '$REMOTE_DEPLOY_DIR' '${REMOTE_WEB_ROOT:-public_html}' '$RELEASE_ID' '$BACKEND_URL' '$EXPECTED_DB_HOST' '$EXPECTED_DB_DATABASE'" \
             < scripts/deploy.sh
 
       # ======================================================
