@@ -557,6 +557,17 @@ else
     || fail 'Unexpected public storage target'
 fi
 
+# First-time bootstrap may begin with an empty deployment directory.
+# Create persistent storage only in bootstrap mode; never replace existing files
+# or symlinks, and do not change storage during a normal deployment.
+if [[ "$ACTION" == bootstrap-preflight || "$ACTION" == bootstrap ]]; then
+  if [[ ! -e "$BASE/storage" && ! -L "$BASE/storage" ]]; then
+    mkdir -m 700 -- "$BASE/storage" \
+      || fail 'Cannot create persistent storage'
+    log 'Created persistent storage for first-time bootstrap'
+  fi
+fi
+
 [[ -d "$BASE/storage" && ! -L "$BASE/storage" ]] \
   || fail 'Persistent storage missing or unsafe'
 
