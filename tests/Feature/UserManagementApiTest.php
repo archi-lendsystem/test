@@ -2,8 +2,6 @@
 
 namespace Tests\Feature;
 
-use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Foundation\Testing\WithFaker;
 use Tests\TestCase;
 
 class UserManagementApiTest extends TestCase
@@ -11,10 +9,10 @@ class UserManagementApiTest extends TestCase
     /**
      * A basic feature test example.
      */
-    public function test_example(): void
+    public function test_root_route_is_not_available(): void
     {
         $response = $this->get('/');
 
-        $response->assertStatus(200);
+        $response->assertNotFound();
     }
 }
