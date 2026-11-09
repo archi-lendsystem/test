@@ -518,9 +518,8 @@ check_config "$OLD_APP"
 
 [[ -d "$(readlink -f "$WEB_ROOT/storage")" ]] \
   || fail 'Public storage symlink target missing'
-
-[[ "$(readlink -f "$WEB_ROOT/storage")" ==
-   "$(readlink -f "$BASE/storage/app/public")" ]] \
+  
+[[ "$(readlink -f "$WEB_ROOT/storage")" == "$(readlink -f "$BASE/storage/app/public")" ]] \
   || fail 'Unexpected public storage target'
 
 free="$(df -Pk "$BASE" | awk 'NR==2 {print $4}')"
