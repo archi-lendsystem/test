@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: deploy-${{ github.repository }}-development
+  group: deploy-${{ github.repository }}-staging
   cancel-in-progress: false
 
 jobs:
@@ -17,7 +17,7 @@ jobs:
   # ==========================================================
 
   tests:
-    if: github.ref == 'refs/heads/development'
+    if: github.ref == 'refs/heads/staging'
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -58,7 +58,7 @@ jobs:
           fi
 
   # ==========================================================
-  # 2. Deploy only from approved development branch
+  # 2. Deploy only from approved staging branch
   # ==========================================================
 
   deploy:
@@ -66,9 +66,9 @@ jobs:
 
     needs: tests
 
-    if: github.ref == 'refs/heads/development'
+    if: github.ref == 'refs/heads/staging'
 
-    environment: development
+    environment: staging
 
     runs-on: [self-hosted, macOS, ARM64]
 
@@ -111,8 +111,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          [[ "$GITHUB_REF" == "refs/heads/development" ]] || {
-            echo "::error::Deployment allowed only from development branch"
+          [[ "$GITHUB_REF" == "refs/heads/staging" ]] || {
+            echo "::error::Deployment allowed only from staging branch"
             exit 1
           }
 
