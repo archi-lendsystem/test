@@ -1,8 +1,12 @@
-
 name: Deploy Development
 
 on:
   workflow_dispatch:
+    inputs:
+      skip_tests:
+        description: "Skip automated tests (emergency use only)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -11,11 +15,108 @@ concurrency:
   group: deploy-${{ github.repository }}-staging
   cancel-in-progress: false
 
+env:
+  DEPLOY_BRANCH: ${{ vars.DEPLOY_BRANCH || 'develop' }}
+
 jobs:
+  # ============================================================
+  # Branch guard (GitHub-hosted, so unapproved code never reaches
+  # the self-hosted runner)
+  # ============================================================
+  guard:
+    name: Verify deployment branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Allow only the approved branch
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF_TYPE" != "branch" || "$GITHUB_REF_NAME" != "$DEPLOY_BRANCH" ]]; then
+            echo "::error::Deployment is only allowed from branch '$DEPLOY_BRANCH' (requested: $GITHUB_REF_TYPE '$GITHUB_REF_NAME')"
+            exit 1
+          fi
+          echo "Branch '$GITHUB_REF_NAME' approved for development deployment"
+
+  # ============================================================
+  # Automated tests + PHP/Composer compatibility (PHP 8.4 = server)
+  # ============================================================
+  test:
+    name: Tests and dependency checks
+    needs: guard
+    if: ${{ !inputs.skip_tests }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Set up PHP 8.4
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: mbstring, intl, bcmath, pdo_sqlite, sqlite3, zip, gd
+          coverage: none
+          tools: composer:v2
+
+      - name: Validate Composer files
+        run: |
+          set -euo pipefail
+          composer validate --no-check-publish --no-interaction
+          if [[ ! -f composer.lock ]]; then
+            echo "::warning::composer.lock is not committed; server installs are not reproducible"
+          fi
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Check platform requirements
+        run: composer check-platform-reqs --no-dev
+
+      - name: Security audit
+        run: |
+          composer audit --locked --no-dev \
+            || echo "::warning::composer audit reported advisories - review before promoting to UAT"
+
+      - name: Prepare test environment
+        run: |
+          set -euo pipefail
+          if [[ -f .env.example ]]; then cp .env.example .env; else printf 'APP_KEY=\n' > .env; fi
+          php artisan key:generate --force
+
+      - name: Run tests
+        env:
+          APP_ENV: testing
+          DB_CONNECTION: sqlite
+          DB_DATABASE: ":memory:"
+          CACHE_STORE: array
+          SESSION_DRIVER: array
+          QUEUE_CONNECTION: sync
+          MAIL_MAILER: array
+        run: |
+          set -euo pipefail
+          if [[ -d tests ]]; then
+            php artisan test --without-tty
+          else
+            echo "::warning::No tests directory found - skipping tests"
+          fi
+
+  # ============================================================
+  # Deployment
+  # ============================================================
   deploy:
     name: Deploy Application to cPanel
+    needs: [guard, test]
+    if: >-
+      ${{ !cancelled()
+          && needs.guard.result == 'success'
+          && (needs.test.result == 'success' || (inputs.skip_tests && needs.test.result == 'skipped'))
+          && github.ref == format('refs/heads/{0}', vars.DEPLOY_BRANCH || 'develop') }}
     runs-on: [self-hosted, macOS, ARM64]
     timeout-minutes: 30
+    environment: development
 
     defaults:
       run:
@@ -26,6 +127,14 @@ jobs:
       REMOTE_DEPLOY_DIR: ${{ secrets.REMOTE_DEPLOY_DIR }}
       REMOTE_WEB_ROOT: ${{ secrets.REMOTE_WEB_ROOT }}
       BACKEND_URL: ${{ secrets.BACKEND_URL }}
+      EXPECTED_APP_ENV: ${{ vars.EXPECTED_APP_ENV }}
+      FORBIDDEN_DB_HOSTS: ${{ secrets.FORBIDDEN_DB_HOSTS }}
+      FORBIDDEN_DB_NAMES: ${{ secrets.FORBIDDEN_DB_NAMES }}
+      FORBIDDEN_APP_HOSTS: ${{ secrets.FORBIDDEN_APP_HOSTS }}
+      KEEP_RELEASES: ${{ vars.KEEP_RELEASES || '5' }}
+      MIN_FREE_DISK_MB: ${{ vars.MIN_FREE_DISK_MB || '1024' }}
+      REQUIRE_DB_BACKUP: ${{ vars.REQUIRE_DB_BACKUP || '1' }}
+      PHP_BIN: /opt/cpanel/ea-php84/root/usr/bin/php
 
     steps:
       # ==========================================================
@@ -38,7 +147,30 @@ jobs:
           fetch-depth: 1
 
       # ==========================================================
-      # 2. Validate deployment configuration
+      # 2. Runner safety checks
+      # ==========================================================
+      - name: Runner safety checks
+        run: |
+          set -euo pipefail
+
+          if [[ "$GITHUB_EVENT_NAME" != "workflow_dispatch" ]]; then
+            echo "::error::Only manual (workflow_dispatch) deployments are allowed"
+            exit 1
+          fi
+
+          if [[ "$GITHUB_REF" != "refs/heads/$DEPLOY_BRANCH" ]]; then
+            echo "::error::Unapproved ref $GITHUB_REF"
+            exit 1
+          fi
+
+          if [[ "$(id -u)" == "0" ]]; then
+            echo "::warning::Self-hosted runner is running as root; use a dedicated unprivileged user"
+          fi
+
+          echo "Runner checks passed"
+
+      # ==========================================================
+      # 3. Validate deployment configuration
       # ==========================================================
       - name: Validate configuration
         run: |
@@ -62,12 +194,13 @@ jobs:
             exit 1
           fi
 
-          if [[ ! -f scripts/deploy.sh ]]; then
-            echo "::error::scripts/deploy.sh is missing"
-            exit 1
-          fi
-
-          bash -n scripts/deploy.sh
+          for script in scripts/deploy.sh scripts/validate-env.sh; do
+            if [[ ! -f "$script" ]]; then
+              echo "::error::$script is missing"
+              exit 1
+            fi
+            bash -n "$script"
+          done
 
           if git ls-files --error-unmatch .env >/dev/null 2>&1; then
             echo "::error::.env must not be tracked in Git"
@@ -92,27 +225,69 @@ jobs:
             exit 1
           fi
 
+          if [[ ! "$KEEP_RELEASES" =~ ^[0-9]+$ ]] || (( KEEP_RELEASES < 2 || KEEP_RELEASES > 20 )); then
+            echo "::error::KEEP_RELEASES must be a number between 2 and 20"
+            exit 1
+          fi
+
+          if [[ ! "$MIN_FREE_DISK_MB" =~ ^[0-9]+$ ]]; then
+            echo "::error::MIN_FREE_DISK_MB must be a number"
+            exit 1
+          fi
+
+          if [[ ! "$REQUIRE_DB_BACKUP" =~ ^[01]$ ]]; then
+            echo "::error::REQUIRE_DB_BACKUP must be 0 or 1"
+            exit 1
+          fi
+
+          LIST_RE='^[A-Za-z0-9_., :-]*$'
+          for name in EXPECTED_APP_ENV FORBIDDEN_DB_HOSTS FORBIDDEN_DB_NAMES FORBIDDEN_APP_HOSTS; do
+            value="${!name:-}"
+            if [[ ! "$value" =~ $LIST_RE ]]; then
+              echo "::error::$name contains invalid characters"
+              exit 1
+            fi
+          done
+
+          EXPECTED_APP_HOST="$(printf '%s' "$BACKEND_URL" \
+            | sed -E 's|^[A-Za-z][A-Za-z0-9+.-]*://||; s|^[^@/]*@||; s|[/:?#].*$||' \
+            | tr '[:upper:]' '[:lower:]')"
+
+          if [[ ! "$EXPECTED_APP_HOST" =~ ^[a-z0-9.-]+$ ]]; then
+            echo "::error::Cannot determine host from BACKEND_URL"
+            exit 1
+          fi
+
+          if [[ ! -f composer.lock ]]; then
+            echo "::warning::composer.lock is not committed"
+          fi
+
+          RELEASE_ID="$(date -u +%Y%m%d%H%M%S)-${GITHUB_SHA:0:7}"
+
+          {
+            echo "RELEASE_ID=$RELEASE_ID"
+            echo "EXPECTED_APP_HOST=$EXPECTED_APP_HOST"
+          } >> "$GITHUB_ENV"
+
+          echo "Release ID: $RELEASE_ID"
           echo "Configuration validated successfully"
 
       # ==========================================================
-      # 3. SECURITY: Validate local environment for UAT
+      # 4. SECURITY: Validate environment isolation (UAT / prod)
       # ==========================================================
       - name: Validate environment security
         run: |
           set -euo pipefail
 
-          echo "Checking environment for forbidden UAT references"
+          echo "Validating local .env against development isolation rules"
 
-          if LC_ALL=C grep -iq 'uat' "$LOCAL_ENV_PATH"; then
-            echo "::error::Deployment blocked: .env contains UAT references"
+          if ! bash scripts/validate-env.sh "$LOCAL_ENV_PATH"; then
+            echo "::error::Deployment blocked: environment validation failed (see messages above)"
             exit 1
           fi
 
-          echo "Environment security validation passed"
-          echo "No UAT references found"
-
       # ==========================================================
-      # 4. Configure secure SSH
+      # 5. Configure secure SSH (unchanged)
       # ==========================================================
       - name: Configure SSH
         env:
@@ -173,181 +348,262 @@ jobs:
           echo "SSH configured successfully"
 
       # ==========================================================
-      # 5. Test SSH and prepare remote directory
+      # 6. Remote preflight: tools, PHP version, disk space
       # ==========================================================
-      - name: Connect and prepare server directory
+      - name: Remote preflight checks
         run: |
           set -euo pipefail
 
           ssh -F "$RUNNER_TEMP/deploy-ssh/config" \
             cpanel-deploy \
-            "mkdir -p \"\$HOME/$REMOTE_DEPLOY_DIR\" && echo 'SSH connection OK, directory ready'"
+            "bash -s -- '$REMOTE_DEPLOY_DIR' '$RELEASE_ID' '$MIN_FREE_DISK_MB' '$PHP_BIN'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+
+          DEPLOY_DIR="$1"
+          RELEASE_ID="$2"
+          MIN_FREE_MB="$3"
+          PHP_BIN="$4"
+          BASE="$HOME/$DEPLOY_DIR"
+
+          export PATH="${PHP_BIN%/*}:$HOME/.local/bin:$PATH"
+
+          mkdir -p "$BASE/releases" "$BASE/.deploy/incoming/$RELEASE_ID"
+          chmod 700 "$BASE/.deploy" "$BASE/.deploy/incoming"
+
+          # Remove stale uploads left by interrupted runs (older than 24h)
+          find "$BASE/.deploy/incoming" -mindepth 1 -maxdepth 1 -type d -mmin +1440 \
+            -exec rm -rf {} + 2>/dev/null || true
+
+          for tool in rsync tar gzip sha256sum composer awk; do
+            if ! command -v "$tool" >/dev/null 2>&1; then
+              echo "ERROR: required tool '$tool' is not available on the server" >&2
+              exit 1
+            fi
+          done
+
+          if [[ ! -x "$PHP_BIN" ]]; then
+            echo "ERROR: PHP binary not found: $PHP_BIN" >&2
+            exit 1
+          fi
+
+          if ! "$PHP_BIN" -r 'exit(PHP_VERSION_ID >= 80400 ? 0 : 1);'; then
+            echo "ERROR: PHP >= 8.4 required, found $("$PHP_BIN" -r 'echo PHP_VERSION;')" >&2
+            exit 1
+          fi
+
+          free_kb="$(df -Pk "$HOME" | awk 'NR == 2 { print $4 }')"
+          if (( free_kb < MIN_FREE_MB * 1024 )); then
+            echo "ERROR: only $(( free_kb / 1024 )) MB free; at least $MIN_FREE_MB MB required" >&2
+            exit 1
+          fi
+          echo "Disk space OK: $(( free_kb / 1024 )) MB free (minimum $MIN_FREE_MB MB)"
+
+          if ! command -v mysqldump >/dev/null 2>&1 && ! command -v mariadb-dump >/dev/null 2>&1; then
+            echo "WARNING: mysqldump not found; DB backups before migrations will not be possible"
+          fi
+
+          echo "SSH connection OK, remote preflight passed"
+          REMOTE
 
       # ==========================================================
-      # 6. Package application source
+      # 7. Package application source
       # ==========================================================
       - name: Package source code
         run: |
           set -euo pipefail
+          umask 077
 
           git archive --format=tar HEAD \
             | gzip -6 > "$RUNNER_TEMP/app-release.tar.gz"
 
           test -s "$RUNNER_TEMP/app-release.tar.gz"
+          gzip -t "$RUNNER_TEMP/app-release.tar.gz"
+
+          {
+            printf 'RELEASE_ID=%s\n' "$RELEASE_ID"
+            printf 'DEPLOY_SHA=%s\n' "$GITHUB_SHA"
+            printf 'DEPLOY_BRANCH=%s\n' "$GITHUB_REF_NAME"
+            printf 'DEPLOY_ACTOR=%s\n' "$GITHUB_ACTOR"
+            printf 'DEPLOY_RUN_URL=%s\n' "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            printf 'DEPLOY_TIME=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            printf 'KEEP_RELEASES=%s\n' "$KEEP_RELEASES"
+            printf 'REQUIRE_DB_BACKUP=%s\n' "$REQUIRE_DB_BACKUP"
+            printf 'EXPECTED_APP_HOST=%s\n' "$EXPECTED_APP_HOST"
+            printf 'EXPECTED_APP_ENV=%s\n' "$EXPECTED_APP_ENV"
+            printf 'FORBIDDEN_DB_HOSTS=%s\n' "$FORBIDDEN_DB_HOSTS"
+            printf 'FORBIDDEN_DB_NAMES=%s\n' "$FORBIDDEN_DB_NAMES"
+            printf 'FORBIDDEN_APP_HOSTS=%s\n' "$FORBIDDEN_APP_HOSTS"
+          } > "$RUNNER_TEMP/deploy.conf"
 
           echo "Source archive created ($(du -h "$RUNNER_TEMP/app-release.tar.gz" | cut -f1))"
 
       # ==========================================================
-      # 7. Upload source and environment file
+      # 8. Upload source, environment and checksums
       # ==========================================================
       - name: Upload release files
         run: |
           set -euo pipefail
           umask 077
 
-          cp "$LOCAL_ENV_PATH" "$RUNNER_TEMP/.env.upload"
+          cp "$LOCAL_ENV_PATH" "$RUNNER_TEMP/env.upload"
 
           # Validate the exact environment copy being uploaded.
-          if LC_ALL=C grep -iq 'uat' "$RUNNER_TEMP/.env.upload"; then
-            echo "::error::UAT reference found in upload environment"
+          if ! bash scripts/validate-env.sh "$RUNNER_TEMP/env.upload"; then
+            echo "::error::Upload copy of .env failed validation"
             exit 1
           fi
+
+          ( cd "$RUNNER_TEMP" \
+            && shasum -a 256 app-release.tar.gz env.upload deploy.conf > checksums.sha256 )
 
           scp -q \
             -F "$RUNNER_TEMP/deploy-ssh/config" \
             "$RUNNER_TEMP/app-release.tar.gz" \
-            "$RUNNER_TEMP/.env.upload" \
-            "cpanel-deploy:$REMOTE_DEPLOY_DIR/"
+            "$RUNNER_TEMP/env.upload" \
+            "$RUNNER_TEMP/deploy.conf" \
+            "$RUNNER_TEMP/checksums.sha256" \
+            "cpanel-deploy:$REMOTE_DEPLOY_DIR/.deploy/incoming/$RELEASE_ID/"
 
-          rm -f "$RUNNER_TEMP/.env.upload"
+          rm -f "$RUNNER_TEMP/env.upload"
 
           echo "Release files uploaded successfully"
 
       # ==========================================================
-      # 8. Execute Laravel deployment
+      # 9. Build and activate release on the server
       # ==========================================================
-      - name: Deploy application
+      - name: Deploy release
+        id: deploy
         run: |
           set -euo pipefail
 
           ssh -F "$RUNNER_TEMP/deploy-ssh/config" \
             cpanel-deploy \
-            "bash -se -- '$REMOTE_DEPLOY_DIR' '${REMOTE_WEB_ROOT:-}'" <<'REMOTE'
-          set -euo pipefail
-          umask 077
+            "bash -s -- '$REMOTE_DEPLOY_DIR' '${REMOTE_WEB_ROOT:-}' '$RELEASE_ID' '$PHP_BIN'" <<'REMOTE'
+          set -Eeuo pipefail
+          umask 027
 
           DEPLOY_DIR="$1"
-          REMOTE_WEB_ROOT="${2:-}"
+          WEB_ROOT_REL="${2:-}"
+          RELEASE_ID="$3"
+          PHP_BIN="$4"
 
-          PHP_BIN="/opt/cpanel/ea-php84/root/usr/bin/php"
-
-          cd "$HOME/$DEPLOY_DIR"
-
-          # ------------------------------------------------------
-          # STEP 1: Check uploaded files
-          # ------------------------------------------------------
-          echo "STEP 1: Checking uploaded files"
-
-          test -s app-release.tar.gz
-          test -s .env.upload
-          tar -tzf app-release.tar.gz >/dev/null
-
-          # ------------------------------------------------------
-          # STEP 2: Validate remote environment before deployment
-          # ------------------------------------------------------
-          echo "STEP 2: Validating remote environment"
-
-          if LC_ALL=C grep -iq 'uat' .env.upload; then
-            echo "ERROR: Deployment blocked: remote .env contains UAT references" >&2
+          if [[ ! "$RELEASE_ID" =~ ^[0-9]{14}-[0-9a-f]{7}$ ]]; then
+            echo "ERROR: invalid release id" >&2
             exit 1
           fi
 
-          echo "Remote environment security validation passed"
+          BASE="$HOME/$DEPLOY_DIR"
+          WEB_ROOT="$HOME/${WEB_ROOT_REL:-public_html}"
+          INCOMING="$BASE/.deploy/incoming/$RELEASE_ID"
+          RELEASE_DIR="$BASE/releases/$RELEASE_ID"
+          CREATED=0
+
+          release_in_use() {
+            if [[ "$(readlink "$BASE/current" 2>/dev/null || true)" == "releases/$RELEASE_ID" ]]; then
+              return 0
+            fi
+            if grep -qF "/releases/$RELEASE_ID/" "$WEB_ROOT/index.php" 2>/dev/null; then
+              return 0
+            fi
+            return 1
+          }
+
+          # Always remove uploads (incl. .env copy); remove the release dir
+          # if it failed and is not referenced by the live site.
+          cleanup() {
+            local rc=$?
+            trap - EXIT
+            cd "$HOME" || true
+            rm -rf -- "$INCOMING"
+            if (( rc != 0 )) && (( CREATED == 1 )) && [[ -d "$RELEASE_DIR" ]] && ! release_in_use; then
+              echo "Removing failed release directory $RELEASE_ID"
+              rm -rf -- "$RELEASE_DIR"
+            fi
+            exit "$rc"
+          }
+          trap cleanup EXIT
+          trap 'exit 129' HUP
+          trap 'exit 130' INT
+          trap 'exit 143' TERM
+
+          conf_get() {
+            awk -v k="$1" 'index($0, k "=") == 1 { print substr($0, length(k) + 2); exit }' \
+              "$INCOMING/deploy.conf"
+          }
 
           # ------------------------------------------------------
-          # STEP 3: Enable maintenance mode
+          # STEP 1: Verify upload integrity
           # ------------------------------------------------------
-          echo "STEP 3: Enabling maintenance mode"
+          echo "STEP 1: Verifying upload integrity"
 
-          if [ -f artisan ] && [ -f vendor/autoload.php ] && [ -x "$PHP_BIN" ]; then
-            "$PHP_BIN" artisan down --retry=15 \
-              || echo "WARNING: Could not enable maintenance mode"
-          else
-            echo "First deployment detected, skipping maintenance mode"
+          cd "$INCOMING"
+
+          for f in app-release.tar.gz env.upload deploy.conf checksums.sha256; do
+            if [[ ! -s "$f" ]]; then
+              echo "ERROR: missing upload file $f" >&2
+              exit 1
+            fi
+          done
+
+          sha256sum -c --quiet checksums.sha256
+
+          tar -tzf app-release.tar.gz > archive.list
+          if grep -Eq '(^/|(^|/)\.\.(/|$))' archive.list; then
+            echo "ERROR: archive contains unsafe paths" >&2
+            exit 1
           fi
 
-          # ------------------------------------------------------
-          # STEP 4: Extract application
-          # ------------------------------------------------------
-          echo "STEP 4: Extracting application"
-
-          tar -tzf app-release.tar.gz \
-            | sed '/\/$/d' \
-            | LC_ALL=C sort > .release-manifest.new
-
-          tar -xzf app-release.tar.gz
-
-          # ------------------------------------------------------
-          # STEP 5: Remove files deleted from Git
-          # ------------------------------------------------------
-          echo "STEP 5: Removing files deleted from Git"
-
-          if [ -f .release-manifest ]; then
-            LC_ALL=C comm -23 .release-manifest .release-manifest.new \
-              | while IFS= read -r file; do
-                  case "$file" in
-                    ""|/*|*..*) continue ;;
-                  esac
-
-                  if [ -f "$file" ] || [ -L "$file" ]; then
-                    rm -f -- "$file"
-                    echo "Removed: $file"
-                  fi
-                done
-          else
-            echo "No previous manifest, skipping"
+          if [[ "$(conf_get RELEASE_ID)" != "$RELEASE_ID" ]]; then
+            echo "ERROR: release id mismatch in deploy.conf" >&2
+            exit 1
           fi
 
-          mv -f .release-manifest.new .release-manifest
+          echo "Checksums and archive verified"
 
           # ------------------------------------------------------
-          # STEP 6: Install environment
+          # STEP 2: Create isolated release directory
           # ------------------------------------------------------
-          echo "STEP 6: Installing environment"
+          echo "STEP 2: Creating release $RELEASE_ID"
 
-          chmod 600 .env.upload
-          mv -f .env.upload .env
+          if [[ -e "$RELEASE_DIR" ]]; then
+            echo "ERROR: $RELEASE_DIR already exists" >&2
+            exit 1
+          fi
+
+          mkdir -p "$RELEASE_DIR"
+          CREATED=1
+
+          tar -xzf app-release.tar.gz -C "$RELEASE_DIR"
+          install -m 600 env.upload "$RELEASE_DIR/.env"
+          grep -E '^(RELEASE_ID|DEPLOY_[A-Z_]+)=' deploy.conf > "$RELEASE_DIR/RELEASE"
+          rm -f env.upload
 
           # ------------------------------------------------------
-          # STEP 7: Validate deployment script
+          # STEP 3: Run Laravel deployment (build, migrate, activate)
           # ------------------------------------------------------
-          echo "STEP 7: Checking deployment script"
+          echo "STEP 3: Running Laravel deployment"
 
-          test -f scripts/deploy.sh
+          cd "$RELEASE_DIR"
           bash -n scripts/deploy.sh
+          bash -n scripts/validate-env.sh
 
-          # ------------------------------------------------------
-          # STEP 8: Execute Laravel deployment
-          # ------------------------------------------------------
-          echo "STEP 8: Running Laravel deployment"
+          export DEPLOY_BASE="$BASE" RELEASE_ID PHP_BIN REMOTE_WEB_ROOT="$WEB_ROOT_REL"
+          for key in KEEP_RELEASES REQUIRE_DB_BACKUP EXPECTED_APP_HOST EXPECTED_APP_ENV \
+                     FORBIDDEN_DB_HOSTS FORBIDDEN_DB_NAMES FORBIDDEN_APP_HOSTS; do
+            export "$key=$(conf_get "$key")"
+          done
 
-          export REMOTE_WEB_ROOT
-          bash scripts/deploy.sh
-
-          # ------------------------------------------------------
-          # STEP 9: Cleanup
-          # ------------------------------------------------------
-          echo "STEP 9: Cleanup"
-
-          rm -f app-release.tar.gz .release-upload.tar.gz
+          bash scripts/deploy.sh deploy
 
           echo "Application deployment successful"
           REMOTE
 
       # ==========================================================
-      # 9. Verify backend health endpoint (authenticated)
+      # 10. Verify backend health endpoint (authenticated)
       # ==========================================================
-      - name: Verify backend domain
+      - name: Verify backend health
+        id: health
         env:
           HEALTH_CHECK_TOKEN: ${{ secrets.HEALTH_CHECK_TOKEN }}
         run: |
@@ -360,17 +616,24 @@ jobs:
 
           echo "Checking backend: $HEALTH_URL"
 
-          HTTP_CODE="$(curl -sS \
-            --header "Authorization: Bearer $HEALTH_CHECK_TOKEN" \
-            --header 'Accept: application/json' \
-            --retry 5 \
-            --retry-delay 3 \
-            --retry-all-errors \
-            --connect-timeout 15 \
-            --max-time 30 \
-            -o "$RESPONSE_FILE" \
-            -w '%{http_code}' \
-            "$HEALTH_URL")"
+          HTTP_CODE="000"
+          for attempt in 1 2 3 4 5 6; do
+            HTTP_CODE="$(curl -sS \
+              --header "Authorization: Bearer $HEALTH_CHECK_TOKEN" \
+              --header 'Accept: application/json' \
+              --connect-timeout 15 \
+              --max-time 30 \
+              -o "$RESPONSE_FILE" \
+              -w '%{http_code}' \
+              "$HEALTH_URL" || true)"
+
+            if [[ "$HTTP_CODE" == "200" ]]; then
+              break
+            fi
+
+            echo "Attempt $attempt: HTTP $HTTP_CODE - retrying in 5s"
+            sleep 5
+          done
 
           echo "HTTP Status: $HTTP_CODE"
 
@@ -380,18 +643,212 @@ jobs:
             exit 1
           fi
 
+          # Structured payload checks (only applied if the endpoint returns these fields)
+          if grep -Eiq '"[A-Za-z0-9_]+"[[:space:]]*:[[:space:]]*"(fail|failed|error|down|unhealthy)"' "$RESPONSE_FILE"; then
+            echo "::error::Health endpoint reports a failing component"
+            exit 1
+          fi
+
+          if grep -Eq '"status"[[:space:]]*:[[:space:]]*"' "$RESPONSE_FILE" \
+              && ! grep -Eiq '"status"[[:space:]]*:[[:space:]]*"(ok|healthy|up|pass|success)"' "$RESPONSE_FILE"; then
+            echo "::error::Health endpoint status is not healthy"
+            exit 1
+          fi
+
+          if grep -q '"release"' "$RESPONSE_FILE"; then
+            if ! grep -Eq "\"release\"[[:space:]]*:[[:space:]]*\"$RELEASE_ID\"" "$RESPONSE_FILE"; then
+              echo "::error::Live application is not serving release $RELEASE_ID"
+              exit 1
+            fi
+            echo "Live release confirmed: $RELEASE_ID"
+          fi
+
           echo "Backend health check passed"
 
       # ==========================================================
-      # 10. Cleanup local temporary files
+      # 11. Optional post-deployment smoke tests
+      #     vars.SMOKE_ENDPOINTS, one per line: METHOD PATH CODES
+      #     e.g.  POST /api/v1/auth/send/otp 422
+      # ==========================================================
+      - name: Post-deployment smoke tests
+        env:
+          SMOKE_ENDPOINTS: ${{ vars.SMOKE_ENDPOINTS }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${SMOKE_ENDPOINTS//[[:space:]]/}" ]]; then
+            echo "No SMOKE_ENDPOINTS configured - skipping"
+            exit 0
+          fi
+
+          METHOD_RE='^(GET|POST|PUT|PATCH|DELETE)$'
+          PATH_RE='^/[A-Za-z0-9._~/%?=&-]*$'
+          CODES_RE='^[0-9]{3}(,[0-9]{3})*$'
+          failures=0
+
+          while read -r method path expected; do
+            if [[ -z "${method:-}" || "$method" == \#* ]]; then
+              continue
+            fi
+
+            if [[ ! "$method" =~ $METHOD_RE || ! "${path:-}" =~ $PATH_RE || ! "${expected:-}" =~ $CODES_RE ]]; then
+              echo "::error::Invalid SMOKE_ENDPOINTS line: $method ${path:-} ${expected:-}"
+              failures=$((failures + 1))
+              continue
+            fi
+
+            url="${BACKEND_URL%/}$path"
+
+            if [[ "$method" == "GET" || "$method" == "DELETE" ]]; then
+              code="$(curl -sS -X "$method" --header 'Accept: application/json' \
+                --connect-timeout 15 --max-time 30 -o /dev/null -w '%{http_code}' "$url" || true)"
+            else
+              code="$(curl -sS -X "$method" --header 'Accept: application/json' \
+                --header 'Content-Type: application/json' --data '{}' \
+                --connect-timeout 15 --max-time 30 -o /dev/null -w '%{http_code}' "$url" || true)"
+            fi
+
+            if [[ ",$expected," == *",$code,"* ]]; then
+              echo "OK    $method $path -> $code"
+            else
+              echo "::error::$method $path returned $code (expected $expected)"
+              failures=$((failures + 1))
+            fi
+          done <<< "$SMOKE_ENDPOINTS"
+
+          if (( failures > 0 )); then
+            exit 1
+          fi
+
+          echo "Smoke tests passed"
+
+      # ==========================================================
+      # 12. Automatic rollback if post-deploy verification failed
+      # ==========================================================
+      - name: Automatic rollback
+        id: rollback
+        if: failure() && steps.deploy.outcome == 'success'
+        run: |
+          set -euo pipefail
+
+          echo "::warning::Post-deployment verification failed - rolling back release $RELEASE_ID"
+
+          ssh -F "$RUNNER_TEMP/deploy-ssh/config" \
+            cpanel-deploy \
+            "bash -s -- '$REMOTE_DEPLOY_DIR' '${REMOTE_WEB_ROOT:-}' '$RELEASE_ID' '$PHP_BIN'" <<'REMOTE'
+          set -euo pipefail
+
+          BASE="$HOME/$1"
+          RELEASE_DIR="$BASE/releases/$3"
+
+          if [[ ! -f "$RELEASE_DIR/scripts/deploy.sh" ]]; then
+            echo "ERROR: $RELEASE_DIR/scripts/deploy.sh not found; manual rollback required" >&2
+            exit 1
+          fi
+
+          export DEPLOY_BASE="$BASE" REMOTE_WEB_ROOT="$2" RELEASE_ID="$3" PHP_BIN="$4"
+          cd "$RELEASE_DIR"
+          bash scripts/deploy.sh rollback
+          REMOTE
+
+          echo "::error::Release $RELEASE_ID was rolled back to the previous version"
+
+      # ==========================================================
+      # 13. Remote temporary file cleanup after failure
+      # ==========================================================
+      - name: Clean up remote temporary files
+        if: failure() && env.RELEASE_ID != ''
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+
+          if [[ ! -f "$RUNNER_TEMP/deploy-ssh/config" ]]; then
+            echo "SSH was not configured - nothing to clean remotely"
+            exit 0
+          fi
+
+          ssh -F "$RUNNER_TEMP/deploy-ssh/config" \
+            cpanel-deploy \
+            "bash -s -- '$REMOTE_DEPLOY_DIR' '${REMOTE_WEB_ROOT:-}' '$RELEASE_ID'" <<'REMOTE'
+          set -u
+
+          BASE="$HOME/$1"
+          WEB_ROOT="$HOME/${2:-public_html}"
+          ID="$3"
+
+          rm -rf -- "$BASE/.deploy/incoming/$ID"
+
+          if [[ -d "$BASE/releases/$ID" ]]; then
+            if [[ "$(readlink "$BASE/current" 2>/dev/null)" == "releases/$ID" ]] \
+                || grep -qF "/releases/$ID/" "$WEB_ROOT/index.php" 2>/dev/null; then
+              echo "Release $ID is still referenced by the live site - leaving it in place"
+            else
+              rm -rf -- "$BASE/releases/$ID"
+              echo "Removed unused release directory $ID"
+            fi
+          fi
+
+          echo "Remote temporary files cleaned"
+          REMOTE
+
+      # ==========================================================
+      # 14. Summary and notification
+      # ==========================================================
+      - name: Deployment summary and notification
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+          ROLLBACK_OUTCOME: ${{ steps.rollback.outcome }}
+          NOTIFY_WEBHOOK: ${{ secrets.DEPLOY_NOTIFY_WEBHOOK }}
+        run: |
+          set -uo pipefail
+
+          RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+
+          case "$JOB_STATUS" in
+            success)   STATUS_TEXT="SUCCESS" ;;
+            cancelled) STATUS_TEXT="CANCELLED" ;;
+            *)
+              if [[ "$ROLLBACK_OUTCOME" == "success" ]]; then
+                STATUS_TEXT="FAILED - rolled back to previous release"
+              else
+                STATUS_TEXT="FAILED"
+              fi
+              ;;
+          esac
+
+          {
+            echo "### Development deployment: $STATUS_TEXT"
+            echo ""
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| Release | \`${RELEASE_ID:-n/a}\` |"
+            echo "| Branch | \`$GITHUB_REF_NAME\` |"
+            echo "| Commit | \`$GITHUB_SHA\` |"
+            echo "| Triggered by | $GITHUB_ACTOR |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ -n "${NOTIFY_WEBHOOK:-}" ]]; then
+            MESSAGE="[$GITHUB_REPOSITORY] Development deploy $STATUS_TEXT | branch $GITHUB_REF_NAME | commit ${GITHUB_SHA:0:7} | by $GITHUB_ACTOR | $RUN_URL"
+            ESCAPED="$(printf '%s' "$MESSAGE" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')"
+
+            curl -sS --max-time 15 -X POST \
+              -H 'Content-Type: application/json' \
+              --data "{\"text\":\"$ESCAPED\"}" \
+              "$NOTIFY_WEBHOOK" >/dev/null \
+              || echo "::warning::Deployment notification could not be sent"
+          fi
+
+      # ==========================================================
+      # 15. Cleanup local temporary files
       # ==========================================================
       - name: Cleanup temporary files
         if: always()
         run: |
           rm -rf "$RUNNER_TEMP/deploy-ssh"
           rm -f "$RUNNER_TEMP/app-release.tar.gz"
-          rm -f "$RUNNER_TEMP/.env.upload"
+          rm -f "$RUNNER_TEMP/env.upload" "$RUNNER_TEMP/.env.upload"
+          rm -f "$RUNNER_TEMP/deploy.conf" "$RUNNER_TEMP/checksums.sha256"
           rm -f "$RUNNER_TEMP/backend-health-response.txt"
 
           echo "Local temporary files cleaned"
-          
