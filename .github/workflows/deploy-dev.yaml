@@ -1,5 +1,5 @@
 
-name: Deploy Development
+name: Deploy Staging
 
 on:
   workflow_dispatch:
@@ -12,31 +12,25 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # ==========================================================
-  # 1. Validate and test before deployment
-  # ==========================================================
-
   tests:
     if: github.ref == 'refs/heads/staging'
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
     steps:
-      - name: Checkout source
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           persist-credentials: false
 
-      - name: Setup PHP 8.4
-        uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.4'
-          tools: composer:v2
           coverage: none
+          tools: composer:v2
+          extensions: pdo_sqlite, sqlite3
 
-      
-      
-      - name: Validate dependencies and run tests
+      - name: Validate and run tests
+        shell: bash
         run: |
           set -euo pipefail
 
@@ -51,52 +45,38 @@ jobs:
 
           composer check-platform-reqs
 
-          if [[ -d tests ]] && \
-            find tests -type f -name '*Test.php' -print -quit | grep -q .; then
+          test -d tests
 
-            # Isolated test environment; no server credentials.
-            cat > .env <<'ENV'
+          find tests -type f -name '*Test.php' \
+            -print -quit | grep -q .
+
+          # Isolated test environment, no staging credentials.
+          cat > .env <<'ENV'
           APP_NAME=Laravel
           APP_ENV=testing
           APP_KEY=
           APP_DEBUG=true
           APP_URL=http://localhost
-
           DB_CONNECTION=sqlite
           DB_DATABASE=:memory:
-
           CACHE_STORE=array
           SESSION_DRIVER=array
           QUEUE_CONNECTION=sync
           MAIL_MAILER=array
           ENV
 
-            php artisan key:generate --force
+          php artisan key:generate --force
 
-            php artisan test --stop-on-failure
-
-          else
-            echo "::error::No Laravel tests found"
-            exit 1
-          fi
-
-
-
-  # ==========================================================
-  # 2. Deploy only from approved staging branch
-  # ==========================================================
+          php artisan test --stop-on-failure
 
   deploy:
-    name: Deploy Application to cPanel
-
-    needs: tests
+    name: Deploy Laravel to cPanel
 
     if: github.ref == 'refs/heads/staging'
-
+    needs: tests
     environment: staging
 
     runs-on: [self-hosted, macOS, ARM64]
-
     timeout-minutes: 45
 
     defaults:
@@ -129,54 +109,77 @@ jobs:
           fetch-depth: 1
 
       # ======================================================
-      # 2. Validate configuration and branch
+      # 2. Validate staging environment before deployment
       # ======================================================
 
-      - name: Validate deployment configuration
+      - name: Validate staging configuration and environment file
         run: |
           set -euo pipefail
 
-          [[ "$GITHUB_REF" == "refs/heads/staging" ]] || {
-            echo "::error::Deployment allowed only from staging branch"
-            exit 1
-          }
+          [[ "$GITHUB_REF" == 'refs/heads/staging' ]]
 
-          : "${LOCAL_ENV_PATH:?LOCAL_ENV_PATH missing}"
-          : "${REMOTE_DEPLOY_DIR:?REMOTE_DEPLOY_DIR missing}"
-          : "${BACKEND_URL:?BACKEND_URL missing}"
-          : "${EXPECTED_DB_HOST:?EXPECTED_DB_HOST missing}"
-          : "${EXPECTED_DB_DATABASE:?EXPECTED_DB_DATABASE missing}"
-          : "${HEALTH_CHECK_TOKEN:?HEALTH_CHECK_TOKEN missing}"
+          : "${LOCAL_ENV_PATH:?Missing LOCAL_ENV_PATH}"
+          : "${REMOTE_DEPLOY_DIR:?Missing REMOTE_DEPLOY_DIR}"
+          : "${BACKEND_URL:?Missing BACKEND_URL}"
+          : "${EXPECTED_DB_HOST:?Missing EXPECTED_DB_HOST}"
+          : "${EXPECTED_DB_DATABASE:?Missing EXPECTED_DB_DATABASE}"
+          : "${HEALTH_CHECK_TOKEN:?Missing HEALTH_CHECK_TOKEN}"
 
-          [[ -s "$LOCAL_ENV_PATH" && -r "$LOCAL_ENV_PATH" ]] || {
-            echo "::error::Local environment file missing or unreadable"
-            exit 1
-          }
+          [[ -f "$LOCAL_ENV_PATH" &&
+             -s "$LOCAL_ENV_PATH" &&
+             -r "$LOCAL_ENV_PATH" ]]
 
-          [[ "$REMOTE_DEPLOY_DIR" =~ ^[A-Za-z0-9_-]+$ ]] || exit 1
+          [[ "$REMOTE_DEPLOY_DIR" =~ ^[A-Za-z0-9_-]+$ ]]
 
-          [[ "${REMOTE_WEB_ROOT:-public_html}" =~ ^[A-Za-z0-9_][A-Za-z0-9_/-]*$ ]] || exit 1
-          [[ "${REMOTE_WEB_ROOT:-public_html}" != *..* ]] || exit 1
+          [[ "${REMOTE_WEB_ROOT:-public_html}" =~ ^[A-Za-z0-9_][A-Za-z0-9_/-]*$ ]]
+          [[ "${REMOTE_WEB_ROOT:-public_html}" != *..* ]]
 
-          [[ "$BACKEND_URL" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?/?$ ]] || exit 1
+          [[ "$BACKEND_URL" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?/?$ ]]
 
-          [[ "$EXPECTED_DB_HOST" =~ ^[A-Za-z0-9._-]+$ ]] || exit 1
-          [[ "$EXPECTED_DB_DATABASE" =~ ^[A-Za-z0-9_-]+$ ]] || exit 1
+          [[ "$EXPECTED_DB_HOST" =~ ^[A-Za-z0-9._-]+$ ]]
+          [[ "$EXPECTED_DB_DATABASE" =~ ^[A-Za-z0-9_-]+$ ]]
+
+          [[ -z "${SMOKE_TEST_PATH:-}" ||
+             "$SMOKE_TEST_PATH" =~ ^/[A-Za-z0-9_./-]+$ ]]
+
+          [[ "${SMOKE_TEST_PATH:-}" != *..* ]]
 
           bash -n scripts/deploy.sh
 
           if git ls-files --error-unmatch .env >/dev/null 2>&1; then
-            echo "::error::.env must not be tracked in Git"
+            echo '::error::.env is tracked by Git'
             exit 1
           fi
 
-          echo "Deployment configuration verified"
+          # Validate without displaying secrets.
+
+          grep -Eq '^APP_ENV=staging\r?$' "$LOCAL_ENV_PATH" || {
+            echo '::error::APP_ENV must be staging'
+            exit 1
+          }
+
+          grep -Eq '^APP_DEBUG=false\r?$' "$LOCAL_ENV_PATH" || {
+            echo '::error::APP_DEBUG must be false'
+            exit 1
+          }
+
+          grep -Eq '^APP_KEY=base64:[A-Za-z0-9+/=]+\r?$' "$LOCAL_ENV_PATH" || {
+            echo '::error::Restore the existing APP_KEY in LOCAL_ENV_PATH'
+            exit 1
+          }
+
+          grep -Eq '^APP_URL=https://' "$LOCAL_ENV_PATH" || {
+            echo '::error::APP_URL must be HTTPS'
+            exit 1
+          }
+
+          echo "Staging configuration validated"
 
       # ======================================================
-      # 3. Configure secure SSH
+      # 3. Configure verified SSH
       # ======================================================
 
-      - name: Configure secure SSH
+      - name: Configure verified SSH
         env:
           SSH_HOST: ${{ secrets.DEV_SERVER_HOST }}
           SSH_USER: ${{ secrets.DEV_SERVER_USER }}
@@ -190,32 +193,36 @@ jobs:
 
           : "${SSH_HOST:?Missing SSH host}"
           : "${SSH_USER:?Missing SSH user}"
-          : "${SSH_KEY:?Missing SSH key}"
-          : "${KNOWN_HOSTS:?Missing verified known hosts}"
+          : "${SSH_KEY:?Missing private SSH key}"
+          : "${KNOWN_HOSTS:?Missing pinned SSH host key}"
 
           [[ "$SSH_HOST" =~ ^[A-Za-z0-9.-]+$ ]]
           [[ "$SSH_USER" =~ ^[A-Za-z0-9_-]+$ ]]
+
           [[ "${SSH_PORT:-22}" =~ ^[0-9]{1,5}$ ]]
 
           (( 10#${SSH_PORT:-22} >= 1 &&
              10#${SSH_PORT:-22} <= 65535 ))
 
-          SSH_DIR="$RUNNER_TEMP/deploy-ssh"
+          mkdir -p -m 700 "$RUNNER_TEMP/deploy-ssh"
 
-          mkdir -m 700 -p "$SSH_DIR"
+          printf '%s\n' "$SSH_KEY" \
+            > "$RUNNER_TEMP/deploy-ssh/key"
 
-          printf '%s\n' "$SSH_KEY" > "$SSH_DIR/id_deploy"
-          printf '%s\n' "$KNOWN_HOSTS" > "$SSH_DIR/known_hosts"
+          printf '%s\n' "$KNOWN_HOSTS" \
+            > "$RUNNER_TEMP/deploy-ssh/known_hosts"
 
-          chmod 600 "$SSH_DIR/id_deploy" "$SSH_DIR/known_hosts"
+          chmod 600 \
+            "$RUNNER_TEMP/deploy-ssh/key" \
+            "$RUNNER_TEMP/deploy-ssh/known_hosts"
 
-          cat > "$SSH_DIR/config" <<EOF
+          cat > "$RUNNER_TEMP/deploy-ssh/config" <<EOF
           Host cpanel-deploy
             HostName $SSH_HOST
             User $SSH_USER
             Port ${SSH_PORT:-22}
-            IdentityFile $SSH_DIR/id_deploy
-            UserKnownHostsFile $SSH_DIR/known_hosts
+            IdentityFile $RUNNER_TEMP/deploy-ssh/key
+            UserKnownHostsFile $RUNNER_TEMP/deploy-ssh/known_hosts
             StrictHostKeyChecking yes
             IdentitiesOnly yes
             BatchMode yes
@@ -224,15 +231,26 @@ jobs:
             ServerAliveCountMax 5
           EOF
 
-          chmod 600 "$SSH_DIR/config"
-
-          echo "Secure SSH configured"
+          chmod 600 "$RUNNER_TEMP/deploy-ssh/config"
 
       # ======================================================
-      # 4. Package source and generate checksum
+      # 4. Verify previous Laravel application before upload
       # ======================================================
 
-      - name: Package release
+      - name: Verify current application can be rolled back
+        run: |
+          set -euo pipefail
+
+          ssh -F "$RUNNER_TEMP/deploy-ssh/config" \
+            cpanel-deploy \
+            "bash -se -- preflight '$REMOTE_DEPLOY_DIR' '${REMOTE_WEB_ROOT:-public_html}' '$RELEASE_ID' '$BACKEND_URL' '$EXPECTED_DB_HOST' '$EXPECTED_DB_DATABASE'" \
+            < scripts/deploy.sh
+
+      # ======================================================
+      # 5. Package source code and generate SHA-256
+      # ======================================================
+
+      - name: Package and checksum release
         run: |
           set -euo pipefail
           umask 077
@@ -242,6 +260,7 @@ jobs:
 
           (
             cd "$RUNNER_TEMP"
+
             shasum -a 256 "$RELEASE_ID.tar.gz" \
               > "$RELEASE_ID.sha256"
           )
@@ -256,10 +275,10 @@ jobs:
           echo "Release archive and checksum generated"
 
       # ======================================================
-      # 5. Upload into isolated remote directory
+      # 6. Upload into private remote directory
       # ======================================================
 
-      - name: Upload release files
+      - name: Upload release to private incoming directory
         run: |
           set -euo pipefail
 
@@ -274,13 +293,13 @@ jobs:
             "$RUNNER_TEMP/$RELEASE_ID.env" \
             "cpanel-deploy:$REMOTE_DEPLOY_DIR/.incoming/"
 
-          echo "Files uploaded successfully"
+          echo "Release uploaded"
 
       # ======================================================
-      # 6. Execute deployment with rollback handling
+      # 7. Deploy with automatic recovery
       # ======================================================
 
-      - name: Deploy Laravel application
+      - name: Deploy with automatic recovery
         id: deploy_release
 
         run: |
@@ -292,16 +311,14 @@ jobs:
             < scripts/deploy.sh
 
       # ======================================================
-      # 7. Verify backend and optional business endpoint
+      # 8. Verify authenticated API endpoints
       # ======================================================
 
-      - name: Verify backend functionality
+      - name: Verify authenticated backend
         run: |
           set -euo pipefail
 
-          HEALTH_URL="${BACKEND_URL%/}/api/health"
-
-          HTTP_CODE="$(curl \
+          status="$(curl \
             --silent \
             --show-error \
             --proto '=https' \
@@ -313,19 +330,16 @@ jobs:
             -H 'Accept: application/json' \
             -o "$RUNNER_TEMP/health-response" \
             -w '%{http_code}' \
-            "$HEALTH_URL")"
+            "${BACKEND_URL%/}/api/health")"
 
-          [[ "$HTTP_CODE" == "200" ]] || {
-            echo "::error::Backend health check failed"
+          [[ "$status" == 200 ]] || {
+            echo "::error::Health failed ($status)"
             exit 1
           }
 
           if [[ -n "${SMOKE_TEST_PATH:-}" ]]; then
 
-            [[ "$SMOKE_TEST_PATH" =~ ^/[A-Za-z0-9_./-]+$ ]] || exit 1
-            [[ "$SMOKE_TEST_PATH" != *..* ]] || exit 1
-
-            SMOKE_STATUS="$(curl \
+            status="$(curl \
               --silent \
               --show-error \
               --proto '=https' \
@@ -337,8 +351,8 @@ jobs:
               -w '%{http_code}' \
               "${BACKEND_URL%/}$SMOKE_TEST_PATH")"
 
-            [[ "$SMOKE_STATUS" == "200" ]] || {
-              echo "::error::Additional smoke test failed"
+            [[ "$status" == 200 ]] || {
+              echo "::error::Smoke check failed ($status)"
               exit 1
             }
 
@@ -347,10 +361,10 @@ jobs:
           echo "Backend verification passed"
 
       # ======================================================
-      # 8. Roll back on external verification failure
+      # 9. Rollback if external verification fails
       # ======================================================
 
-      - name: Automatic rollback
+      - name: Roll back if external verification fails
         if: failure() && steps.deploy_release.outcome == 'success'
 
         run: |
@@ -362,14 +376,15 @@ jobs:
             < scripts/deploy.sh
 
       # ======================================================
-      # 9. Clean temporary files
+      # 10. Cleanup temporary files
       # ======================================================
 
-      - name: Cleanup deployment files
+      - name: Clean temporary files
         if: always()
 
         run: |
-          if [[ -f "$RUNNER_TEMP/deploy-ssh/config" ]]; then
+          if [[ -f "$RUNNER_TEMP/deploy-ssh/config" &&
+                "$REMOTE_DEPLOY_DIR" =~ ^[A-Za-z0-9_-]+$ ]]; then
 
             ssh -F "$RUNNER_TEMP/deploy-ssh/config" \
               cpanel-deploy \
@@ -389,19 +404,19 @@ jobs:
           echo "Temporary cleanup completed"
 
       # ======================================================
-      # 10. Deployment notification and release tracking
+      # 11. Deployment status and optional notification
       # ======================================================
 
-      - name: Report deployment status
+      - name: Report deployment result
         if: always()
 
         env:
           NOTIFICATION_WEBHOOK: ${{ secrets.DEPLOY_NOTIFY_WEBHOOK }}
-          DEPLOY_STATUS: ${{ job.status }}
+          STATUS: ${{ job.status }}
 
         run: |
-          printf 'Release: `%s`\nResult: **%s**\n' \
-            "$RELEASE_ID" "$DEPLOY_STATUS" \
+          printf 'Release: `%s`\nStatus: **%s**\n' \
+            "$RELEASE_ID" "$STATUS" \
             >> "$GITHUB_STEP_SUMMARY"
 
           if [[ -n "${NOTIFICATION_WEBHOOK:-}" ]]; then
@@ -409,8 +424,8 @@ jobs:
             curl -fsS \
               --max-time 10 \
               -H 'Content-Type: application/json' \
-              --data "{\"release\":\"$RELEASE_ID\",\"status\":\"$DEPLOY_STATUS\"}" \
+              --data "{\"release\":\"$RELEASE_ID\",\"status\":\"$STATUS\"}" \
               "$NOTIFICATION_WEBHOOK" \
-              || echo "::warning::Notification failed"
+              || echo '::warning::Notification failed'
 
           fi

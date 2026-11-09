@@ -4,23 +4,21 @@
 set -Eeuo pipefail
 umask 077
 
-# ============================================================
-# 1. Deployment configuration
-# ============================================================
+# Actions: preflight | deploy | rollback
 
 ACTION="${1:?Action required}"
 DEPLOY_DIR="${2:?Deployment directory required}"
 WEB_DIR="${3:?Web root required}"
 RELEASE_ID="${4:?Release ID required}"
-
 EXPECTED_URL="${5:?Expected URL required}"
 EXPECTED_DB_HOST="${6:?Expected DB host required}"
 EXPECTED_DB_NAME="${7:?Expected DB name required}"
 
+[[ "$ACTION" =~ ^(preflight|deploy|rollback)$ ]] || exit 1
 [[ "$DEPLOY_DIR" =~ ^[A-Za-z0-9_-]+$ ]] || exit 1
 
-[[ "$WEB_DIR" =~ ^[A-Za-z0-9_][A-Za-z0-9_/-]*$ ]] || exit 1
-[[ "$WEB_DIR" != *..* ]] || exit 1
+[[ "$WEB_DIR" =~ ^[A-Za-z0-9_][A-Za-z0-9_/-]*$ &&
+   "$WEB_DIR" != *..* ]] || exit 1
 
 [[ "$RELEASE_ID" =~ ^[0-9a-f]{40}$ ]] || exit 1
 
@@ -28,7 +26,11 @@ EXPECTED_DB_NAME="${7:?Expected DB name required}"
 [[ "$EXPECTED_DB_HOST" =~ ^[A-Za-z0-9._-]+$ ]] || exit 1
 [[ "$EXPECTED_DB_NAME" =~ ^[A-Za-z0-9_-]+$ ]] || exit 1
 
-PHP_BIN="/opt/cpanel/ea-php84/root/usr/bin/php"
+# ============================================================
+# 1. Runtime and directories
+# ============================================================
+
+PHP_BIN=/opt/cpanel/ea-php84/root/usr/bin/php
 
 export PATH="$(dirname "$PHP_BIN"):$HOME/.local/bin:$PATH"
 export COMPOSER_NO_INTERACTION=1
@@ -36,12 +38,11 @@ export COMPOSER_NO_INTERACTION=1
 BASE="$HOME/$DEPLOY_DIR"
 WEB_ROOT="$HOME/$WEB_DIR"
 
-INCOMING="$BASE/.incoming"
 RELEASES="$BASE/.releases"
+INCOMING="$BASE/.incoming"
 BACKUPS="$BASE/.deploy-backups"
 
 ACTIVE="$BASE/.active-release"
-
 RELEASE="$RELEASES/$RELEASE_ID"
 SNAP="$BACKUPS/$RELEASE_ID"
 
@@ -52,14 +53,9 @@ MAINTENANCE_STARTED=0
 SWITCH_STARTED=0
 SUCCESS=0
 
-mkdir -p "$BASE" "$INCOMING" "$RELEASES" "$BACKUPS"
-
-chmod 700 "$INCOMING" "$BACKUPS"
-
 log() {
   printf '[%s] %s\n' \
-    "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
-    "$*" | tee -a "$LOG"
+    "$(date -u +'%FT%TZ')" "$*" | tee -a "$LOG"
 }
 
 fail() {
@@ -67,52 +63,297 @@ fail() {
   exit 1
 }
 
+[[ -d "$BASE" && ! -L "$BASE" ]] || {
+  echo 'Missing or unsafe application directory' >&2
+  exit 1
+}
+
+[[ -d "$WEB_ROOT" &&
+   ! -L "$WEB_ROOT" &&
+   "$BASE" != "$WEB_ROOT" ]] || fail 'Invalid web root'
+
+[[ ! -e "$WEB_ROOT/.env" &&
+   ! -L "$WEB_ROOT/.env" ]] || fail 'Unsafe .env in web root'
+
+[[ -x "$PHP_BIN" ]] || fail 'PHP 8.4 unavailable'
+
 # ============================================================
-# 2. Prevent concurrent server deployments
+# 2. Prevent concurrent deployments
 # ============================================================
 
-command -v flock >/dev/null \
-  || fail "flock is unavailable"
+command -v flock >/dev/null || fail 'flock is required'
 
 exec 9>"$BASE/.deployment.lock"
 
-flock -n 9 \
-  || fail "Another deployment or rollback is running"
+flock -n 9 || fail 'Another deployment is running'
 
 # ============================================================
-# 3. Restore previous public files
+# 3. Identify previous working Laravel application
 # ============================================================
 
-restore_public() {
+identify_previous() {
+
+  OLD_APP=''
+
+  if [[ -s "$ACTIVE" ]]; then
+
+    OLD_APP="$(cat "$ACTIVE")"
+
+    [[ "$OLD_APP" == "$RELEASES/"* ]] \
+      || fail 'Unsafe active release path'
+
+  elif [[ -f "$BASE/artisan" ]]; then
+
+    OLD_APP="$BASE"
+
+  fi
+
+  [[ -n "$OLD_APP" ]] \
+    || fail 'No previous Laravel application; restore a verified backup before deploying'
+
+  for f in \
+    artisan \
+    composer.json \
+    vendor/autoload.php \
+    bootstrap/app.php \
+    .env
+  do
+
+    [[ -f "$OLD_APP/$f" ]] \
+      || fail "Previous application incomplete: $f"
+
+  done
+
+  [[ -f "$WEB_ROOT/index.php" &&
+     ! -L "$WEB_ROOT/index.php" ]] \
+    || fail 'Missing or unsafe live index.php'
+
+  grep -Fq \
+    "$OLD_APP/vendor/autoload.php" \
+    "$WEB_ROOT/index.php" \
+    || fail 'Live index.php references a different or missing vendor'
+
+  grep -Fq \
+    "$OLD_APP/bootstrap/app.php" \
+    "$WEB_ROOT/index.php" \
+    || fail 'Live index.php references a different or missing bootstrap'
+
+  (
+    cd "$OLD_APP"
+
+    "$PHP_BIN" artisan --version >/dev/null
+
+  ) || fail 'Previous Laravel installation cannot boot'
+}
+
+# ============================================================
+# 4. Verify staging Laravel configuration
+# ============================================================
+
+check_config() {
+
+  local app="$1"
+
+  (
+    cd "$app"
+
+    "$PHP_BIN" -r '
+
+      require "vendor/autoload.php";
+
+      $app = require "bootstrap/app.php";
+
+      $app->make(
+          Illuminate\Contracts\Console\Kernel::class
+      )->bootstrap();
+
+      $db = config(
+          "database.connections." .
+          config("database.default")
+      );
+
+      $bad = static function ($message) {
+          fwrite(STDERR, $message . "\n");
+          exit(1);
+      };
+
+      $url = (string) config("app.url");
+
+      if (config("app.env") !== "staging") {
+          $bad("APP_ENV must be staging");
+      }
+
+      if (config("app.debug") !== false) {
+          $bad("APP_DEBUG must be false");
+      }
+
+      if (
+          !is_string(config("app.key")) ||
+          config("app.key") === ""
+      ) {
+          $bad("APP_KEY missing");
+      }
+
+      if (
+          parse_url($url, PHP_URL_SCHEME) !== "https" ||
+          strcasecmp(
+              (string) parse_url($url, PHP_URL_HOST),
+              (string) parse_url($argv[1], PHP_URL_HOST)
+          ) !== 0
+      ) {
+          $bad("APP_URL mismatch");
+      }
+
+      if (
+          !in_array(
+              $db["driver"] ?? "",
+              ["mysql", "mariadb"],
+              true
+          ) ||
+          !empty($db["url"])
+      ) {
+          $bad("Expected ordinary MySQL/MariaDB config");
+      }
+
+      if (
+          !is_string($db["host"] ?? null) ||
+          strcasecmp($db["host"], $argv[2]) !== 0
+      ) {
+          $bad("DB_HOST mismatch");
+      }
+
+      if (($db["database"] ?? "") !== $argv[3]) {
+          $bad("DB_DATABASE mismatch");
+      }
+
+      if (
+          empty($db["username"]) ||
+          !isset($db["password"]) ||
+          $db["password"] === ""
+      ) {
+          $bad("DB credentials missing");
+      }
+
+      foreach (
+          [
+              $url,
+              $db["host"],
+              $db["database"],
+              $db["username"]
+          ] as $value
+      ) {
+
+          if (
+              preg_match(
+                  "~(^|[./_-])uat([./_-]|$)~i",
+                  (string) $value
+              )
+          ) {
+              $bad("UAT target detected");
+          }
+      }
+
+      echo "Approved staging configuration verified\n";
+
+    ' \
+      "$EXPECTED_URL" \
+      "$EXPECTED_DB_HOST" \
+      "$EXPECTED_DB_NAME"
+  )
+}
+
+# ============================================================
+# 5. Preserve original encryption key
+# ============================================================
+
+check_key_unchanged() {
+
+  local old="$1"
+  local new="$2"
+  local a b
+
+  a="$(
+    cd "$old"
+
+    "$PHP_BIN" -r '
+      require "vendor/autoload.php";
+
+      $app = require "bootstrap/app.php";
+
+      $app->make(
+          Illuminate\Contracts\Console\Kernel::class
+      )->bootstrap();
+
+      echo hash(
+          "sha256",
+          (string) config("app.key")
+      );
+    '
+  )"
+
+  b="$(
+    cd "$new"
+
+    "$PHP_BIN" -r '
+      require "vendor/autoload.php";
+
+      $app = require "bootstrap/app.php";
+
+      $app->make(
+          Illuminate\Contracts\Console\Kernel::class
+      )->bootstrap();
+
+      echo hash(
+          "sha256",
+          (string) config("app.key")
+      );
+    '
+  )"
+
+  [[ -n "$a" && "$a" == "$b" ]] \
+    || fail 'APP_KEY differs from previous application; refusing to rotate encryption key'
+}
+
+# ============================================================
+# 6. Restore public files after failed deployment
+# ============================================================
+
+restore_snapshot() {
 
   [[ -f "$SNAP/manifest" ]] || return 1
 
-  local relative
+  local rel dest
 
-  while IFS= read -r -d '' relative; do
+  while IFS= read -r -d '' rel; do
 
-    [[ "$relative" != /* && "$relative" != *..* ]] \
-      || return 1
+    rel="${rel#./}"
 
-    if [[ -e "$SNAP/old/$relative" || -L "$SNAP/old/$relative" ]]; then
+    [[ -n "$rel" &&
+       "$rel" != /* &&
+       "$rel" != *..* ]] || return 1
 
-      mkdir -p "$(dirname "$WEB_ROOT/$relative")"
+    dest="$WEB_ROOT/$rel"
 
-      rm -f -- "$WEB_ROOT/$relative"
+    if [[ -f "$SNAP/old/$rel" ||
+          -L "$SNAP/old/$rel" ]]; then
+
+      mkdir -p "$(dirname "$dest")"
+
+      rm -f -- "$dest"
 
       cp -a \
-        "$SNAP/old/$relative" \
-        "$WEB_ROOT/$relative"
+        "$SNAP/old/$rel" \
+        "$dest"
 
     else
 
-      rm -f -- "$WEB_ROOT/$relative"
+      rm -f -- "$dest"
 
     fi
 
   done < "$SNAP/manifest"
 
-  # Restore original index.php atomically.
+  # Restore old index.php atomically.
 
   if [[ -f "$SNAP/index.php" ]]; then
 
@@ -124,13 +365,9 @@ restore_public() {
       "$WEB_ROOT/.index.php.restore.$RELEASE_ID" \
       "$WEB_ROOT/index.php"
 
-  else
-
-    rm -f "$WEB_ROOT/index.php"
-
   fi
 
-  # Restore previous public storage link.
+  # Restore public storage symlink.
 
   if [[ -L "$SNAP/storage" ]]; then
 
@@ -144,15 +381,16 @@ restore_public() {
 
   fi
 
-  # Restore previous active release.
+  # Restore active-release pointer.
 
   if [[ -f "$SNAP/active" ]]; then
 
-    cp "$SNAP/active" \
-      "$ACTIVE.tmp.$RELEASE_ID"
+    cp -p \
+      "$SNAP/active" \
+      "$ACTIVE.restore.$RELEASE_ID"
 
     mv -f \
-      "$ACTIVE.tmp.$RELEASE_ID" \
+      "$ACTIVE.restore.$RELEASE_ID" \
       "$ACTIVE"
 
   else
@@ -163,38 +401,38 @@ restore_public() {
 }
 
 # ============================================================
-# 4. Automatic deployment failure recovery
+# 7. Failure handler and maintenance recovery
 # ============================================================
 
 recover() {
 
-  local result=$?
+  local code=$?
 
   trap - EXIT
 
-  if [[ "$ACTION" == "deploy" &&
-        "$SUCCESS" -ne 1 &&
-        "$result" -ne 0 ]]; then
+  if [[ "$ACTION" == deploy &&
+        "$code" -ne 0 &&
+        "$SUCCESS" -eq 0 ]]; then
 
-    log "Deployment failed, starting recovery"
+    log 'Deployment failed: attempting recovery'
 
     if (( SWITCH_STARTED )); then
 
-      restore_public \
-        || log "WARNING: Public file rollback failed"
+      restore_snapshot \
+        || log 'CRITICAL: Public rollback failed'
 
     fi
 
-    if (( MAINTENANCE_STARTED )) && [[ -n "$OLD_APP" ]]; then
+    if (( MAINTENANCE_STARTED )) && \
+       [[ -n "$OLD_APP" ]]; then
 
       (
         cd "$OLD_APP"
         "$PHP_BIN" artisan up
-      ) || log "WARNING: Maintenance recovery failed"
+
+      ) || log 'CRITICAL: Could not exit old maintenance mode'
 
     fi
-
-    # Remove incomplete inactive release.
 
     if [[ -d "$RELEASE" &&
           "$(cat "$ACTIVE" 2>/dev/null || true)" != "$RELEASE" ]]; then
@@ -203,89 +441,121 @@ recover() {
 
     fi
 
-    log "WARNING: Database migrations are not automatically reversed"
+    log 'Database schema changes are NOT automatically reversed'
   fi
 
-  # Cleanup temporary backup credentials and uploaded files.
+  if [[ "$ACTION" == deploy ]]; then
 
-  if [[ "$ACTION" == "deploy" ]]; then
-
-    rm -f -- \
+    rm -f \
       "$SNAP"/.mysql.* \
-      "$SNAP"/.db.*
-
-    rm -f -- \
+      "$SNAP"/.db.* \
       "$INCOMING/$RELEASE_ID.tar.gz" \
       "$INCOMING/$RELEASE_ID.sha256" \
       "$INCOMING/$RELEASE_ID.env"
 
   fi
 
-  exit "$result"
+  exit "$code"
 }
+
+# ============================================================
+# 8. Explicit rollback action
+# ============================================================
+
+if [[ "$ACTION" == rollback ]]; then
+
+  [[ -f "$SNAP/manifest" &&
+     -f "$ACTIVE" &&
+     "$(cat "$ACTIVE")" == "$RELEASE" ]] \
+    || fail 'No applicable rollback snapshot'
+
+  [[ -f "$SNAP/old-app" ]] \
+    || fail 'Previous application snapshot missing'
+
+  OLD_APP="$(cat "$SNAP/old-app")"
+
+  [[ "$OLD_APP" == "$BASE" ||
+     "$OLD_APP" == "$RELEASES/"* ]] \
+    || fail 'Unsafe rollback target'
+
+  [[ -f "$OLD_APP/vendor/autoload.php" ]] \
+    || fail 'Rollback application missing'
+
+  restore_snapshot \
+    || fail 'Failed to restore public files'
+
+  (
+    cd "$OLD_APP"
+    "$PHP_BIN" artisan up
+
+  ) || fail 'Could not bring old app online'
+
+  log 'Application code/public files restored'
+  log 'Verify database schema compatibility manually'
+
+  exit 0
+fi
+
+# ============================================================
+# 9. Pre-deployment recovery readiness verification
+# ============================================================
+
+log 'Checking existing application and rollback readiness'
+
+identify_previous
+
+check_config "$OLD_APP"
+
+[[ -r "$OLD_APP/.env" ]] \
+  || fail 'Cannot read previous .env'
+
+[[ -d "$BASE/storage" &&
+   ! -L "$BASE/storage" ]] \
+  || fail 'Persistent storage missing or unsafe'
+
+[[ -L "$WEB_ROOT/storage" ]] \
+  || fail 'Public storage symlink missing'
+
+[[ -d "$(readlink -f "$WEB_ROOT/storage")" ]] \
+  || fail 'Public storage symlink target missing'
+
+[[ "$(readlink -f "$WEB_ROOT/storage")" ==
+   "$(readlink -f "$BASE/storage/app/public")" ]] \
+  || fail 'Unexpected public storage target'
+
+free="$(df -Pk "$BASE" | awk 'NR==2 {print $4}')"
+
+[[ "$free" =~ ^[0-9]+$ ]] &&
+  (( free >= 524288 )) \
+  || fail 'Less than 512 MiB free'
+
+[[ -w "$BASE" ]] \
+  || fail 'Application base is not writable'
+
+log 'Existing application is recoverable'
+
+if [[ "$ACTION" == preflight ]]; then
+  exit 0
+fi
+
+# ============================================================
+# 10. Prepare isolated deployment directories
+# ============================================================
 
 trap recover EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-# ============================================================
-# 5. Explicit rollback functionality
-# ============================================================
+mkdir -p \
+  "$INCOMING" \
+  "$RELEASES" \
+  "$BACKUPS"
 
-if [[ "$ACTION" == "rollback" ]]; then
+chmod 700 "$INCOMING" "$BACKUPS"
 
-  [[ -f "$SNAP/manifest" ]] \
-    || fail "Rollback snapshot not found"
-
-  [[ -f "$ACTIVE" &&
-     "$(cat "$ACTIVE")" == "$RELEASE" ]] \
-    || fail "Release is no longer active"
-
-  log "Rolling back release $RELEASE_ID"
-
-  restore_public \
-    || fail "Unable to restore previous public files"
-
-  if [[ -f "$SNAP/old-app" ]]; then
-
-    OLD_APP="$(cat "$SNAP/old-app")"
-
-    [[ "$OLD_APP" == "$BASE" ||
-       "$OLD_APP" == "$RELEASES/"* ]] \
-      || fail "Unsafe previous application path"
-
-    (
-      cd "$OLD_APP"
-      "$PHP_BIN" artisan up
-    ) || fail "Previous application recovery failed"
-
-  fi
-
-  log "Previous application entry point restored"
-
-  log "WARNING: Check database schema compatibility"
-
-  exit 0
-fi
-
-[[ "$ACTION" == "deploy" ]] \
-  || fail "Unknown deployment action"
-
-# ============================================================
-# 6. Validate required tools and PHP version
-# ============================================================
-
-log "Validating deployment tools"
-
-[[ -x "$PHP_BIN" ]] \
-  || fail "PHP 8.4 executable unavailable"
-
-"$PHP_BIN" -r '
-  exit(
-    PHP_VERSION_ID >= 80400 &&
-    PHP_VERSION_ID < 80500 ? 0 : 1
-  );
-' || fail "PHP 8.4.x is required"
+[[ ! -e "$RELEASE" &&
+   ! -e "$SNAP" ]] \
+  || fail 'Release or snapshot already exists'
 
 for tool in \
   tar \
@@ -298,100 +568,51 @@ for tool in \
 do
 
   command -v "$tool" >/dev/null \
-    || fail "Missing required command: $tool"
+    || fail "Missing server tool: $tool"
 
 done
 
-# ============================================================
-# 7. Validate uploaded release
-# ============================================================
-
-log "Validating release files"
-
-[[ -s "$INCOMING/$RELEASE_ID.tar.gz" ]] \
-  || fail "Release archive missing"
-
-[[ -s "$INCOMING/$RELEASE_ID.sha256" ]] \
-  || fail "Checksum missing"
-
-[[ -s "$INCOMING/$RELEASE_ID.env" ]] \
-  || fail "Environment file missing"
-
-[[ ! -e "$RELEASE" ]] \
-  || fail "Release already exists"
-
-[[ "$WEB_ROOT" != "$BASE" ]] \
-  || fail "Web root cannot equal application directory"
-
-[[ ! -e "$WEB_ROOT/.env" ]] \
-  || fail "Unsafe .env detected in web root"
-
-[[ -d "$WEB_ROOT" && ! -L "$WEB_ROOT" ]] \
-  || fail "Missing or symlinked web root"
+"$PHP_BIN" -r '
+  exit(
+      PHP_VERSION_ID >= 80400 &&
+      PHP_VERSION_ID < 80500 ? 0 : 1
+  );
+' || fail 'PHP 8.4.x required'
 
 # ============================================================
-# 8. Verify server disk space
+# 11. Validate uploaded release and integrity
 # ============================================================
 
-log "Checking server disk space"
-
-FREE_KB="$(df -Pk "$BASE" | awk 'NR==2 {print $4}')"
-
-[[ "$FREE_KB" =~ ^[0-9]+$ ]] \
-  || fail "Cannot determine free disk space"
-
-(( FREE_KB >= 524288 )) \
-  || fail "Less than 512 MiB free"
-
-# ============================================================
-# 9. Verify release integrity
-# ============================================================
-
-log "Verifying SHA-256 checksum"
+[[ -s "$INCOMING/$RELEASE_ID.tar.gz" &&
+   -s "$INCOMING/$RELEASE_ID.sha256" &&
+   -s "$INCOMING/$RELEASE_ID.env" ]] \
+  || fail 'Incomplete release upload'
 
 (
   cd "$INCOMING"
 
   sha256sum -c "$RELEASE_ID.sha256"
 
-) || fail "Release checksum verification failed"
+) || fail 'Release checksum mismatch'
 
 # Reject unsafe archive paths.
 
-"$PHP_BIN" -r '
+tar -tzf "$INCOMING/$RELEASE_ID.tar.gz" |
+awk '
+  /^\// || /(^|\/)\.\.(\/|$)/ || /\\/ {
+    bad=1
+  }
+  END {
+    exit bad
+  }
+' || fail 'Unsafe archive paths'
 
-$lines = [];
-
-exec(
-    "tar -tzf " . escapeshellarg($argv[1]),
-    $lines,
-    $status
-);
-
-if ($status !== 0) {
-    exit(1);
-}
-
-foreach ($lines as $path) {
-
-    if (
-        $path === "" ||
-        str_starts_with($path, "/") ||
-        preg_match("~(^|/)\.\.(/|$)~", $path) ||
-        str_contains($path, "\\")
-    ) {
-        exit(1);
-    }
-}
-
-' "$INCOMING/$RELEASE_ID.tar.gz" \
-  || fail "Unsafe archive entry detected"
-
-# Reject archive links and unsupported entry types.
+# Reject symlinks, hard links and unsupported entry types.
 
 if tar -tvzf "$INCOMING/$RELEASE_ID.tar.gz" |
   awk '
-    substr($1,1,1) !~ /[-d]/ {
+    substr($1,1,1)!="-" &&
+    substr($1,1,1)!="d" {
       bad=1
     }
     END {
@@ -399,14 +620,16 @@ if tar -tvzf "$INCOMING/$RELEASE_ID.tar.gz" |
     }
   '
 then
-  fail "Archive contains links or unsupported entries"
+
+  fail 'Archive contains links or unsupported entries'
+
 fi
 
 # ============================================================
-# 10. Extract new code into isolated release
+# 12. Extract new release separately
 # ============================================================
 
-log "Extracting isolated release"
+log 'Preparing isolated release'
 
 mkdir -m 750 "$RELEASE"
 
@@ -416,7 +639,7 @@ tar -xzf \
   --no-same-permissions \
   -C "$RELEASE"
 
-for file in \
+for f in \
   artisan \
   composer.json \
   composer.lock \
@@ -424,38 +647,19 @@ for file in \
   public/.htaccess
 do
 
-  [[ -f "$RELEASE/$file" ]] \
-    || fail "Missing release file: $file"
+  [[ -f "$RELEASE/$f" ]] \
+    || fail "Release missing $f"
 
 done
 
 [[ ! -e "$RELEASE/public/.env" ]] \
-  || fail "Unsafe public environment file"
-
-# ============================================================
-# 11. Install environment without overwriting old .env
-# ============================================================
-
-log "Installing release environment"
+  || fail 'Unsafe public .env'
 
 cp \
   "$INCOMING/$RELEASE_ID.env" \
   "$RELEASE/.env"
 
 chmod 600 "$RELEASE/.env"
-
-# ============================================================
-# 12. Preserve shared Laravel storage
-# ============================================================
-
-log "Preparing persistent storage"
-
-mkdir -p \
-  "$BASE/storage/app/public" \
-  "$BASE/storage/framework/cache/data" \
-  "$BASE/storage/framework/sessions" \
-  "$BASE/storage/framework/views" \
-  "$BASE/storage/logs"
 
 rm -rf "$RELEASE/storage"
 
@@ -465,22 +669,16 @@ ln -s \
 
 mkdir -p "$RELEASE/bootstrap/cache"
 
-chmod -R u+rwX \
-  "$BASE/storage" \
-  "$RELEASE/bootstrap/cache"
-
 # ============================================================
-# 13. Install Composer dependencies
+# 13. Composer production dependencies
 # ============================================================
 
-log "Installing Composer dependencies"
+log 'Installing locked production dependencies'
 
 (
   cd "$RELEASE"
 
-  COMPOSER_BIN="$(command -v composer)"
-
-  "$PHP_BIN" "$COMPOSER_BIN" install \
+  composer install \
     --no-dev \
     --prefer-dist \
     --no-interaction \
@@ -488,158 +686,34 @@ log "Installing Composer dependencies"
     --optimize-autoloader \
     --classmap-authoritative
 
-  "$PHP_BIN" "$COMPOSER_BIN" check-platform-reqs --no-dev
+  composer check-platform-reqs --no-dev
 
-  [[ -f vendor/autoload.php ]]
-
+  test -f vendor/autoload.php
 )
 
 # ============================================================
-# 14. Validate Laravel environment security
+# 14. Validate new environment and APP_KEY
 # ============================================================
 
-log "Validating environment isolation"
+log 'Validating new environment and encryption key'
+
+check_config "$RELEASE"
+
+check_key_unchanged "$OLD_APP" "$RELEASE"
+
+# ============================================================
+# 15. Cache Laravel and verify required routes
+# ============================================================
 
 (
   cd "$RELEASE"
-
-  "$PHP_BIN" -r '
-
-    require "vendor/autoload.php";
-
-    $app = require "bootstrap/app.php";
-
-    $app->make(
-        Illuminate\Contracts\Console\Kernel::class
-    )->bootstrap();
-
-    $cfg = config(
-        "database.connections." . config("database.default")
-    );
-
-    $url = (string) config("app.url");
-
-    $expectedHost = parse_url(
-        $argv[1],
-        PHP_URL_HOST
-    );
-
-    $actualHost = parse_url(
-        $url,
-        PHP_URL_HOST
-    );
-
-    $error = static function ($message) {
-        fwrite(STDERR, $message . "\n");
-        exit(1);
-    };
-
-    if (config("app.env") !== "staging") {
-        $error("APP_ENV must be staging");
-    }
-
-    if (config("app.debug") !== false) {
-        $error("APP_DEBUG must be false");
-    }
-
-    if (!config("app.key")) {
-        $error("APP_KEY missing");
-    }
-
-    if (
-        parse_url($url, PHP_URL_SCHEME) !== "https" ||
-        !$actualHost ||
-        strcasecmp($actualHost, $expectedHost) !== 0
-    ) {
-        $error("APP_URL does not match approved domain");
-    }
-
-    if (
-        !in_array(
-            $cfg["driver"] ?? "",
-            ["mysql", "mariadb"],
-            true
-        )
-    ) {
-        $error("Only MySQL/MariaDB supported");
-    }
-
-    if (
-        !empty($cfg["url"]) ||
-        is_array($cfg["host"] ?? null)
-    ) {
-        $error("Unsupported database configuration");
-    }
-
-    if (
-        strcasecmp(
-            (string) ($cfg["host"] ?? ""),
-            $argv[2]
-        ) !== 0
-    ) {
-        $error("Unapproved database host");
-    }
-
-    if (
-        (string) ($cfg["database"] ?? "") !== $argv[3]
-    ) {
-        $error("Unapproved database name");
-    }
-
-    if (
-        empty($cfg["username"]) ||
-        !isset($cfg["password"]) ||
-        $cfg["password"] === ""
-    ) {
-        $error("Database credentials missing");
-    }
-
-    foreach (
-        [
-            $url,
-            (string) $cfg["host"],
-            (string) $cfg["database"],
-            (string) $cfg["username"]
-        ] as $value
-    ) {
-
-        if (
-            preg_match(
-                "~(^|[./_-])uat([./_-]|$)~i",
-                $value
-            )
-        ) {
-            $error("Forbidden UAT environment reference");
-        }
-    }
-
-    echo "Environment security verified\n";
-
-  ' \
-    "$EXPECTED_URL" \
-    "$EXPECTED_DB_HOST" \
-    "$EXPECTED_DB_NAME"
-
-  # ==========================================================
-  # 15. Clear and rebuild Laravel caches
-  # ==========================================================
-
-  log "Optimizing Laravel"
-
-  "$PHP_BIN" artisan optimize:clear
 
   "$PHP_BIN" artisan config:cache
   "$PHP_BIN" artisan event:cache
   "$PHP_BIN" artisan route:cache
 
   "$PHP_BIN" artisan view:cache \
-    || log "WARNING: view:cache failed"
-
-  # ==========================================================
-  # 16. Verify required API routes
-  # ==========================================================
-
-  log "Verifying required API routes"
+    || log 'WARNING: view cache failed'
 
   "$PHP_BIN" artisan route:list --json |
   "$PHP_BIN" -r '
@@ -653,31 +727,31 @@ log "Validating environment isolation"
         exit(1);
     }
 
-    $required = [
-        "api/health" => "GET",
-        "api/v1/auth/send/otp" => "POST"
-    ];
+    foreach (
+        [
+            "api/health" => "GET",
+            "api/v1/auth/send/otp" => "POST"
+        ] as $uri => $method
+    ) {
 
-    foreach ($required as $uri => $method) {
+        $ok = false;
 
-        $found = false;
-
-        foreach ($routes as $route) {
-
-            $methods = explode(
-                "|",
-                $route["method"] ?? ""
-            );
+        foreach ($routes as $r) {
 
             if (
-                ($route["uri"] ?? "") === $uri &&
-                in_array($method, $methods, true)
+                ($r["uri"] ?? "") === $uri &&
+                in_array(
+                    $method,
+                    explode("|", $r["method"] ?? ""),
+                    true
+                )
             ) {
-                $found = true;
+                $ok = true;
+                break;
             }
         }
 
-        if (!$found) {
+        if (!$ok) {
 
             fwrite(
                 STDERR,
@@ -689,78 +763,29 @@ log "Validating environment isolation"
 
         echo "Verified $method $uri\n";
     }
-
   '
-
-  "$PHP_BIN" artisan --version
-
 )
 
 # ============================================================
-# 17. Identify previous application
+# 16. Snapshot previous public files
 # ============================================================
 
-if [[ -s "$ACTIVE" ]]; then
-
-  OLD_APP="$(cat "$ACTIVE")"
-
-  [[ "$OLD_APP" == "$RELEASES/"* &&
-     -f "$OLD_APP/artisan" ]] \
-    || fail "Invalid active release pointer"
-
-elif [[ -f "$BASE/artisan" ]]; then
-
-  OLD_APP="$BASE"
-
-fi
-
-# ============================================================
-# 18. Backup affected public files
-# ============================================================
-
-log "Backing up previous public files"
+log 'Backing up public files and database before migrations'
 
 mkdir -m 700 "$SNAP"
 mkdir -m 700 "$SNAP/old"
 
-if [[ -n "$OLD_APP" ]]; then
-
-  printf '%s\n' "$OLD_APP" \
-    > "$SNAP/old-app"
-
-fi
+printf '%s\n' "$OLD_APP" > "$SNAP/old-app"
 
 if [[ -f "$ACTIVE" ]]; then
-
   cp -p "$ACTIVE" "$SNAP/active"
-
 fi
 
-if [[ -f "$WEB_ROOT/index.php" ]]; then
+cp -p "$WEB_ROOT/index.php" "$SNAP/index.php"
 
-  cp -p \
-    "$WEB_ROOT/index.php" \
-    "$SNAP/index.php"
-
-fi
-
-if [[ -L "$WEB_ROOT/storage" ]]; then
-
-  ln -s \
-    "$(readlink "$WEB_ROOT/storage")" \
-    "$SNAP/storage"
-
-elif [[ -e "$WEB_ROOT/storage" ]]; then
-
-  fail "Public storage is a real directory"
-
-else
-
-  touch "$SNAP/no-storage"
-
-fi
-
-# Record files which may be overwritten.
+ln -s \
+  "$(readlink "$WEB_ROOT/storage")" \
+  "$SNAP/storage"
 
 (
   cd "$RELEASE/public"
@@ -775,42 +800,39 @@ fi
 if [[ -f "$WEB_ROOT/index.html" &&
       ! -f "$RELEASE/public/index.html" ]]; then
 
-  printf './index.html\0' \
-    >> "$SNAP/manifest"
+  printf './index.html\0' >> "$SNAP/manifest"
 
 fi
 
 while IFS= read -r -d '' rel; do
 
-  relative="${rel#./}"
+  rel="${rel#./}"
 
-  [[ -n "$relative" &&
-     "$relative" != /* &&
-     "$relative" != *..* ]] \
-    || fail "Unsafe public filename"
+  [[ -n "$rel" &&
+     "$rel" != /* &&
+     "$rel" != *..* ]] \
+    || fail 'Unsafe public filename'
 
-  if [[ -e "$WEB_ROOT/$relative" ||
-        -L "$WEB_ROOT/$relative" ]]; then
+  if [[ -f "$WEB_ROOT/$rel" ||
+        -L "$WEB_ROOT/$rel" ]]; then
 
-    [[ ! -d "$WEB_ROOT/$relative" ]] \
-      || fail "Public target is a directory"
-
-    mkdir -p \
-      "$SNAP/old/$(dirname "$relative")"
+    mkdir -p "$SNAP/old/$(dirname "$rel")"
 
     cp -a \
-      "$WEB_ROOT/$relative" \
-      "$SNAP/old/$relative"
+      "$WEB_ROOT/$rel" \
+      "$SNAP/old/$rel"
+
+  elif [[ -e "$WEB_ROOT/$rel" ]]; then
+
+    fail "Public target is not a file: $rel"
 
   fi
 
 done < "$SNAP/manifest"
 
 # ============================================================
-# 19. Database backup before migrations
+# 17. Create database backup
 # ============================================================
-
-log "Creating database backup"
 
 MYSQL_CNF="$(mktemp "$SNAP/.mysql.XXXXXXXX")"
 DB_NAME_FILE="$(mktemp "$SNAP/.db.XXXXXXXX")"
@@ -830,38 +852,39 @@ DB_NAME_FILE="$(mktemp "$SNAP/.db.XXXXXXXX")"
         Illuminate\Contracts\Console\Kernel::class
     )->bootstrap();
 
-    $cfg = config(
-        "database.connections." . config("database.default")
+    $c = config(
+        "database.connections." .
+        config("database.default")
     );
 
-    $escape = static function ($value) {
+    $quote = static function ($v) {
 
-        if (preg_match("/[\x00-\x1f]/", (string) $value)) {
+        if (preg_match("/[\x00-\x1f]/", (string) $v)) {
             exit(1);
         }
 
         return str_replace(
             ["\\", "\""],
             ["\\\\", "\\\""],
-            (string) $value
+            (string) $v
         );
     };
 
-    $text = "[client]\n";
+    $s = "[client]\n";
 
     foreach (
         ["host", "port", "username", "password"]
-        as $key
+        as $k
     ) {
 
         if (
-            isset($cfg[$key]) &&
-            $cfg[$key] !== ""
+            isset($c[$k]) &&
+            $c[$k] !== ""
         ) {
 
-            $text .= $key .
+            $s .= $k .
                 "=\"" .
-                $escape($cfg[$key]) .
+                $quote($c[$k]) .
                 "\"\n";
         }
     }
@@ -869,30 +892,22 @@ DB_NAME_FILE="$(mktemp "$SNAP/.db.XXXXXXXX")"
     if (
         file_put_contents(
             getenv("MYSQL_CNF"),
-            $text
-        ) === false
-    ) {
-        exit(1);
-    }
-
-    if (
+            $s
+        ) === false ||
         file_put_contents(
             getenv("DB_NAME_FILE"),
-            $cfg["database"]
+            (string) $c["database"]
         ) === false
     ) {
         exit(1);
     }
-
   '
 )
 
 chmod 600 "$MYSQL_CNF" "$DB_NAME_FILE"
 
-DB_NAME="$(cat "$DB_NAME_FILE")"
-
-[[ "$DB_NAME" == "$EXPECTED_DB_NAME" ]] \
-  || fail "Database name mismatch"
+[[ "$(cat "$DB_NAME_FILE")" == "$EXPECTED_DB_NAME" ]] \
+  || fail 'Backup database mismatch'
 
 mysqldump \
   --defaults-extra-file="$MYSQL_CNF" \
@@ -902,46 +917,32 @@ mysqldump \
   --triggers \
   --events \
   --no-tablespaces \
-  "$DB_NAME" \
+  "$EXPECTED_DB_NAME" \
   | gzip -6 > "$SNAP/database.sql.gz"
 
 rm -f "$MYSQL_CNF" "$DB_NAME_FILE"
 
-gzip -t "$SNAP/database.sql.gz" \
-  || fail "Database backup verification failed"
-
-[[ -s "$SNAP/database.sql.gz" ]] \
-  || fail "Database backup is empty"
+[[ -s "$SNAP/database.sql.gz" ]] &&
+  gzip -t "$SNAP/database.sql.gz" \
+  || fail 'Invalid database backup'
 
 chmod 600 "$SNAP/database.sql.gz"
 
-log "Database backup completed"
-
 # ============================================================
-# 20. Enable maintenance mode
+# 18. Maintenance mode and database migrations
 # ============================================================
 
-if [[ -n "$OLD_APP" &&
-      -f "$OLD_APP/vendor/autoload.php" ]]; then
+log 'Entering maintenance mode and running migrations'
 
-  log "Enabling Laravel maintenance mode"
+# Mark before artisan down so partial failures trigger recovery.
 
-  (
-    cd "$OLD_APP"
+MAINTENANCE_STARTED=1
 
-    "$PHP_BIN" artisan down --retry=15
+(
+  cd "$OLD_APP"
+  "$PHP_BIN" artisan down --retry=15
 
-  ) || fail "Cannot enable maintenance mode"
-
-  MAINTENANCE_STARTED=1
-
-fi
-
-# ============================================================
-# 21. Run database migrations
-# ============================================================
-
-log "Running database migrations"
+) || fail 'Maintenance command failed'
 
 (
   cd "$RELEASE"
@@ -952,12 +953,12 @@ log "Running database migrations"
 )
 
 # ============================================================
-# 22. Publish new public files
+# 19. Publish public assets
 # ============================================================
 
-SWITCH_STARTED=1
+log 'Publishing public assets and switching entry point'
 
-log "Publishing Laravel public files"
+SWITCH_STARTED=1
 
 rsync -a \
   --chmod=D755,F644 \
@@ -967,9 +968,7 @@ rsync -a \
   "$WEB_ROOT/"
 
 if [[ ! -f "$RELEASE/public/index.html" ]]; then
-
   rm -f "$WEB_ROOT/index.html"
-
 fi
 
 ln -sfn \
@@ -977,10 +976,8 @@ ln -sfn \
   "$WEB_ROOT/storage"
 
 # ============================================================
-# 23. Atomically publish Laravel index.php
+# 20. Atomically publish Laravel index.php
 # ============================================================
-
-log "Updating Laravel entry point"
 
 APP_DIR="$RELEASE" \
 WEB_ROOT="$WEB_ROOT" \
@@ -990,11 +987,11 @@ WEB_ROOT="$WEB_ROOT" \
 $app = getenv('APP_DIR');
 $web = getenv('WEB_ROOT');
 
-$index = file_get_contents(
+$source = file_get_contents(
     $app . '/public/index.php'
 );
 
-if ($index === false) {
+if ($source === false) {
     exit(1);
 }
 
@@ -1006,16 +1003,15 @@ foreach (
     ] as $path
 ) {
 
-    $pattern = '~__DIR__\s*\.\s*([\x27\x22])/\.\./'
-        . preg_quote($path, '~')
-        . '\1~';
+    $pattern =
+        '~__DIR__\s*\.\s*([\x27\x22])/\.\./' .
+        preg_quote($path, '~') .
+        '\1~';
 
-    $count = 0;
-
-    $index = preg_replace(
+    $source = preg_replace(
         $pattern,
         var_export($app . '/' . $path, true),
-        $index,
+        $source,
         -1,
         $count
     );
@@ -1027,17 +1023,17 @@ foreach (
 
         fwrite(
             STDERR,
-            "Unsupported Laravel index.php format: $path\n"
+            "Unsupported Laravel index.php: $path\n"
         );
 
         exit(1);
     }
 }
 
-$tmp = $web . '/.index.php.deploy.'
-    . bin2hex(random_bytes(6));
+$tmp = $web . '/.index.php.deploy.' .
+    bin2hex(random_bytes(6));
 
-if (file_put_contents($tmp, $index, LOCK_EX) === false) {
+if (file_put_contents($tmp, $source, LOCK_EX) === false) {
     exit(1);
 }
 
@@ -1045,14 +1041,14 @@ chmod($tmp, 0644);
 
 if (!rename($tmp, $web . '/index.php')) {
 
-    unlink($tmp);
+    @unlink($tmp);
 
     exit(1);
 }
 PHP
 
 # ============================================================
-# 24. Update active release pointer
+# 21. Track active release
 # ============================================================
 
 printf '%s\n' "$RELEASE" \
@@ -1063,10 +1059,8 @@ mv -f \
   "$ACTIVE"
 
 # ============================================================
-# 25. Disable maintenance mode
+# 22. Disable maintenance mode
 # ============================================================
-
-log "Disabling maintenance mode"
 
 (
   cd "$RELEASE"
@@ -1074,11 +1068,18 @@ log "Disabling maintenance mode"
   "$PHP_BIN" artisan up
 )
 
+(
+  cd "$OLD_APP"
+
+  "$PHP_BIN" artisan up
+
+) || log 'WARNING: Previous release maintenance flag not cleared'
+
 # ============================================================
-# 26. Verify database, queues and scheduler
+# 23. Verify database and background commands
 # ============================================================
 
-log "Verifying Laravel services"
+log 'Checking database and queue/scheduler commands'
 
 (
   cd "$RELEASE"
@@ -1087,22 +1088,19 @@ log "Verifying Laravel services"
     --no-ansi >/dev/null
 
   "$PHP_BIN" artisan queue:restart \
-    || log "WARNING: Queue restart signal failed"
+    || log 'WARNING: queue restart failed; check supervisor/Horizon'
 
   "$PHP_BIN" artisan schedule:list \
     --no-ansi >/dev/null \
-    || log "WARNING: Scheduler verification failed"
-
+    || log 'WARNING: schedule:list failed; check cron'
 )
 
 # ============================================================
-# 27. Complete deployment
+# 24. Deployment prepared successfully
 # ============================================================
 
 SUCCESS=1
 
-log "Release deployed successfully: $RELEASE_ID"
+log "Release $RELEASE_ID published"
 
-log "Previous application preserved for rollback"
-
-log "Awaiting external GitHub Actions health verification"
+log "External HTTP smoke checks will follow"
