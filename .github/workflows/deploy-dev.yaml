@@ -34,6 +34,7 @@ jobs:
           tools: composer:v2
           coverage: none
 
+      
       - name: Validate dependencies and run tests
         run: |
           set -euo pipefail
@@ -49,13 +50,36 @@ jobs:
 
           composer check-platform-reqs
 
-          if find tests -type f -name '*Test.php' -print -quit 2>/dev/null | grep -q .; then
-            cp .env.example .env
+          if [[ -d tests ]] && \
+            find tests -type f -name '*Test.php' -print -quit | grep -q .; then
+
+            # Create a safe testing environment without production secrets.
+            if [[ -f .env.example ]]; then
+              cp .env.example .env
+            else
+              echo "::warning::.env.example missing; creating isolated testing environment"
+              touch .env
+            fi
+
+            {
+              echo "APP_ENV=testing"
+              echo "APP_DEBUG=true"
+              echo "DB_CONNECTION=sqlite"
+              echo "DB_DATABASE=:memory:"
+              echo "CACHE_STORE=array"
+              echo "SESSION_DRIVER=array"
+              echo "QUEUE_CONNECTION=sync"
+              echo "MAIL_MAILER=array"
+            } >> .env
+
             php artisan key:generate --force
+
             php artisan test --stop-on-failure
+
           else
-            echo "::warning::No automated Laravel tests found"
+            echo "::warning::No Laravel tests found"
           fi
+
 
   # ==========================================================
   # 2. Deploy only from approved staging branch
