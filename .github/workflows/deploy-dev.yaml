@@ -105,6 +105,7 @@ jobs:
 
       HEALTH_CHECK_TOKEN: ${{ secrets.HEALTH_CHECK_TOKEN }}
       SMOKE_TEST_PATH: ${{ vars.SMOKE_TEST_PATH }}
+      SMOKE_TEST_PATHS: ${{ vars.SMOKE_TEST_PATHS }}
 
       RELEASE_ID: ${{ github.sha }}
       BOOTSTRAP_REQUESTED: ${{ inputs.bootstrap_staging }}
@@ -156,6 +157,15 @@ jobs:
              "$SMOKE_TEST_PATH" =~ ^/[A-Za-z0-9_./-]+$ ]]
 
           [[ "${SMOKE_TEST_PATH:-}" != *..* ]]
+
+          # Optional whitespace-separated, read-only endpoints for deeper smoke tests.
+          # Keep existing SMOKE_TEST_PATH support unchanged.
+          for path in ${SMOKE_TEST_PATHS:-}; do
+            [[ "$path" =~ ^/[A-Za-z0-9_./-]+$ && "$path" != *..* ]] || {
+              echo '::error::Invalid SMOKE_TEST_PATHS entry'
+              exit 1
+            }
+          done
 
           bash -n scripts/deploy.sh
 
@@ -392,7 +402,31 @@ jobs:
 
           fi
 
-          echo "Backend verification passed"
+          # Additional critical GET routes, configured in staging environment vars.
+          for path in ${SMOKE_TEST_PATHS:-}; do
+            status="$(curl \
+              --silent --show-error --proto '=https' \
+              --connect-timeout 10 --max-time 30 --retry 2 \
+              -H "Authorization: Bearer $HEALTH_CHECK_TOKEN" \
+              -H 'Accept: application/json' \
+              -o /dev/null -w '%{http_code}' \
+              "${BACKEND_URL%/}$path")"
+            [[ "$status" == 200 ]] || {
+              echo "::error::Critical endpoint $path failed ($status)"
+              exit 1
+            }
+          done
+
+          echo "Backend HTTP verification passed"
+
+      # Validate the actual published Laravel DB connection (not only HTTP 200).
+      - name: Verify active release and database connectivity
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/deploy-ssh/config" \
+            cpanel-deploy \
+            "bash -se -- verify '$REMOTE_DEPLOY_DIR' '${REMOTE_WEB_ROOT:-public_html}' '$RELEASE_ID' '$BACKEND_URL' '$EXPECTED_DB_HOST' '$EXPECTED_DB_DATABASE'" \
+            < scripts/deploy.sh
 
       # ======================================================
       # 9. Rollback if external verification fails
@@ -408,6 +442,9 @@ jobs:
             cpanel-deploy \
             "bash -se -- rollback '$REMOTE_DEPLOY_DIR' '${REMOTE_WEB_ROOT:-public_html}' '$RELEASE_ID' '$BACKEND_URL' '$EXPECTED_DB_HOST' '$EXPECTED_DB_DATABASE'" \
             < scripts/deploy.sh
+
+          # A rollback restores files, not applied database migrations.
+          echo '::warning::Rollback restored the previous application files; check database schema compatibility and live health.'
 
       # ======================================================
       # 10. Cleanup temporary files

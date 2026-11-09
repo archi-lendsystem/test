@@ -4,7 +4,7 @@
 set -Eeuo pipefail
 umask 077
 
-# Actions: preflight | bootstrap-preflight | deploy | bootstrap | rollback
+# Actions: preflight | bootstrap-preflight | deploy | bootstrap | rollback | verify
 # Bootstrap requires explicit GitHub Actions manual dispatch authorization.
 # Bootstrap backs up populated database and public files but NEVER migrates.
 
@@ -16,7 +16,7 @@ EXPECTED_URL="${5:?Expected URL required}"
 EXPECTED_DB_HOST="${6:?Expected DB host required}"
 EXPECTED_DB_NAME="${7:?Expected DB name required}"
 
-[[ "$ACTION" =~ ^(preflight|bootstrap-preflight|deploy|bootstrap|rollback)$ ]] || exit 1
+[[ "$ACTION" =~ ^(preflight|bootstrap-preflight|deploy|bootstrap|rollback|verify)$ ]] || exit 1
 [[ "$DEPLOY_DIR" =~ ^[A-Za-z0-9_-]+$ ]] || exit 1
 
 [[ "$WEB_DIR" =~ ^[A-Za-z0-9_][A-Za-z0-9_/-]*$ &&
@@ -489,6 +489,47 @@ if [[ "$ACTION" == rollback ]]; then
 fi
 
 # ============================================================
+# 9. Verify the published release and actual DB connectivity
+# ============================================================
+
+if [[ "$ACTION" == verify ]]; then
+  [[ -s "$ACTIVE" && "$(cat "$ACTIVE")" == "$RELEASE" ]] \
+    || fail 'Expected release is not active'
+
+  identify_previous
+  check_config "$OLD_APP"
+
+  log 'Verifying active Laravel release and database connectivity'
+  (
+    cd "$OLD_APP"
+    "$PHP_BIN" -r '
+      require "vendor/autoload.php";
+      $app = require "bootstrap/app.php";
+      $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+      try {
+          $connection = Illuminate\Support\Facades\DB::connection();
+          $statement = $connection->select("SELECT 1 AS deployment_probe");
+          if (count($statement) !== 1 ||
+              (int) ($statement[0]->deployment_probe ?? 0) !== 1) {
+              throw new RuntimeException("Database probe returned unexpected data");
+          }
+      } catch (Throwable $e) {
+          fwrite(STDERR, "Database connectivity check failed\n");
+          exit(1);
+      }
+      echo "Database connectivity verified\n";
+    '
+
+    # Verifies framework command registration, not that cron is installed.
+    "$PHP_BIN" artisan schedule:list --no-ansi >/dev/null
+    "$PHP_BIN" artisan migrate:status --no-ansi >/dev/null
+  ) || fail 'Published application verification failed'
+
+  log 'Active release, DB, migrations, and scheduler commands verified'
+  exit 0
+fi
+
+# ============================================================
 # 9. Pre-deployment recovery readiness verification
 # ============================================================
 
@@ -785,6 +826,13 @@ fi
 
 if [[ -f "$ACTIVE" ]]; then
   cp -p "$ACTIVE" "$SNAP/active"
+fi
+
+# Private copy of the previous environment for disaster recovery.
+# The running application's .env is never overwritten in place.
+if [[ -n "$OLD_APP" && -r "$OLD_APP/.env" ]]; then
+  cp -p "$OLD_APP/.env" "$SNAP/previous.env"
+  chmod 600 "$SNAP/previous.env"
 fi
 
 if [[ -f "$WEB_ROOT/index.php" ]]; then
@@ -1102,11 +1150,12 @@ log 'Checking database and queue/scheduler commands'
   "$PHP_BIN" artisan migrate:status \
     --no-ansi >/dev/null
 
+  # Queue workers still require a real supervisor/Horizon health check.
   "$PHP_BIN" artisan queue:restart \
     || log 'WARNING: queue restart failed; check supervisor/Horizon'
 
-  "$PHP_BIN" artisan schedule:list \
-    --no-ansi >/dev/null \
+  # A working Artisan scheduler command does not prove cron is installed.
+  "$PHP_BIN" artisan schedule:list --no-ansi >/dev/null \
     || log 'WARNING: schedule:list failed; check cron'
 )
 
