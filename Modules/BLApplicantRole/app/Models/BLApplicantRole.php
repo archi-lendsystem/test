@@ -16,7 +16,6 @@ class BLApplicantRole extends Model
 
     protected $fillable = [
         'lead_uuid',
-        'product_id',
         'created_by',
         'lead_id',
         'applicant_id',

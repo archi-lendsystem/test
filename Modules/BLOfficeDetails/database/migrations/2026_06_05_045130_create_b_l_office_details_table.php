@@ -20,12 +20,6 @@ return new class extends Migration
                 ->on('b_l_lead_creations')
                 ->onDelete('cascade');
 
-                  $table->unsignedBigInteger('product_id')->nullable();
-
-            $table->foreign('product_id')
-                ->references('id')
-                ->on('products')
-                ->nullOnDelete();
             $table->unsignedBigInteger('created_by')->nullable();
 
             $table->string('lead_id');

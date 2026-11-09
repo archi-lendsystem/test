@@ -2,6 +2,7 @@
     use Illuminate\Support\Carbon;
 
     $lead = $lead ?? null;
+    $reportBranchName = $branch_name ?? null;
     $sanction = $sanction ?? null;
     $disbursement = $disbursement ?? null;
     $creditVisitReport = $credit_visit_report ?? null;
@@ -31,23 +32,15 @@
         ])->filter()->implode(', ');
     };
 
-    $companyName = 'Lendsystem Pvt Ltd.';
-$logoPaths = [
-    public_path('assets/images/logo/lendsystem_logo.png'),
-    base_path('public/assets/images/logo/lendsystem_logo.png'),
-];
-
-$logoPath = collect($logoPaths)->first(
-    fn ($path) => is_file($path) && is_readable($path)
-);
-
-$logoMime = $logoPath
-    ? (mime_content_type($logoPath) ?: 'image/png')
-    : 'image/png';
-
-$logoBase64 = $logoPath
-    ? base64_encode(file_get_contents($logoPath))
-    : null;
+    $companyName = 'Sabrimala Fintech Pvt Ltd.';
+    $logoPaths = [
+        base_path('../public_html/images/sabrimala-logo.png'),
+        public_path('images/sabrimala-logo.png'),
+        base_path('public/images/sabrimala-logo.png'),
+    ];
+    $logoPath = collect($logoPaths)->first(fn ($path) => is_file($path) && is_readable($path));
+    $logoMime = $logoPath ? (mime_content_type($logoPath) ?: 'image/png') : 'image/png';
+    $logoBase64 = $logoPath ? base64_encode(file_get_contents($logoPath)) : null;
 
     $agreementDate = data_get($disbursement, 'disbursement_date', data_get($disbursement, 'created_at'));
     $clientId = $display(data_get($lead, 'lead_id', data_get($lead, 'application_number')));
@@ -55,7 +48,10 @@ $logoBase64 = $logoPath
     $borrowerAddress = $buildAddress($mainDetails);
     $borrowerPan = $display(data_get($mainDetails, 'pan_card_number'));
     $borrowerAge = $display(data_get($mainDetails, 'age'));
-    $branchName = $display(data_get($lead, 'branch_name', data_get($lead, 'branch', data_get($lead, 'city'))));
+
+     $branchName = $display(
+    $reportBranchName
+);
     $sanctionAmount = data_get($sanction, 'sanctioned_amount', data_get($sanction, 'sanction_amount'));
     $interestRate = data_get($sanction, 'interest_rate');
     $tenure = data_get($sanction, 'tenure_months', data_get($sanction, 'tenure'));
@@ -174,6 +170,25 @@ $logoBase64 = $logoPath
     $bankIfsc = $display(data_get($bank, 'ifsc_code', data_get($bank, 'ifsc')));
     $bankAccountHolder = $display(data_get($bank, 'account_holder_name', data_get($bank, 'account_name')));
     $bankAccountType = strtolower($display(data_get($bank, 'account_type'), ''));
+
+
+    $tenure = data_get($sanction, 'tenure_months', data_get($sanction, 'tenure'));
+
+$rawRepaymentFrequency = data_get($sanction, 'repayment_mode');
+$normalizedFrequency = strtolower(trim((string) $rawRepaymentFrequency));
+
+$tenureUnit = match ($normalizedFrequency) {
+    'daily', 'day', 'days' => 'day',
+    'weekly', 'week', 'weeks' => 'week',
+    'yearly', 'annual', 'year', 'years' => 'year',
+    default => 'month',
+};
+
+$tenureUnitLabel = $tenureUnit;
+
+if (is_numeric($tenure) && (float) $tenure !== 1.0) {
+    $tenureUnitLabel .= 's';
+}
 @endphp
 
 <!DOCTYPE html>
@@ -183,17 +198,8 @@ $logoBase64 = $logoPath
 <title>Loan Agreement - {{ $clientId }}</title>
 <style>
   @page {
-        size: A4 portrait;
-        margin: 24px 28px 200px 28px;
-    }
-
-    tr {
-        page-break-inside: avoid;
-    }
-
-    .section-title {
-        page-break-after: avoid;
-    }
+    margin: 0;
+  }
 
   * {
     box-sizing: border-box;
@@ -329,10 +335,7 @@ $logoBase64 = $logoPath
 <div class="page" data-page="1">
   <div class="company-header">
     @if ($logoBase64)
-      <img
-          src="data:{{ $logoMime }};base64,{{ $logoBase64 }}"
-          alt="LendSystem Logo"
-      >
+      <img class="company-logo" src="data:{{ $logoMime }};base64,{{ $logoBase64 }}" alt="Sabrimala Fintech Logo">
     @else
       <strong>{{ $companyName }}</strong>
     @endif
@@ -401,10 +404,7 @@ $logoBase64 = $logoPath
 <div class="page" data-page="2">
   <div class="company-header">
     @if ($logoBase64)
-      <img
-          src="data:{{ $logoMime }};base64,{{ $logoBase64 }}"
-          alt="LendSystem Logo"
-      >
+      <img class="company-logo" src="data:{{ $logoMime }};base64,{{ $logoBase64 }}" alt="Sabrimala Fintech Logo">
     @else
       <strong>{{ $companyName }}</strong>
     @endif
@@ -460,10 +460,7 @@ $logoBase64 = $logoPath
 <div class="page" data-page="3">
   <div class="company-header">
     @if ($logoBase64)
-      <img
-          src="data:{{ $logoMime }};base64,{{ $logoBase64 }}"
-          alt="LendSystem Logo"
-      >
+      <img class="company-logo" src="data:{{ $logoMime }};base64,{{ $logoBase64 }}" alt="Sabrimala Fintech Logo">
     @else
       <strong>{{ $companyName }}</strong>
     @endif
@@ -508,10 +505,7 @@ $logoBase64 = $logoPath
 <div class="page" data-page="4">
   <div class="company-header">
     @if ($logoBase64)
-      <img
-          src="data:{{ $logoMime }};base64,{{ $logoBase64 }}"
-          alt="LendSystem Logo"
-      >
+      <img class="company-logo" src="data:{{ $logoMime }};base64,{{ $logoBase64 }}" alt="Sabrimala Fintech Logo">
     @else
       <strong>{{ $companyName }}</strong>
     @endif
@@ -563,10 +557,7 @@ $logoBase64 = $logoPath
 <div class="page" data-page="5">
   <div class="company-header">
     @if ($logoBase64)
-      <img
-          src="data:{{ $logoMime }};base64,{{ $logoBase64 }}"
-          alt="LendSystem Logo"
-      >
+      <img class="company-logo" src="data:{{ $logoMime }};base64,{{ $logoBase64 }}" alt="Sabrimala Fintech Logo">
     @else
       <strong>{{ $companyName }}</strong>
     @endif
@@ -618,7 +609,9 @@ $logoBase64 = $logoPath
     jointly and severally promise to pay <strong>{{ $companyName }}</strong> or order at their office
     situated at <span class="field">{{ $branchName }}</span>, notwithstanding non-presentment, the sum of
     Rs. <span class="field">{{ $formatNumber($sanctionAmount) }}</span> (Rupees {{ $amountInWords }}) for value received, with diminishing
-    interest at the rate of <span class="field">{{ $display($interestRate) }}</span>% per annum plus interest tax with monthly rests,
+    interest at the rate of <span class="field">
+      <!-- {{ $display($interestRate) }} -->
+    </span>% per annum plus interest tax with monthly rests,
     calculated from the date of disbursement till the date of payment in full.
   </p>
 
@@ -639,10 +632,7 @@ $logoBase64 = $logoPath
 <div class="page" data-page="6">
   <div class="company-header">
     @if ($logoBase64)
-      <img
-          src="data:{{ $logoMime }};base64,{{ $logoBase64 }}"
-          alt="LendSystem Logo"
-      >
+      <img class="company-logo" src="data:{{ $logoMime }};base64,{{ $logoBase64 }}" alt="Sabrimala Fintech Logo">
     @else
       <strong>{{ $companyName }}</strong>
     @endif
@@ -675,7 +665,7 @@ $logoBase64 = $logoPath
 
   <ol class="clauses">
     <li>I DO HEREBY GUARANTEE that the Borrower/s, jointly and severally, will duly and punctually observe and perform each and every one of the obligations to pay money — whether for or towards principal, interest, additional interest, extra charges on arrears, service charges, or otherwise howsoever — contained in the said Loan Agreement, AND I DO HEREBY AGREE AND UNDERTAKE THAT in the event of default on his/their part, or on the part of any one of them, in making payment in discharge of any such obligations, I shall forthwith, upon your notifying such default to me, such notification being conclusive and binding on me, make payment to you not only of the instalments due in respect of the defaulted instalments but also, in the event of your having accelerated payment of the balance of the Loan, make payment to you of the entire Loan without demur or protest, notwithstanding any protestations from the Borrower/s.</li>
-    <li>I hereby certify that I fully understand the responsibility of guaranteeing a loan of amount Rs. <span class="field">{{ $formatNumber($sanctionAmount) }}</span> for <span class="field">{{ $display($tenure) }}</span> months for Mr./Ms./Mrs. <span class="field">{{ $borrowerName }}</span> and fulfil all the terms and conditions mentioned in the Guarantor agreement.</li>
+    <li>I hereby certify that I fully understand the responsibility of guaranteeing a loan of amount Rs. <span class="field">{{ $formatNumber($sanctionAmount) }}</span> for <span class="field">{{ $display($tenure) }} {{ $tenure !== null && $tenure !== '' ? $tenureUnitLabel : '' }}</span> for Mr./Ms./Mrs. <span class="field">{{ $borrowerName }}</span> and fulfil all the terms and conditions mentioned in the Guarantor agreement.</li>
     <li>I hereby accord my consent to the terms of the said Loan Agreement and/or any instrument(s) that may hereafter be executed by the Borrower/s in your favour as aforesaid, being by mutual consent between you and him/them in any respect varied or modified without requiring my consent or approval thereto, and agree that my liability under this Guarantee shall in no manner be affected by such variations and modifications, and I expressly give up all my rights as surety under the provisions of the Indian Contract Act, 1872 in that behalf.</li>
     <li>I/we certify that the text content of this loan application form has been explained to me in vernacular language by the employee of <strong>{{ $companyName }}</strong>, and I/we am/are signing it after fully understanding its meaning.</li>
     <li>You shall have the fullest liberty, without in any way affecting this Guarantee and discharging me from my liability thereunder, to postpone for any time or from time to time the exercise of any power or powers reserved to or conferred on you by the said Loan Agreement or any instrument(s) that may hereafter be executed by the Borrower/s in your favour, and to exercise the same at any time and in any manner, either to enforce or forbear to enforce payment of principal or interest or other monies due to you by the Borrower/s, or any of the remedies or securities available to you, or to grant any indulgence or facility to the Borrower/s AND I SHALL not be released by any exercise by you of your liberty with reference to the matters aforesaid, or by reason of time being given to the Borrower/s, or by any other matter or thing whatsoever which, under the law relating to sureties, would but for this provision have the effect of releasing me, AND I hereby waive all suretyship and other rights which I might otherwise be entitled to enforce.</li>
@@ -690,10 +680,7 @@ $logoBase64 = $logoPath
 <div class="page" data-page="7">
   <div class="company-header">
     @if ($logoBase64)
-      <img
-          src="data:{{ $logoMime }};base64,{{ $logoBase64 }}"
-          alt="LendSystem Logo"
-      >
+      <img class="company-logo" src="data:{{ $logoMime }};base64,{{ $logoBase64 }}" alt="Sabrimala Fintech Logo">
     @else
       <strong>{{ $companyName }}</strong>
     @endif
@@ -743,10 +730,7 @@ $logoBase64 = $logoPath
 <div class="page" data-page="8">
   <div class="company-header">
     @if ($logoBase64)
-      <img
-          src="data:{{ $logoMime }};base64,{{ $logoBase64 }}"
-          alt="LendSystem Logo"
-      >
+      <img class="company-logo" src="data:{{ $logoMime }};base64,{{ $logoBase64 }}" alt="Sabrimala Fintech Logo">
     @else
       <strong>{{ $companyName }}</strong>
     @endif
@@ -790,13 +774,21 @@ $logoBase64 = $logoPath
     <tr>
       <td class="label">A/c Type</td>
       <td>
-        <div class="checkbox-row">
+        <!-- <div class="checkbox-row">
           <span><span class="box {{ str_contains($bankAccountType, 'saving') ? 'checked' : '' }}">{{ str_contains($bankAccountType, 'saving') ? '✓' : '' }}</span> Savings</span>
           <span><span class="box {{ str_contains($bankAccountType, 'current') ? 'checked' : '' }}">{{ str_contains($bankAccountType, 'current') ? '✓' : '' }}</span> Current</span>
           <span><span class="box {{ $bankAccountType === 'nre' ? 'checked' : '' }}">{{ $bankAccountType === 'nre' ? '✓' : '' }}</span> NRE</span>
           <span><span class="box {{ $bankAccountType === 'nro' ? 'checked' : '' }}">{{ $bankAccountType === 'nro' ? '✓' : '' }}</span> NRO</span>
           <span><span class="box {{ $bankAccountType === 'fcnr' ? 'checked' : '' }}">{{ $bankAccountType === 'fcnr' ? '✓' : '' }}</span> FCNR</span>
-        </div>
+        </div> -->
+
+        <div class="checkbox-row">
+    <span><span class="box {{ str_contains($bankAccountType, 'saving') ? 'checked' : '' }}">{{ str_contains($bankAccountType, 'saving') ? 'X' : '' }}</span> Savings</span>
+    <span><span class="box {{ str_contains($bankAccountType, 'current') ? 'checked' : '' }}">{{ str_contains($bankAccountType, 'current') ? 'X' : '' }}</span> Current</span>
+    <span><span class="box {{ $bankAccountType === 'nre' ? 'checked' : '' }}">{{ $bankAccountType === 'nre' ? 'X' : '' }}</span> NRE</span>
+    <span><span class="box {{ $bankAccountType === 'nro' ? 'checked' : '' }}">{{ $bankAccountType === 'nro' ? 'X' : '' }}</span> NRO</span>
+    <span><span class="box {{ $bankAccountType === 'fcnr' ? 'checked' : '' }}">{{ $bankAccountType === 'fcnr' ? 'X' : '' }}</span> FCNR</span>
+</div>
       </td>
     </tr>
   </table>

@@ -14,6 +14,7 @@ use Modules\UserManagement\Models\Permission;
 use Modules\UserManagement\Models\UserPermission;
 use Modules\UserManagement\Models\UserType;
 use Modules\UserManagement\Models\LoginOtpVerification;
+use Illuminate\Support\Facades\Hash;
 
 
 use Modules\Product\Models\Product;
@@ -255,4 +256,34 @@ public function branches(): BelongsToMany
         'branch_id'
     )->withTimestamps();
 }
+
+public function accessibleBranchIds(): array
+{
+    return $this->branches()
+        ->where('organization_branches.is_active', true)
+        ->pluck('organization_branches.id')
+        ->map(fn ($id) => (int) $id)
+        ->unique()
+        ->values()
+        ->all();
+}
+
+public function getAuthPassword()
+{
+    return $this->user_password;
+}
+
+public function setUserPasswordAttribute($value)
+{
+    if ($value === null || $value === '') {
+        return;
+    }
+
+    // Pehle se hash hai toh dobara hash mat karo
+    $this->attributes['user_password'] = password_get_info($value)['algo']
+        ? $value
+        : Hash::make($value);
+}
+
+
 }

@@ -4,7 +4,6 @@ namespace Modules\Settlement\Services;
 
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
-use Modules\Repayment\Enums\AllocationComponent;
 use Modules\Repayment\Enums\InstallmentPaymentStatus;
 use Modules\Repayment\Enums\RepaymentAccountStatus;
 use Modules\Repayment\Enums\RepaymentTransactionStatus;
@@ -12,7 +11,6 @@ use Modules\Repayment\Enums\RepaymentTransactionType;
 use Modules\Repayment\Enums\StatusHistorySource;
 use Modules\Repayment\Enums\StatusHistoryType;
 use Modules\Repayment\Models\RepaymentAccount;
-use Modules\Repayment\Models\RepaymentAllocation;
 use Modules\Repayment\Models\RepaymentStatusHistory;
 use Modules\Repayment\Models\RepaymentTransaction;
 use Modules\Repayment\Services\RepaymentTransactionNumberGenerator;
@@ -27,9 +25,9 @@ class SettlementService
     ) {}
 
     /**
-     * Propose a full-and-final settlement: the customer pays
-     * settlement_amount (less than what's actually outstanding) and the
-     * remainder is written off once paid.
+     * Create a negotiated full-and-final settlement proposal.
+     * The snapshot amount is retained so Settlement UI can always show
+     * "amount due when moved to settlement" vs "customer settled at".
      */
     public function propose(
         RepaymentAccount $account,
@@ -54,7 +52,7 @@ class SettlementService
         return RepaymentSettlement::create([
             'repayment_account_id' => $account->id,
             'total_outstanding_at_proposal' => $totalOutstanding,
-            'settlement_amount' => $settlementAmount,
+            'settlement_amount' => round($settlementAmount, 2),
             'waived_amount' => round($totalOutstanding - $settlementAmount, 2),
             'status' => SettlementStatus::PROPOSED->value,
             'reason' => $reason,
@@ -91,25 +89,39 @@ class SettlementService
     }
 
     /**
-     * Record that the customer paid the settlement amount, write off the
-     * remaining outstanding balance across installments so the ledger
-     * actually zeroes out (not just a status flag flip), and close the loan.
+     * Collect only the negotiated settlement amount. Remaining future EMIs
+     * are frozen as SETTLED (not PAID), which keeps the audit trail honest
+     * and prevents those EMIs from becoming pending again later.
      */
-    public function markPaidAndClose(RepaymentSettlement $settlement, ?string $paidReference, ?int $actorId = null): RepaymentSettlement
-    {
-        return DB::transaction(function () use ($settlement, $paidReference, $actorId) {
-            $settlement = RepaymentSettlement::where('id', $settlement->id)->lockForUpdate()->first();
+    public function markPaidAndClose(
+        RepaymentSettlement $settlement,
+        ?string $paidReference,
+        ?int $actorId = null,
+        ?string $settlementDate = null
+    ): RepaymentSettlement {
+        return DB::transaction(function () use ($settlement, $paidReference, $actorId, $settlementDate) {
+            $settlement = RepaymentSettlement::where('id', $settlement->id)
+                ->lockForUpdate()
+                ->first();
+
             $this->assertStatus($settlement, SettlementStatus::APPROVED);
 
-            $account = RepaymentAccount::where('id', $settlement->repayment_account_id)->lockForUpdate()->first();
-            $oldAccountStatus = $account->status;
+            $account = RepaymentAccount::where('id', $settlement->repayment_account_id)
+                ->lockForUpdate()
+                ->first();
 
+            $oldAccountStatus = $account->status;
             $idempotencyKey = 'SETTLEMENT_' . $settlement->uuid;
             $postingTimestamp = now();
+            $effectiveDate = $settlementDate ?: $postingTimestamp->toDateString();
+            $settlementAmount = number_format((float) $settlement->settlement_amount, 2, '.', '');
 
             if (!RepaymentTransaction::where('idempotency_key', $idempotencyKey)->exists()) {
                 $installments = $account->installments()
-                    ->where('outstanding_amount', '>', 0)
+                    ->whereIn('payment_status', [
+                        InstallmentPaymentStatus::UNPAID->value,
+                        InstallmentPaymentStatus::PARTIAL->value,
+                    ])
                     ->orderBy('due_date')
                     ->orderBy('installment_number')
                     ->lockForUpdate()
@@ -119,67 +131,64 @@ class SettlementService
                     'repayment_account_id' => $account->id,
                     'transaction_number' => $this->transactionNumberGenerator->generateTemporary(),
                     'idempotency_key' => $idempotencyKey,
-                    'transaction_type' => RepaymentTransactionType::ADJUSTMENT->value,
-                    'amount' => $account->total_outstanding,
-                    'allocated_amount' => $account->total_outstanding,
+                    'transaction_type' => RepaymentTransactionType::SETTLEMENT->value,
+                    'amount' => $settlementAmount,
+                    'allocated_amount' => $settlementAmount,
                     'unallocated_amount' => '0.00',
                     'transaction_reference' => $paidReference,
-                    'received_date' => $postingTimestamp->toDateString(),
-                    'value_date' => $postingTimestamp->toDateString(),
+                    'received_date' => $effectiveDate,
+                    'value_date' => $effectiveDate,
                     'status' => RepaymentTransactionStatus::POSTED->value,
                     'posted_at' => $postingTimestamp,
-                    'remarks' => 'Full-and-final settlement closure.',
+                    'remarks' => 'Negotiated full-and-final settlement payment.',
                     'metadata' => [
+                        'posting_source' => 'SETTLEMENT',
+                        'allocation_strategy' => 'ACCOUNT_LEVEL_FULL_AND_FINAL',
                         'settlement_uuid' => $settlement->uuid,
-                        'settlement_amount_collected' => (string) $settlement->settlement_amount,
+                        'total_outstanding_at_proposal' => (string) $settlement->total_outstanding_at_proposal,
+                        'settlement_amount_collected' => $settlementAmount,
                         'waived_amount' => (string) $settlement->waived_amount,
+                        'frozen_installments_count' => $installments->count(),
                     ],
                     'created_by' => $actorId,
                     'approved_by' => $actorId,
                 ]);
 
-                $transaction->transaction_number = $this->transactionNumberGenerator->generateFinal(
-                    (int) $transaction->id,
-                    $postingTimestamp
-                );
-                $transaction->save();
-
-                $allocationOrder = 1;
+                $transaction->forceFill([
+                    'transaction_number' => $this->transactionNumberGenerator->generateFinal(
+                        (int) $transaction->id,
+                        $postingTimestamp
+                    ),
+                ])->save();
 
                 foreach ($installments as $installment) {
-                    $remainingInterest = bcsub((string) $installment->interest_due, (string) $installment->interest_paid, 2);
-                    $remainingPrincipal = bcsub((string) $installment->principal_due, (string) $installment->principal_paid, 2);
-
-                    if (bccomp($remainingInterest, '0.00', 2) === 1) {
-                        RepaymentAllocation::create([
-                            'repayment_transaction_id' => $transaction->id,
-                            'repayment_installment_id' => $installment->id,
-                            'component' => AllocationComponent::INTEREST->value,
-                            'amount' => $remainingInterest,
-                            'allocation_order' => $allocationOrder++,
-                            'metadata' => ['reason' => 'settlement_write_off'],
-                        ]);
-                    }
-
-                    if (bccomp($remainingPrincipal, '0.00', 2) === 1) {
-                        RepaymentAllocation::create([
-                            'repayment_transaction_id' => $transaction->id,
-                            'repayment_installment_id' => $installment->id,
-                            'component' => AllocationComponent::PRINCIPAL->value,
-                            'amount' => $remainingPrincipal,
-                            'allocation_order' => $allocationOrder++,
-                            'metadata' => ['reason' => 'settlement_write_off'],
-                        ]);
-                    }
+                    $oldPaymentStatus = $installment->payment_status;
+                    $outstandingBeforeClosure = (string) $installment->outstanding_amount;
 
                     $installment->forceFill([
-                        'principal_paid' => $installment->principal_due,
-                        'interest_paid' => $installment->interest_due,
+                        // Do not fabricate principal/interest paid for a write-off.
                         'outstanding_amount' => '0.00',
-                        'payment_status' => InstallmentPaymentStatus::PAID->value,
-                        'last_payment_at' => $postingTimestamp,
-                        'fully_paid_at' => $postingTimestamp,
+                        'payment_status' => InstallmentPaymentStatus::SETTLED->value,
+                        'fully_paid_at' => null,
                     ])->save();
+
+                    RepaymentStatusHistory::create([
+                        'repayment_account_id' => $account->id,
+                        'repayment_installment_id' => $installment->id,
+                        'repayment_transaction_id' => $transaction->id,
+                        'status_type' => StatusHistoryType::PAYMENT_STATUS->value,
+                        'old_status' => $oldPaymentStatus->value,
+                        'new_status' => InstallmentPaymentStatus::SETTLED->value,
+                        'source' => StatusHistorySource::ACCOUNT_CLOSURE->value,
+                        'reason' => 'Remaining installment frozen because the loan was settled.',
+                        'metadata' => [
+                            'settlement_date' => $effectiveDate,
+                            'outstanding_before_closure' => $outstandingBeforeClosure,
+                            'settlement_uuid' => $settlement->uuid,
+                        ],
+                        'changed_by' => $actorId,
+                        'changed_at' => $postingTimestamp,
+                    ]);
                 }
 
                 $account->forceFill([
@@ -187,10 +196,10 @@ class SettlementService
                     'interest_outstanding' => '0.00',
                     'total_outstanding' => '0.00',
                     'overdue_amount' => '0.00',
-                    'total_received' => bcadd((string) $account->total_received, (string) $settlement->settlement_amount, 2),
+                    'total_received' => bcadd((string) $account->total_received, $settlementAmount, 2),
                     'next_due_date' => null,
                     'last_payment_at' => $postingTimestamp,
-                    'status' => RepaymentAccountStatus::CLOSED->value,
+                    'status' => RepaymentAccountStatus::SETTLED->value,
                     'closed_at' => $postingTimestamp,
                     'updated_by' => $actorId,
                 ])->save();
@@ -200,13 +209,14 @@ class SettlementService
                     'repayment_transaction_id' => $transaction->id,
                     'status_type' => StatusHistoryType::ACCOUNT_STATUS->value,
                     'old_status' => $oldAccountStatus->value,
-                    'new_status' => RepaymentAccountStatus::CLOSED->value,
+                    'new_status' => RepaymentAccountStatus::SETTLED->value,
                     'source' => StatusHistorySource::ACCOUNT_CLOSURE->value,
-                    'reason' => 'Full-and-final settlement paid and closed.',
+                    'reason' => 'Negotiated full-and-final settlement paid and closed.',
                     'metadata' => [
                         'settlement_uuid' => $settlement->uuid,
-                        'settlement_amount' => (string) $settlement->settlement_amount,
+                        'settlement_amount' => $settlementAmount,
                         'waived_amount' => (string) $settlement->waived_amount,
+                        'settlement_date' => $effectiveDate,
                     ],
                     'changed_by' => $actorId,
                     'changed_at' => $postingTimestamp,
@@ -215,11 +225,12 @@ class SettlementService
 
             $settlement->update([
                 'status' => SettlementStatus::PAID->value,
-                'paid_at' => now(),
+                'settlement_date' => $effectiveDate,
+                'paid_at' => $postingTimestamp,
                 'paid_reference' => $paidReference,
             ]);
 
-            return $settlement->fresh();
+            return $settlement->fresh(['account']);
         });
     }
 

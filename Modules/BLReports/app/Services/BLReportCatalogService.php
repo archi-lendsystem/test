@@ -9,8 +9,8 @@ use Modules\BLReports\Enums\BLReportStatus;
 use Modules\BLReports\Enums\BLReportType;
 use Modules\BLReports\Exceptions\BLReportException;
 use Modules\BLReports\Models\BLReport;
-use Modules\ESign\Models\ESignDocument;
-use Modules\ESign\Services\BLCombinedDocumentService;
+use Modules\ESign\Models\SigningRequest;
+
 use Throwable;
 
 final class BLReportCatalogService
@@ -36,16 +36,13 @@ final class BLReportCatalogService
 
         /*
          * Disbursement is optional.
-         * Used only for loan metadata.
+         * It is used only for loan metadata when available.
          */
         $disbursement = BLDisbursment::query()
             ->where('lead_uuid', $leadUuid)
             ->latest('id')
             ->first();
 
-        /*
-         * Get latest version of every BL report.
-         */
         $existingReports = BLReport::query()
             ->where('lead_uuid', $leadUuid)
             ->orderByDesc('version')
@@ -60,49 +57,70 @@ final class BLReportCatalogService
                     $report->report_type->value
             );
 
-        /*
-         * There is now ONE eSign document for the complete BL package:
-         *
-         * Sanction Letter
-         * +
-         * Loan Application
-         * +
-         * Loan Agreement
-         * +
-         * DPN
-         * +
-         * Key Facts Statement
-         * +
-         * Declaration
-         */
-        $signingDocument = ESignDocument::query()
-            ->with([
-                'borrowerSession',
-                'lenderSession',
-            ])
-            ->where('lead_uuid', $leadUuid)
-            ->where(
-                'document_type',
-                BLCombinedDocumentService::DOCUMENT_TYPE
+                $reportIds = $existingReports
+            ->pluck('id')
+            ->filter()
+            ->map(
+                fn ($id): int => (int) $id
             )
-            ->orderByDesc('version')
-            ->orderByDesc('id')
-            ->first();
+            ->values();
+
+        $signingRequests = collect();
+
+        if ($reportIds->isNotEmpty()) {
+            $signingRequests = SigningRequest::query()
+                ->select([
+                    'id',
+                    'uuid',
+                    'module_id',
+                    'status',
+                    'signing_url',
+                    'signed_pdf_path',
+                    'completed_at',
+                    'created_at',
+                    'updated_at',
+                ])
+                ->where(
+                    'module_type',
+                    'bl_reports'
+                )
+                ->whereIn(
+                    'module_id',
+                    $reportIds->all()
+                )
+                ->orderByDesc('id')
+                ->get()
+                ->unique(
+                    fn (SigningRequest $request): string =>
+                        (string) $request->module_id
+                )
+                ->keyBy(
+                    fn (SigningRequest $request): string =>
+                        (string) $request->module_id
+                );
+        }
 
         $reports = collect(BLReportType::ordered())
             ->map(function (BLReportType $type) use (
                 $existingReports,
-                $signingDocument
+                $signingRequests
             ): array {
                 /** @var BLReport|null $report */
                 $report = $existingReports->get(
                     $type->value
                 );
 
+                /** @var SigningRequest|null $signingRequest */
+                $signingRequest = $report
+                    ? $signingRequests->get(
+                        (string) $report->id
+                    )
+                    : null;
+
                 return $this->formatReport(
                     type: $type,
                     report: $report,
-                    signingDocument: $signingDocument
+                    signingRequest: $signingRequest
                 );
             })
             ->values()
@@ -113,10 +131,13 @@ final class BLReportCatalogService
             'lead_id' => $lead->lead_id,
             'loan_number' => $disbursement?->loan_number,
 
+            /*
+             * Informational only.
+             * Report generation/download does not depend on this.
+             */
             'is_disbursed' => $disbursement !== null,
 
             'message' => 'Reports fetched successfully.',
-
             'reports' => $reports,
         ];
     }
@@ -124,7 +145,7 @@ final class BLReportCatalogService
     private function formatReport(
         BLReportType $type,
         ?BLReport $report,
-        ?ESignDocument $signingDocument
+        ?SigningRequest $signingRequest
     ): array {
         if (! $report) {
             return [
@@ -148,133 +169,99 @@ final class BLReportCatalogService
             ];
         }
 
-        $downloadAvailable = $this->isDownloadAvailable(
-            $report
-        );
+        $downloadAvailable =
+            $this->isDownloadAvailable($report);
 
         return [
             'uuid' => $report->uuid,
-
-            'report_type' =>
-                $report->report_type->value,
-
-            'document_name' =>
-                $report->document_name,
-
-            'version' =>
-                $report->version,
-
-            'status' =>
-                $report->status->value,
-
-            'download_available' =>
-                $downloadAvailable,
-
+            'report_type' => $report->report_type->value,
+            'document_name' => $report->document_name,
+            'version' => $report->version,
+            'status' => $report->status->value,
+            'download_available' => $downloadAvailable,
             'generated_at' =>
                 $report->generated_at?->toIso8601String(),
+            'message' => $this->statusMessage(
+                status: $report->status,
+                downloadAvailable: $downloadAvailable
+            ),
 
-            'message' =>
-                $this->statusMessage(
-                    status: $report->status,
-                    downloadAvailable: $downloadAvailable
-                ),
-
-            /*
-             * Same combined eSign journey is shown
-             * against every report.
-             */
-            'esign' =>
-                $this->formatESign(
-                    signingDocument: $signingDocument,
-                    canSignDocument: $downloadAvailable
-                ),
+            'esign' => $this->formatESign(
+                signingRequest: $signingRequest,
+                canSignDocument: $downloadAvailable
+            ),
         ];
     }
 
     private function formatESign(
-        ?ESignDocument $signingDocument,
-        bool $canSignDocument
-    ): array {
-        /*
-         * No combined signing has started yet.
-         */
-        if (! $signingDocument) {
-            return [
-                'status' => null,
-
-                'request_uuid' => null,
-
-                'can_request' =>
-                    $canSignDocument,
-
-                'can_resume' =>
-                    false,
-
-                'signing_url' =>
-                    null,
-
-                'completed_at' =>
-                    null,
-            ];
-        }
-
-        $status =
-            $signingDocument->status->value;
-
-        /*
-         * Decide whose signing URL should currently
-         * be exposed.
-         *
-         * borrower_pending -> borrower URL
-         * lender_pending   -> lender URL
-         */
-        $activeSession = match ($status) {
-            'borrower_pending' =>
-                $signingDocument->borrowerSession,
-
-            'lender_pending' =>
-                $signingDocument->lenderSession,
-
-            default =>
-                null,
-        };
-
-        $signingUrl =
-            $activeSession?->hasUsableUrl()
-                ? $activeSession->esign_url
-                : null;
-
+    ?SigningRequest $signingRequest,
+    bool $canSignDocument
+): array {
+    if (! $signingRequest) {
         return [
-            'status' =>
-                $status,
-
-            'request_uuid' =>
-                $signingDocument->uuid,
-
-            /*
-             * New signing can be requested again only
-             * when previous workflow failed.
-             */
-            'can_request' =>
-                $canSignDocument
-                && $status === 'failed',
-
-            /*
-             * Resume means there is still an active
-             * borrower/lender signing link.
-             */
-            'can_resume' =>
-                $signingUrl !== null,
-
-            'signing_url' =>
-                $signingUrl,
-
-            'completed_at' =>
-                $signingDocument
-                    ->completed_at
-                    ?->toIso8601String(),
+            'status' => null,
+            'request_uuid' => null,
+            'can_request' => $canSignDocument,
+            'can_resume' => false,
+            'signing_url' => null,
+            'completed_at' => null,
         ];
     }
+
+    $status = strtolower(
+        trim(
+            (string) $signingRequest->status
+        )
+    );
+
+    $canRetry = in_array(
+        $status,
+        [
+            'failed',
+            'cancelled',
+        ],
+        true
+    );
+
+    $canResume = in_array(
+        $status,
+        [
+            'initiated',
+            'pending',
+            'in_progress',
+        ],
+        true
+    )
+        && ! empty(
+            $signingRequest->signing_url
+        );
+
+    return [
+        'status' => $status !== ''
+            ? $status
+            : null,
+
+        'request_uuid' =>
+            $signingRequest->uuid,
+
+        'can_request' =>
+            $canSignDocument
+            && $canRetry,
+
+        'can_resume' =>
+            $canResume,
+
+        'signing_url' =>
+            $canResume
+                ? $signingRequest->signing_url
+                : null,
+
+        'completed_at' =>
+            $signingRequest
+                ->completed_at
+                ?->toIso8601String(),
+    ];
+}
 
     private function isDownloadAvailable(
         BLReport $report
@@ -291,21 +278,14 @@ final class BLReportCatalogService
             Log::warning(
                 'BL report file availability check failed.',
                 [
-                    'lead_uuid' =>
-                        $report->lead_uuid,
-
-                    'report_uuid' =>
-                        $report->uuid,
-
+                    'lead_uuid' => $report->lead_uuid,
+                    'report_uuid' => $report->uuid,
                     'report_type' =>
                         $report->report_type->value,
-
                     'storage_disk' =>
                         $report->storage_disk,
-
                     'file_path' =>
                         $report->file_path,
-
                     'message' =>
                         $exception->getMessage(),
                 ]

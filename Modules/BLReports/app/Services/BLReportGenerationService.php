@@ -104,6 +104,32 @@ final class BLReportGenerationService
     }
 
     /**
+ * Regenerate a previously generated report before download.
+ */
+public function regenerateForDownload(
+    BLReport $report,
+    ?int $generatedBy = null
+): array {
+    $data = $this->dataService->build(
+        $report->lead_uuid
+    );
+
+    $reportType = $report->report_type;
+
+    if (! $reportType instanceof BLReportType) {
+        $reportType = BLReportType::from(
+            (string) $reportType
+        );
+    }
+
+    return $this->generateOne(
+        reportType: $reportType,
+        data: $data,
+        generatedBy: $generatedBy
+    );
+}
+
+    /**
      * Generate a single report.
      */
     private function generateOne(
@@ -181,10 +207,10 @@ final class BLReportGenerationService
          * When the context changes, an already-generated report
          * must be regenerated with the latest loan information.
          */
-        $sameGenerationContext =
-            $report->exists
-            && $report->disbursement_id === $disbursementId
-            && $report->loan_number === $loanNumber;
+        // $sameGenerationContext =
+        //     $report->exists
+        //     && $report->disbursement_id === $disbursementId
+        //     && $report->loan_number === $loanNumber;
 
         $report->fill([
             'disbursement_id' => $disbursementId,
@@ -207,16 +233,16 @@ final class BLReportGenerationService
          * generated, the context changes and the report will
          * therefore be regenerated.
          */
-        if (
-            $report->status === BLReportStatus::GENERATED
-            && $sameGenerationContext
-            && $this->storageService->exists($report)
-        ) {
-            return $this->formatResult(
-                report: $report,
-                message: 'Report already generated.'
-            );
-        }
+        // if (
+        //     $report->status === BLReportStatus::GENERATED
+        //     && $sameGenerationContext
+        //     && $this->storageService->exists($report)
+        // ) {
+        //     return $this->formatResult(
+        //         report: $report,
+        //         message: 'Report already generated.'
+        //     );
+        // }
 
         $report->forceFill([
             'status' => BLReportStatus::GENERATING,

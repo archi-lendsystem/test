@@ -9,10 +9,10 @@ use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 use Modules\NOC\Models\NocCertificate;
 use Modules\Repayment\Enums\RepaymentAccountStatus;
 use Modules\Repayment\Models\RepaymentAccount;
+use Modules\UserManagement\Support\ReportBranchAccess;
 use Throwable;
 
 class NOCController extends Controller
@@ -25,17 +25,49 @@ class NOCController extends Controller
     public function index(Request $request): JsonResponse
     {
         $validated = $request->validate([
+            'branch_id' => 'nullable|integer|exists:organization_branches,id',   //branch wize
             'search' => 'nullable|string|max:255',
             'per_page' => 'nullable|integer|min:1|max:200',
         ]);
 
-        $query = RepaymentAccount::query()
-            ->where('status', RepaymentAccountStatus::CLOSED->value)
+        $branchId = !empty($validated['branch_id'])   //branch wize
+            ? (int) $validated['branch_id']
+            : null;
+
+        // $query = RepaymentAccount::query()
+        //     ->where('status', RepaymentAccountStatus::CLOSED->value)
+        //     ->with([
+        //         'lead:uuid,lead_id',
+        //         'lead.applicantDetails' => fn ($q) => $q
+        //             ->where('applicant_sno', 0)
+        //             ->select(['id', 'lead_uuid', 'full_name', 'alternate_contact_number']),
+        //         'nocCertificate',
+        //     ]);
+
+        $query = ReportBranchAccess::scopeByRelation(
+            RepaymentAccount::query(),
+            $request->user(),
+            'lead',
+            $branchId
+        )
+            ->where(
+                'status',
+                RepaymentAccountStatus::CLOSED->value
+            )
             ->with([
-                'lead:uuid,lead_id',
-                'lead.applicantDetails' => fn ($q) => $q
+                'lead:uuid,lead_id,branch_id',
+
+                'lead.branch:id,name,branch_code',
+
+                'lead.applicantDetails' => fn($q) => $q
                     ->where('applicant_sno', 0)
-                    ->select(['id', 'lead_uuid', 'full_name', 'alternate_contact_number']),
+                    ->select([
+                        'id',
+                        'lead_uuid',
+                        'full_name',
+                        'alternate_contact_number',
+                    ]),
+
                 'nocCertificate',
             ]);
 
@@ -43,7 +75,7 @@ class NOCController extends Controller
             $search = $validated['search'];
             $query->where(function ($q) use ($search) {
                 $q->where('loan_number', 'like', "%{$search}%")
-                    ->orWhereHas('lead.applicantDetails', fn ($aq) => $aq->where('full_name', 'like', "%{$search}%"));
+                    ->orWhereHas('lead.applicantDetails', fn($aq) => $aq->where('full_name', 'like', "%{$search}%"));
             });
         }
 
@@ -79,14 +111,18 @@ class NOCController extends Controller
     }
 
     /**
-     * Generate (or re-fetch, if one already exists) the NOC for a closed
-     * loan, including its PDF.
+     * Issue an NOC record for a closed loan (or return the existing one).
+     *
+     * NOTE: this no longer builds or stores a PDF. The PDF is built fresh,
+     * in-memory, every time download() is called — that's what lets the
+     * "print date" the employee types in change what actually prints,
+     * instead of always returning a file generated once at issue time.
      */
     public function store(Request $request, string $accountUuid): JsonResponse
     {
         $account = RepaymentAccount::with([
             'lead:uuid,lead_id',
-            'lead.applicantDetails' => fn ($q) => $q->where('applicant_sno', 0),
+            'lead.applicantDetails' => fn($q) => $q->where('applicant_sno', 0),
         ])->where('uuid', $accountUuid)->first();
 
         if (!$account) {
@@ -113,31 +149,9 @@ class NOCController extends Controller
                     return ['noc' => $existing, 'already_existed' => true];
                 }
 
-                $applicant = $account->lead?->applicantDetails->first();
-                $applicantName = $applicant?->full_name ?? '—';
-                $leadId = $account->lead?->lead_id ?? '—';
                 $closureType = $validated['closure_type'] ?? 'NORMAL_CLOSURE';
 
                 $noc = $this->createNocWithRetry($locked->id, $closureType, $validated['remarks'] ?? null, optional($request->user())->id);
-
-                $closureTypeLabel = match ($closureType) {
-                    'FORECLOSURE' => 'Foreclosure',
-                    'SETTLEMENT' => 'Settlement',
-                    default => 'Normal Closure',
-                };
-
-                $pdf = Pdf::loadView('noc::pdf.noc-certificate', [
-                    'noc' => $noc,
-                    'account' => $locked,
-                    'applicantName' => $applicantName,
-                    'leadId' => $leadId,
-                    'closureTypeLabel' => $closureTypeLabel,
-                ])->setPaper('a4', 'portrait');
-
-                $pdfPath = 'noc/' . now()->format('Y/m') . "/{$noc->noc_number}.pdf";
-                Storage::disk('local')->put($pdfPath, $pdf->output());
-
-                $noc->update(['pdf_path' => $pdfPath]);
 
                 return ['noc' => $noc->fresh(), 'already_existed' => false];
             });
@@ -178,17 +192,51 @@ class NOCController extends Controller
     }
 
     /**
-     * Download a previously generated NOC PDF.
+     * Build the NOC PDF fresh on every call and stream it straight to the
+     * browser — nothing is read from or written to disk. This is what
+     * makes the "print date" the employee fills in on the list page take
+     * effect: each download re-renders the certificate with whatever
+     * print_date was submitted (falling back to today's date if it wasn't).
      */
-    public function download(string $nocUuid)
+    public function download(Request $request, string $nocUuid)
     {
-        $noc = NocCertificate::where('uuid', $nocUuid)->first();
+        $validated = $request->validate([
+            'print_date' => 'nullable|date',
+        ]);
 
-        if (!$noc || !$noc->pdf_path || !Storage::disk('local')->exists($noc->pdf_path)) {
+        $noc = NocCertificate::with([
+            'account',
+            'account.lead:uuid,lead_id',
+            'account.lead.applicantDetails' => fn($q) => $q
+                ->where('applicant_sno', 0)
+                ->select(['id', 'lead_uuid', 'full_name']),
+        ])->where('uuid', $nocUuid)->first();
+
+        if (!$noc) {
             return $this->error('NOC certificate not found.', null, 404);
         }
 
-        return Storage::disk('local')->download($noc->pdf_path, "{$noc->noc_number}.pdf");
+        $account = $noc->account;
+        $applicant = $account?->lead?->applicantDetails->first();
+        $applicantName = $applicant?->full_name ?? '—';
+        $leadId = $account?->lead?->lead_id ?? '—';
+
+        $closureTypeLabel = match ($noc->closure_type) {
+            'FORECLOSURE' => 'Foreclosure',
+            'SETTLEMENT' => 'Settlement',
+            default => 'Normal Closure',
+        };
+
+        $pdf = Pdf::loadView('noc::pdf.noc-certificate', [
+            'noc' => $noc,
+            'account' => $account,
+            'applicantName' => $applicantName,
+            'leadId' => $leadId,
+            'closureTypeLabel' => $closureTypeLabel,
+            'printDate' => $validated['print_date'] ?? null,
+        ])->setPaper('a4', 'portrait');
+
+        return $pdf->download("{$noc->noc_number}.pdf");
     }
 
     private function generateNocNumber(): string

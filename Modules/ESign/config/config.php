@@ -1,460 +1,214 @@
 <?php
 
-use Modules\ESign\Services\ConfigurableHttpESignProvider;
+// // Sandbox and production use different hosts (not just a flag) — base_url
+// // must follow env unless explicitly overridden.
+// $digioEnv = env('DIGIO_ENV', 'sandbox');
+
+// return [
+//     'env'            => $digioEnv,
+//     'base_url'       => env('DIGIO_BASE_URL', $digioEnv === 'production' ? 'https://api.digio.in' : 'https://ext.digio.in:444'),
+//     'client_id'      => env('DIGIO_CLIENT_ID'),
+//     'client_secret'  => env('DIGIO_CLIENT_SECRET'),
+//     'webhook_secret' => env('DIGIO_WEBHOOK_SECRET'),
+//     'timeout'        => env('DIGIO_API_TIMEOUT', 30),
+//     'max_retries'    => env('DIGIO_MAX_RETRIES', 3),
+
+//     'endpoints' => [
+//         'create_sign_request' => '/v2/client/document/uploadpdf',
+//         'get_status'          => '/v2/client/document/',
+//         'download_document'   => '/v2/client/document/download/',
+//     ],
+
+//     // DigiCollect / eNACH mandate endpoints. Digio's docs portal gates the
+//     // exact request/response schema behind a JS code-sample widget that
+//     // could not be scraped — paths below are best-effort from published
+//     // field names (ENA id, UMRN) and should be confirmed against the
+//     // logged-in Digio dashboard docs before go-live.
+//     'nach_endpoints' => [
+//         'create_mandate'  => '/client/nach/mandate/create',
+//         'mandate_status'  => '/client/nach/mandate/',
+//         'cancel_mandate'  => '/client/nach/mandate/cancel/',
+//     ],
+// ];
+
+
+$digioEnv = strtolower(trim((string) env('DIGIO_ENV', 'sandbox')));
+
+// Safety fallback:
+// Unknown/mistyped environments must never accidentally point to production.
+if (! in_array($digioEnv, ['sandbox', 'production'], true)) {
+    $digioEnv = 'sandbox';
+}
 
 return [
 
-    'name' => 'ESign',
-
-    'enabled' => (bool) env(
-        'ESIGN_ENABLED',
-        true
-    ),
-
-    'provider_class' => ConfigurableHttpESignProvider::class,
-
     /*
     |--------------------------------------------------------------------------
-    | Provider
+    | Digio Environment
     |--------------------------------------------------------------------------
     */
 
-    'provider' => [
-
-        'name' => env(
-            'ESIGN_PROVIDER_NAME',
-            'thelendsystem'
-        ),
-
-        'base_url' => rtrim(
-            (string) env(
-                'ESIGN_PROVIDER_BASE_URL',
-                'https://api.thelendsystem.com'
-            ),
-            '/'
-        ),
-
-        /*
-        | App Key + Secret Key headers
-        */
-
-        'auth_mode' => 'headers',
-
-        'app_key' => env(
-            'ESIGN_PROVIDER_APP_KEY'
-        ),
-
-        'secret_key' => env(
-            'ESIGN_PROVIDER_SECRET_KEY'
-        ),
-
-        'app_key_header' => 'X-App-Key',
-
-        'secret_key_header' => 'X-Secret-Key',
-
-        /*
-        | eSign (esign-generate/short-url/get-doc) is documented as
-        | "Production only — not available in UAT" for every step, so
-        | this always defaults to production regardless of what other
-        | Lendsystem products (DigiLocker/PAN/Liveness/...) are set to.
-        | Omitting X-Environment defaults to uat on the vendor's side,
-        | which rejects a production-scoped secret key outright.
-        */
-        'environment' => env(
-            'ESIGN_PROVIDER_ENVIRONMENT',
-            'production'
-        ),
-
-        'environment_header' => 'X-Environment',
-
-        /*
-        | Actual provider endpoints
-        */
-
-        'endpoints' => [
-
-            'generate' => env(
-                'ESIGN_PROVIDER_GENERATE_ENDPOINT',
-                '/api/v1/verify/esign-generate'
-            ),
-
-            'short_url' => env(
-                'ESIGN_PROVIDER_SHORT_URL_ENDPOINT',
-                '/api/v1/verify/esign-generate-short-url'
-            ),
-
-            'get_doc' => env(
-                'ESIGN_PROVIDER_GET_DOC_ENDPOINT',
-                '/api/v1/verify/esign-get-doc'
-            ),
-        ],
-
-        /*
-        | Where to read fields from the vendor's response envelope
-        | ({success,message,status_code,request_id,timestamp,data:{...}}
-        | — same shape as DigiLocker/Liveness/Geocoding).
-        */
-        'response_paths' => [
-
-            'request_id' => 'data.request_id',
-
-            'reference_key' => 'data.ReferenceKey',
-
-            'signing_url' => 'data.esign_url',
-
-            'upload_url' => 'data.upload_url',
-
-            'status' => 'data.status',
-
-            'download_url' => 'data.download_url',
-        ],
-
-        /*
-        | Step 1's "status" (eg. "created") and Step 3's per-signer
-        | "state" (eg. "signed"/"notsigned") both flow through the same
-        | mappedStatus() lookup.
-        */
-        'status_map' => [
-
-            'created' => 'pending',
-
-            'pending' => 'pending',
-
-            'notsigned' => 'pending',
-
-            'not_signed' => 'pending',
-
-            'signed' => 'signed',
-
-            'failed' => 'failed',
-
-            'expired' => 'expired',
-
-            'cancelled' => 'cancelled',
-        ],
-
-        /*
-        | HTTP
-        */
-
-        'timeout' => 30,
-
-        'connect_timeout' => 10,
-
-        'retry_times' => 2,
-
-        'retry_sleep_ms' => 250,
-
-        'verify_tls' => true,
-
-        /*
-        | Webhook verification
-        */
-
-        'webhook' => [
-
-            // Public callback URL to register in the eSign provider portal.
-            'public_url' => env(
-                'ESIGN_WEBHOOK_URL',
-                rtrim((string) env('APP_URL'), '/').'/api/esign/webhook'
-            ),
-
-            // hmac (recommended), token, or none (only for providers with no verification support).
-            'verification_mode' => env(
-                'ESIGN_WEBHOOK_VERIFICATION_MODE',
-                'hmac'
-            ),
-
-            'secret' => env(
-                'ESIGN_WEBHOOK_SECRET'
-            ),
-
-            'signature_header' =>
-                env('ESIGN_WEBHOOK_SIGNATURE_HEADER', 'X-ESign-Signature'),
-
-            'timestamp_header' =>
-                env('ESIGN_WEBHOOK_TIMESTAMP_HEADER', 'X-ESign-Timestamp'),
-
-            'token_header' =>
-                env('ESIGN_WEBHOOK_TOKEN_HEADER', 'X-ESign-Webhook-Token'),
-
-            'algorithm' => env(
-                'ESIGN_WEBHOOK_ALGORITHM',
-                'sha256'
-            ),
-
-            'tolerance_seconds' => env(
-                'ESIGN_WEBHOOK_TOLERANCE',
-                300
-            ),
-        ],
-
-        // Override these paths if the provider's webhook payload uses a different envelope.
-        'webhook_paths' => [
-            'event_id' => env('ESIGN_WEBHOOK_EVENT_ID_PATH', 'event_id'),
-            'reference_key' => env('ESIGN_WEBHOOK_REFERENCE_KEY_PATH', 'data.ReferenceKey'),
-            'request_id' => env('ESIGN_WEBHOOK_REQUEST_ID_PATH', 'data.request_id'),
-            'document_id' => env('ESIGN_WEBHOOK_DOCUMENT_ID_PATH', 'data.docId'),
-            'status' => env('ESIGN_WEBHOOK_STATUS_PATH', 'data.state'),
-            'occurred_at' => env('ESIGN_WEBHOOK_OCCURRED_AT_PATH', 'timestamp'),
-        ],
-    ],
+    'env' => $digioEnv,
 
     /*
     |--------------------------------------------------------------------------
-    | Templates
+    | Digio Base URL
+    |--------------------------------------------------------------------------
+    |
+    | Sandbox:
+    | https://ext.digio.in:444
+    |
+    | Production:
+    | https://api.digio.in
+    |
+    */
+
+    'base_url' => rtrim(
+        (string) env(
+            'DIGIO_BASE_URL',
+            $digioEnv === 'production'
+                ? 'https://api.digio.in'
+                : 'https://ext.digio.in:444'
+        ),
+        '/'
+    ),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Authentication
     |--------------------------------------------------------------------------
     */
 
-    'template_only' => (bool) env(
-        'ESIGN_TEMPLATE_ONLY',
-        true
-    ),
+    'client_id' => env('DIGIO_CLIENT_ID'),
 
-    // 'templates' => [
-
-    //     'borrower' => env(
-    //         'ESIGN_BORROWER_TEMPLATE_ID'
-    //     ),
-
-    //     'lender' => env(
-    //         'ESIGN_LENDER_TEMPLATE_ID'
-    //     ),
-    // ],
-
-    /*
-     * The provider API supplied for this project does not accept x/y signature
-     * coordinates. Configure two provider templates instead:
-     * - borrower template: signature field on the LEFT
-     * - lender template: signature field on the RIGHT
-     */
-    'templates' => [
-        'borrower' => env('ESIGN_BORROWER_TEMPLATE_ID'),
-        'lender' => env('ESIGN_LENDER_TEMPLATE_ID'),
-    ],
-
-/*
-|--------------------------------------------------------------------------
-| Lender signer
-|--------------------------------------------------------------------------
-*/
-
-'lender' => [
-
-    'name' => env(
-        'ESIGN_LENDER_NAME'
-    ),
-
-    'email' => env(
-        'ESIGN_LENDER_EMAIL'
-    ),
-
-    'mobile' => env(
-        'ESIGN_LENDER_MOBILE'
-    ),
-    
-     'location' => env(
-        'ESIGN_LENDER_LOCATION',
-        'India'
-    ),
-
-    'identifier' => env(
-        'ESIGN_LENDER_IDENTIFIER',
-        'FRIENDLY-SALARY-LENDER'
-    ),
-],
+    'client_secret' => env('DIGIO_CLIENT_SECRET'),
 
     /*
     |--------------------------------------------------------------------------
-    | Link delivery
+    | Webhook
     |--------------------------------------------------------------------------
     */
 
-    'notifications' => [
-        // Step 2 (esign-generate-short-url) is called automatically for lender.
-        'lender_sms' => (bool) env('ESIGN_LENDER_SMS_ENABLED', true),
-    ],
+    'webhook_secret' => env('DIGIO_WEBHOOK_SECRET'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | HTTP Settings
+    |--------------------------------------------------------------------------
+    */
+
+    'timeout' => max(
+        1,
+        (int) env('DIGIO_API_TIMEOUT', 30)
+    ),
+
+    'connect_timeout' => max(
+        1,
+        (int) env('DIGIO_CONNECT_TIMEOUT', 10)
+    ),
+
+    'max_retries' => max(
+        0,
+        (int) env('DIGIO_MAX_RETRIES', 3)
+    ),
+
+    /*
+    |--------------------------------------------------------------------------
+    | DigiSign Defaults
+    |--------------------------------------------------------------------------
+    */
+
+    'sign_request_expiry_days' => max(
+        1,
+        (int) env('DIGIO_SIGN_REQUEST_EXPIRY_DAYS', 10)
+    ),
+
+    'default_display_on_page' => (string) env(
+        'DIGIO_DISPLAY_ON_PAGE',
+        'first'
+    ),
+
+    'notify_signers' => filter_var(
+        env('DIGIO_NOTIFY_SIGNERS', true),
+        FILTER_VALIDATE_BOOL
+    ),
+
+    'send_sign_link' => filter_var(
+        env('DIGIO_SEND_SIGN_LINK', true),
+        FILTER_VALIDATE_BOOL
+    ),
+
+    'generate_access_token' => filter_var(
+        env('DIGIO_GENERATE_ACCESS_TOKEN', true),
+        FILTER_VALIDATE_BOOL
+    ),
 
     /*
     |--------------------------------------------------------------------------
     | Storage
     |--------------------------------------------------------------------------
-    */
-
-    'storage' => [
-
-        'source_disk' => env(
-            'ESIGN_SOURCE_DISK',
-            'local'
-        ),
-
-        'signed_disk' => env(
-            'ESIGN_SIGNED_DISK',
-            'local'
-        ),
-
-        'combined_disk' => env(
-            'ESIGN_COMBINED_DISK',
-            'private'
-        ),
-
-        'directory' => trim(
-            (string) env(
-                'ESIGN_STORAGE_DIRECTORY',
-                'private/esign'
-            ),
-            '/'
-        ),
-
-        'max_pdf_bytes' => 15728640,
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | BL combined package
-    |--------------------------------------------------------------------------
-    */
-
-    'bl' => [
-        'auto_start_lender' => (bool) env('ESIGN_BL_AUTO_START_LENDER', true),
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | Authorization
-    |--------------------------------------------------------------------------
-    */
-
-    'authorization' => [
-
-    /*
-    | Gate ability registered by ESignServiceProvider
-    */
-
-    'backend_ability' => env(
-        'ESIGN_BACKEND_ABILITY',
-        'manage-esign'
-    ),
-
-    /*
-    | Backend roles allowed to manage borrower/lender eSign
-    */
-
-    'backend_roles' => array_values(
-        array_filter(
-            array_map(
-                static fn (string $role): string =>
-                    trim($role),
-                explode(
-                    ',',
-                                       (string) env(
-                        'ESIGN_BACKEND_ROLES',
-                        'administrator,super_administrator,admin,backend-admin,loan-manager,credit,operation'
-                    )
-                )
-            )
-        )
-    ),
-
-    /*
-    | Customer authorization mapping
     |
-    | "auth_identifier" (Sanctum's getAuthIdentifier(), ie. users.id) is
-    | NOT the same number as customer_lendings.customer_id — comparing
-    | those two always fails for a real customer. The User model has its
-    | own customer_id column (copied from the accepted lead) that
-    | actually matches.
+    | Signed documents must not be stored on a publicly accessible disk.
+    |
     */
 
-    'customer_user_key' =>
-        'customer_id',
-
-    'customer_lending_key' =>
-        'customer_id',
-],
-
-    /*
-    |--------------------------------------------------------------------------
-    | Routes
-    |--------------------------------------------------------------------------
-    */
-
-    'routes' => [
-
-        'backend_prefix' =>
-            'api/backend/esign',
-
-        'customer_prefix' =>
-            'api/customer/esign',
-
-        'webhook_prefix' =>
-            'api/esign',
-
-        'backend_middleware' => [
-            'api',
-            'auth:sanctum',
-            'throttle:esign-backend',
-        ],
-
-        'customer_middleware' => [
-            'api',
-            'auth:sanctum',
-            'throttle:esign-customer',
-        ],
-
-        'webhook_middleware' => [
-            'api',
-            'throttle:esign-webhook',
-        ],
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | Queue and polling
-    |--------------------------------------------------------------------------
-    */
-
-    'queue' => env(
-        'ESIGN_QUEUE',
-        'default'
+    'storage_disk' => (string) env(
+        'DIGIO_STORAGE_DISK',
+        'private'
     ),
 
-    'polling' => [
+    /*
+    |--------------------------------------------------------------------------
+    | Security
+    |--------------------------------------------------------------------------
+    |
+    | Sanction and BL Reports will be approved eSign entry points.
+    | Generic arbitrary PDF signing remains disabled.
+    |
+    */
 
-        'stale_after_minutes' => 5,
+    'allow_generic_initiation' => filter_var(
+        env('DIGIO_ALLOW_GENERIC_INITIATION', false),
+        FILTER_VALIDATE_BOOL
+    ),
 
-        'batch_size' => 100,
+    /*
+    |--------------------------------------------------------------------------
+    | DigiSign API Endpoints
+    |--------------------------------------------------------------------------
+    */
+
+    'endpoints' => [
+
+        'create_sign_request' =>
+            '/v2/client/document/uploadpdf',
+
+        'get_document' =>
+            '/v2/client/document/',
+
+        'download_document' =>
+            '/v2/client/document/download',
     ],
 
     /*
     |--------------------------------------------------------------------------
-    | Audit retention
+    | Existing NACH Configuration
     |--------------------------------------------------------------------------
+    |
+    | NACH is outside the current DigiSign scope.
+    | Existing configuration is retained and not modified.
+    |
     */
 
-    'retention' => [
+    'nach_endpoints' => [
 
-        'api_logs_days' => 90,
+        'create_mandate' =>
+            '/client/nach/mandate/create',
 
-        'webhook_events_days' => 180,
-    ],
+        'mandate_status' =>
+            '/client/nach/mandate/',
 
-    /*
-    |--------------------------------------------------------------------------
-    | Log redaction
-    |--------------------------------------------------------------------------
-    */
-
-    'redact_keys' => [
-        'authorization',
-        'app_key',
-        'secret_key',
-        'token',
-        'password',
-        'otp',
-        'signer',
-        'url',
-        'aadhaar',
-        'pan',
+        'cancel_mandate' =>
+            '/client/nach/mandate/cancel/',
     ],
 ];

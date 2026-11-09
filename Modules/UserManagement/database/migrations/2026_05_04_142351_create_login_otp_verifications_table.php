@@ -14,8 +14,7 @@ return new class extends Migration
         Schema::create('login_otp_verifications', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->constrained('users')->onDelete('cascade');
-            $table->string('otp', 6);
-            $table->string('channel', 10)->default('email');
+            $table->string('otp', 4);
             $table->timestamp('expires_at');
             $table->boolean('used')->default(false);
             $table->string('session_id')->nullable();
@@ -26,7 +25,7 @@ return new class extends Migration
             // Indexes for better query performance
             $table->index(['user_id', 'session_id']);
             $table->index(['user_id', 'ip_address']);
-            $table->index(['user_id', 'used', 'expires_at']);
+            $table->index(['user_id', 'used', 'expires_at']); 
         });
     }
 
@@ -38,3 +37,4 @@ return new class extends Migration
         Schema::dropIfExists('login_otp_verifications');
     }
 };
+

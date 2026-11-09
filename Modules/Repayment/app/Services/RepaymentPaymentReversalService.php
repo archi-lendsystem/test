@@ -811,6 +811,13 @@ final class RepaymentPaymentReversalService
                             : null,
             ])->save();
 
+            app(RepaymentInstallmentDueStatusSyncService::class)->sync(
+                $installment,
+                StatusHistorySource::PAYMENT_REVERSAL,
+                $reversalTransaction,
+                $actorId
+            );
+
             if ($oldPaymentStatus !== $newPaymentStatus) {
                 RepaymentStatusHistory::query()->create([
                     'repayment_account_id' =>
@@ -1548,8 +1555,6 @@ final class RepaymentPaymentReversalService
     }
 }
 
-
-
 // namespace Modules\Repayment\Services;
 
 // use Illuminate\Database\QueryException;
@@ -1572,11 +1577,12 @@ final class RepaymentPaymentReversalService
 // {
 //     public function __construct(
 //         private readonly RepaymentTransactionNumberGenerator
-//             $transactionNumberGenerator,
+//         $transactionNumberGenerator,
 
 //         private readonly RepaymentReceiptService
-//             $receiptService
-//     ) {}
+//         $receiptService
+//     ) {
+//     }
 
 //     /**
 //      * Reverse a successfully posted customer payment.
@@ -1591,7 +1597,7 @@ final class RepaymentPaymentReversalService
 //     ): RepaymentTransaction {
 //         try {
 //             return DB::transaction(
-//                 fn (): RepaymentTransaction =>
+//                 fn(): RepaymentTransaction =>
 //                     $this->reverseInsideTransaction(
 //                         accountUuid: $accountUuid,
 //                         transactionUuid: $transactionUuid,
@@ -1601,7 +1607,7 @@ final class RepaymentPaymentReversalService
 //                 attempts: 3
 //             );
 //         } catch (QueryException $exception) {
-//             if (! $this->isDuplicateKeyException($exception)) {
+//             if (!$this->isDuplicateKeyException($exception)) {
 //                 throw $exception;
 //             }
 
@@ -1631,7 +1637,7 @@ final class RepaymentPaymentReversalService
 //             ->lockForUpdate()
 //             ->first();
 
-//         if (! $account) {
+//         if (!$account) {
 //             throw RepaymentPaymentReversalException::accountNotFound(
 //                 $accountUuid
 //             );
@@ -1647,7 +1653,7 @@ final class RepaymentPaymentReversalService
 //             ->lockForUpdate()
 //             ->first();
 
-//         if (! $originalTransaction) {
+//         if (!$originalTransaction) {
 //             throw RepaymentPaymentReversalException::
 //                 transactionNotFound(
 //                     accountUuid: $accountUuid,
@@ -1682,7 +1688,7 @@ final class RepaymentPaymentReversalService
 //                     account: $account,
 //                     originalTransaction: $originalTransaction,
 //                     reversalTransaction:
-//                         $existingByIdempotency,
+//                     $existingByIdempotency,
 //                     payload: $payload
 //                 )
 //             ) {
@@ -1695,7 +1701,7 @@ final class RepaymentPaymentReversalService
 //                 idempotencyConflict(
 //                     idempotencyKey: $idempotencyKey,
 //                     existingTransactionUuid:
-//                         (string) $existingByIdempotency->uuid
+//                     (string) $existingByIdempotency->uuid
 //                 );
 //         }
 
@@ -1712,10 +1718,10 @@ final class RepaymentPaymentReversalService
 //             throw RepaymentPaymentReversalException::
 //                 alreadyReversed(
 //                     transactionUuid:
-//                         (string) $originalTransaction->uuid,
+//                     (string) $originalTransaction->uuid,
 
 //                     reversalTransactionUuid:
-//                         (string) $existingReversal->uuid
+//                     (string) $existingReversal->uuid
 //                 );
 //         }
 
@@ -1740,13 +1746,13 @@ final class RepaymentPaymentReversalService
 //         )->format('Y-m-d');
 
 //         if (
-//             ! $originalReceivedDate
+//             !$originalReceivedDate
 //             || $reversalDate < $originalReceivedDate
 //         ) {
 //             throw RepaymentPaymentReversalException::
 //                 invalidReversalDate(
 //                     originalReceivedDate:
-//                         $originalReceivedDate ?? '',
+//                     $originalReceivedDate ?? '',
 
 //                     reversalDate: $reversalDate
 //                 );
@@ -1795,10 +1801,10 @@ final class RepaymentPaymentReversalService
 //                     accountUuid: (string) $account->uuid,
 
 //                     requiredAmount:
-//                         $originalUnallocatedAmount,
+//                     $originalUnallocatedAmount,
 
 //                     availableAmount:
-//                         $availableAdvance
+//                     $availableAdvance
 //                 );
 //         }
 
@@ -1902,7 +1908,7 @@ final class RepaymentPaymentReversalService
 //         $reversalTransaction->transaction_number =
 //             $this->transactionNumberGenerator->generateFinal(
 //                 transactionId:
-//                     (int) $reversalTransaction->id,
+//                 (int) $reversalTransaction->id,
 
 //                 businessDate: $reversalDate
 //             );
@@ -1915,11 +1921,11 @@ final class RepaymentPaymentReversalService
 //             $this->restoreInstallmentAllocations(
 //                 account: $account,
 //                 originalTransaction:
-//                     $originalTransaction,
+//                 $originalTransaction,
 //                 reversalTransaction:
-//                     $reversalTransaction,
+//                 $reversalTransaction,
 //                 originalAllocations:
-//                     $originalAllocations,
+//                 $originalAllocations,
 //                 actorId: $actorId,
 //                 postingTimestamp: $postingTimestamp
 //             );
@@ -1995,9 +2001,9 @@ final class RepaymentPaymentReversalService
 //         $this->refreshAccountAfterReversal(
 //             account: $account,
 //             originalTransaction:
-//                 $originalTransaction,
+//             $originalTransaction,
 //             reversalTransaction:
-//                 $reversalTransaction,
+//             $reversalTransaction,
 //             actorId: $actorId,
 //             postingTimestamp: $postingTimestamp
 //         );
@@ -2036,7 +2042,7 @@ final class RepaymentPaymentReversalService
 
 //         $installmentIds = $originalAllocations
 //             ->pluck('repayment_installment_id')
-//             ->map(fn ($id): int => (int) $id)
+//             ->map(fn($id): int => (int) $id)
 //             ->unique()
 //             ->sort()
 //             ->values();
@@ -2053,7 +2059,7 @@ final class RepaymentPaymentReversalService
 //             throw RepaymentPaymentReversalException::
 //                 invalidAllocationState(
 //                     transactionUuid:
-//                         (string) $originalTransaction->uuid,
+//                     (string) $originalTransaction->uuid,
 
 //                     details: [
 //                         'reason' =>
@@ -2070,7 +2076,7 @@ final class RepaymentPaymentReversalService
 //         $groupedAllocations = $originalAllocations
 //             ->groupBy('repayment_installment_id')
 //             ->sortBy(
-//                 fn (Collection $group) =>
+//                 fn(Collection $group) =>
 //                     (int) $group->min('allocation_order')
 //             );
 
@@ -2083,16 +2089,16 @@ final class RepaymentPaymentReversalService
 //             );
 
 //             if (
-//                 ! $installment
+//                 !$installment
 //                 || (int) $installment
 //                     ->repayment_account_id
-//                     !== (int) $account->id
+//                 !== (int) $account->id
 //             ) {
 //                 throw RepaymentPaymentReversalException::
 //                     invalidAllocationState(
 //                         transactionUuid:
-//                             (string) $originalTransaction
-//                                 ->uuid,
+//                         (string) $originalTransaction
+//                             ->uuid,
 
 //                         details: [
 //                             'installment_id' =>
@@ -2136,8 +2142,8 @@ final class RepaymentPaymentReversalService
 //                     throw RepaymentPaymentReversalException::
 //                         invalidAllocationState(
 //                             transactionUuid:
-//                                 (string) $originalTransaction
-//                                     ->uuid,
+//                             (string) $originalTransaction
+//                                 ->uuid,
 
 //                             details: [
 //                                 'allocation_uuid' =>
@@ -2214,8 +2220,8 @@ final class RepaymentPaymentReversalService
 //                 throw RepaymentPaymentReversalException::
 //                     invalidAllocationState(
 //                         transactionUuid:
-//                             (string) $originalTransaction
-//                                 ->uuid,
+//                         (string) $originalTransaction
+//                             ->uuid,
 
 //                         details: [
 //                             'installment_uuid' =>
@@ -2248,19 +2254,46 @@ final class RepaymentPaymentReversalService
 //                 2
 //             );
 
-//             $newOutstanding = bcadd(
-//                 bcsub(
-//                     (string) $installment->interest_due,
-//                     $newInterestPaid,
-//                     2
-//                 ),
-//                 bcsub(
-//                     (string) $installment->principal_due,
-//                     $newPrincipalPaid,
-//                     2
-//                 ),
+//             /*
+//              * Restore the reversed allocation back into the rounded
+//              * collectible outstanding. Do not rebuild outstanding from exact
+//              * principal_due + interest_due because that would reintroduce the
+//              * paise residual that caused PARTIAL EMIs.
+//              */
+//             $restoredAmount = bcadd(
+//                 $interestToRestore,
+//                 $principalToRestore,
 //                 2
 //             );
+
+//             $maximumOutstanding =
+//                 $this->roundWholeMoney(
+//                     $installment->installment_amount
+//                 );
+
+//             $newOutstanding = bcadd(
+//                 $this->roundWholeMoney(
+//                     $installment->outstanding_amount
+//                 ),
+//                 $restoredAmount,
+//                 2
+//             );
+
+//             if (
+//                 bccomp(
+//                     $newOutstanding,
+//                     $maximumOutstanding,
+//                     2
+//                 ) === 1
+//             ) {
+//                 $newOutstanding =
+//                     $maximumOutstanding;
+//             }
+
+//             $newOutstanding =
+//                 $this->roundWholeMoney(
+//                     $newOutstanding
+//                 );
 
 //             $newTotalPaid = bcadd(
 //                 $newInterestPaid,
@@ -2321,7 +2354,6 @@ final class RepaymentPaymentReversalService
 //                 'interest_paid' => $newInterestPaid,
 //                 'principal_paid' => $newPrincipalPaid,
 //                 'outstanding_amount' => $newOutstanding,
-
 //                 'payment_status' =>
 //                     $newPaymentStatus->value,
 
@@ -2330,9 +2362,9 @@ final class RepaymentPaymentReversalService
 
 //                 'fully_paid_at' =>
 //                     $newPaymentStatus
-//                         === InstallmentPaymentStatus::PAID
-//                             ? $remainingLastPaymentAt
-//                             : null,
+//                     === InstallmentPaymentStatus::PAID
+//                     ? $remainingLastPaymentAt
+//                     : null,
 //             ])->save();
 
 //             if ($oldPaymentStatus !== $newPaymentStatus) {
@@ -2420,17 +2452,22 @@ final class RepaymentPaymentReversalService
 //             ->selectRaw(
 //                 '
 //                 COALESCE(
-//                     SUM(principal_due - principal_paid),
-//                     0
-//                 ) AS principal_outstanding,
-
-//                 COALESCE(
-//                     SUM(interest_due - interest_paid),
+//                     SUM(
+//                         LEAST(
+//                             GREATEST(
+//                                 interest_due - interest_paid,
+//                                 0
+//                             ),
+//                             ROUND(outstanding_amount, 0)
+//                         )
+//                     ),
 //                     0
 //                 ) AS interest_outstanding,
 
 //                 COALESCE(
-//                     SUM(outstanding_amount),
+//                     SUM(
+//                         ROUND(outstanding_amount, 0)
+//                     ),
 //                     0
 //                 ) AS total_outstanding,
 
@@ -2438,7 +2475,7 @@ final class RepaymentPaymentReversalService
 //                     SUM(
 //                         CASE
 //                             WHEN due_status = ?
-//                             THEN outstanding_amount
+//                             THEN ROUND(outstanding_amount, 0)
 //                             ELSE 0
 //                         END
 //                     ),
@@ -2449,19 +2486,31 @@ final class RepaymentPaymentReversalService
 //             )
 //             ->first();
 
-//         $principalOutstanding = $this->normalizeMoney(
-//             $totals?->principal_outstanding ?? '0'
-//         );
-
-//         $interestOutstanding = $this->normalizeMoney(
-//             $totals?->interest_outstanding ?? '0'
-//         );
-
-//         $totalOutstanding = $this->normalizeMoney(
+//         $totalOutstanding = $this->roundWholeMoney(
 //             $totals?->total_outstanding ?? '0'
 //         );
 
-//         $overdueAmount = $this->normalizeMoney(
+//         $interestOutstanding = $this->roundWholeMoney(
+//             $totals?->interest_outstanding ?? '0'
+//         );
+
+//         if (
+//             bccomp(
+//                 $interestOutstanding,
+//                 $totalOutstanding,
+//                 2
+//             ) === 1
+//         ) {
+//             $interestOutstanding = $totalOutstanding;
+//         }
+
+//         $principalOutstanding = bcsub(
+//             $totalOutstanding,
+//             $interestOutstanding,
+//             2
+//         );
+
+//         $overdueAmount = $this->roundWholeMoney(
 //             $totals?->overdue_amount ?? '0'
 //         );
 
@@ -2539,7 +2588,9 @@ final class RepaymentPaymentReversalService
 //                 'repayment_account_id',
 //                 $account->id
 //             )
-//             ->where('outstanding_amount', '>', 0)
+//             ->whereRaw(
+//                 'ROUND(outstanding_amount, 0) > 0'
+//             )
 //             ->orderBy('due_date')
 //             ->orderBy('installment_number')
 //             ->value('due_date');
@@ -2572,8 +2623,8 @@ final class RepaymentPaymentReversalService
 //                 '0.00',
 //                 2
 //             ) === 1
-//                 && $oldAccountStatus
-//                     === RepaymentAccountStatus::CLOSED =>
+//             && $oldAccountStatus
+//             === RepaymentAccountStatus::CLOSED =>
 //                 RepaymentAccountStatus::ACTIVE,
 
 //             default => $oldAccountStatus,
@@ -2609,9 +2660,9 @@ final class RepaymentPaymentReversalService
 
 //             'closed_at' =>
 //                 $newAccountStatus
-//                     === RepaymentAccountStatus::CLOSED
-//                         ? $account->closed_at
-//                         : null,
+//                 === RepaymentAccountStatus::CLOSED
+//                 ? $account->closed_at
+//                 : null,
 
 //             'updated_by' => $actorId,
 //         ])->save();
@@ -2667,20 +2718,20 @@ final class RepaymentPaymentReversalService
 //     ): void {
 //         if (
 //             $transaction->transaction_type
-//                 !== RepaymentTransactionType::PAYMENT
+//             !== RepaymentTransactionType::PAYMENT
 //             || $transaction->status
-//                 !== RepaymentTransactionStatus::POSTED
+//             !== RepaymentTransactionStatus::POSTED
 //         ) {
 //             throw RepaymentPaymentReversalException::
 //                 transactionNotReversible(
 //                     transactionUuid:
-//                         (string) $transaction->uuid,
+//                     (string) $transaction->uuid,
 
 //                     transactionType:
-//                         $transaction->transaction_type->value,
+//                     $transaction->transaction_type->value,
 
 //                     transactionStatus:
-//                         $transaction->status->value
+//                     $transaction->status->value
 //                 );
 //         }
 //     }
@@ -2705,7 +2756,7 @@ final class RepaymentPaymentReversalService
 //                 throw RepaymentPaymentReversalException::
 //                     invalidAllocationState(
 //                         transactionUuid:
-//                             (string) $transaction->uuid,
+//                         (string) $transaction->uuid,
 
 //                         details: [
 //                             'allocation_uuid' =>
@@ -2746,7 +2797,7 @@ final class RepaymentPaymentReversalService
 //             throw RepaymentPaymentReversalException::
 //                 invalidAllocationState(
 //                     transactionUuid:
-//                         (string) $transaction->uuid,
+//                     (string) $transaction->uuid,
 
 //                     details: [
 //                         'allocation_rows_total' =>
@@ -2774,7 +2825,7 @@ final class RepaymentPaymentReversalService
 //             throw RepaymentPaymentReversalException::
 //                 invalidAllocationState(
 //                     transactionUuid:
-//                         (string) $transaction->uuid,
+//                     (string) $transaction->uuid,
 
 //                     details: [
 //                         'allocated_amount' =>
@@ -2807,12 +2858,12 @@ final class RepaymentPaymentReversalService
 //         if (
 //             (int) $reversalTransaction
 //                 ->repayment_account_id
-//                 !== (int) $account->id
+//             !== (int) $account->id
 //             || $reversalTransaction->transaction_type
-//                 !== RepaymentTransactionType::REVERSAL
+//             !== RepaymentTransactionType::REVERSAL
 //             || (int) $reversalTransaction
 //                 ->reversal_of_transaction_id
-//                 !== (int) $originalTransaction->id
+//             !== (int) $originalTransaction->id
 //         ) {
 //             return false;
 //         }
@@ -2820,28 +2871,28 @@ final class RepaymentPaymentReversalService
 //         $fingerprint = $this->buildRequestFingerprint(
 //             accountUuid: (string) $account->uuid,
 //             transactionUuid:
-//                 (string) $originalTransaction->uuid,
+//             (string) $originalTransaction->uuid,
 
 //             reversalDate:
-//                 $this->normalizeRequiredString(
-//                     $payload['reversal_date'] ?? ''
-//                 ),
+//             $this->normalizeRequiredString(
+//                 $payload['reversal_date'] ?? ''
+//             ),
 
 //             valueDate:
-//                 $this->normalizeRequiredString(
-//                     $payload['value_date'] ?? ''
-//                 ),
+//             $this->normalizeRequiredString(
+//                 $payload['value_date'] ?? ''
+//             ),
 
 //             reason:
-//                 $this->normalizeRequiredString(
-//                     $payload['reason'] ?? ''
-//                 )
+//             $this->normalizeRequiredString(
+//                 $payload['reason'] ?? ''
+//             )
 //         );
 
 //         $storedFingerprint =
 //             $reversalTransaction
 //                 ->metadata['request_fingerprint']
-//                 ?? null;
+//             ?? null;
 
 //         return is_string($storedFingerprint)
 //             && hash_equals(
@@ -2870,7 +2921,7 @@ final class RepaymentPaymentReversalService
 //             ->where('uuid', $accountUuid)
 //             ->first();
 
-//         if (! $account) {
+//         if (!$account) {
 //             throw RepaymentPaymentReversalException::accountNotFound(
 //                 $accountUuid
 //             );
@@ -2886,7 +2937,7 @@ final class RepaymentPaymentReversalService
 //                 ->where('uuid', $transactionUuid)
 //                 ->first();
 
-//         if (! $originalTransaction) {
+//         if (!$originalTransaction) {
 //             throw RepaymentPaymentReversalException::
 //                 transactionNotFound(
 //                     accountUuid: $accountUuid,
@@ -2908,9 +2959,9 @@ final class RepaymentPaymentReversalService
 //                 $this->requestMatchesReversal(
 //                     account: $account,
 //                     originalTransaction:
-//                         $originalTransaction,
+//                     $originalTransaction,
 //                     reversalTransaction:
-//                         $existingByIdempotency,
+//                     $existingByIdempotency,
 //                     payload: $payload
 //                 )
 //             ) {
@@ -2924,7 +2975,7 @@ final class RepaymentPaymentReversalService
 //                     idempotencyKey: $idempotencyKey,
 
 //                     existingTransactionUuid:
-//                         (string) $existingByIdempotency->uuid
+//                     (string) $existingByIdempotency->uuid
 //                 );
 //         }
 
@@ -2940,10 +2991,10 @@ final class RepaymentPaymentReversalService
 //             throw RepaymentPaymentReversalException::
 //                 alreadyReversed(
 //                     transactionUuid:
-//                         (string) $originalTransaction->uuid,
+//                     (string) $originalTransaction->uuid,
 
 //                     reversalTransactionUuid:
-//                         (string) $existingReversal->uuid
+//                     (string) $existingReversal->uuid
 //                 );
 //         }
 
@@ -2994,13 +3045,31 @@ final class RepaymentPaymentReversalService
 //             'reversalOf',
 //             'reversal',
 
-//             'allocations' => fn ($query) =>
+//             'allocations' => fn($query) =>
 //                 $query->allocationOrder(),
 //         ]);
 
 //         $transaction->loadCount('allocations');
 
 //         return $transaction;
+//     }
+
+//     /**
+//      * Round collectible/outstanding to a whole rupee while preserving
+//      * two-decimal database formatting.
+//      */
+//     private function roundWholeMoney(mixed $value): string
+//     {
+//         return number_format(
+//             round(
+//                 (float) ($value ?? 0),
+//                 0,
+//                 PHP_ROUND_HALF_UP
+//             ),
+//             2,
+//             '.',
+//             ''
+//         );
 //     }
 
 //     /**
@@ -3034,3 +3103,4 @@ final class RepaymentPaymentReversalService
 //             && (int) $driverCode === 1062;
 //     }
 // }
+

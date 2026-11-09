@@ -5,8 +5,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
-{
-    public function up(): void
+{public function up(): void
     {
         Schema::create('b_l_reports', function (Blueprint $table): void {
             $table->id();
@@ -15,55 +14,64 @@ return new class extends Migration
 
             $table->uuid('lead_uuid')->index();
 
-            $table->unsignedBigInteger('disbursement_id')
-                ->nullable()
+            $table
+                ->unsignedBigInteger('disbursement_id')
                 ->index();
 
-            $table->string('loan_number', 100)
-                ->nullable()
+            $table
+                ->string('loan_number', 100)
                 ->index();
 
-            $table->string('report_type', 50)
+            $table
+                ->string('report_type', 50)
                 ->index();
 
             $table->string('document_name', 150);
 
-            $table->unsignedInteger('version')
+            $table
+                ->unsignedInteger('version')
                 ->default(1);
 
-            $table->string('status', 30)
+            $table
+                ->string('status', 30)
                 ->default('PENDING')
                 ->index();
 
-            $table->string('storage_disk', 50)
+            $table
+                ->string('storage_disk', 50)
                 ->default('private');
 
-            $table->text('file_path')
+            $table->text('file_path')->nullable();
+
+            $table
+                ->string('mime_type', 100)
                 ->nullable();
 
-            $table->string('mime_type', 100)
+            $table
+                ->unsignedBigInteger('file_size')
                 ->nullable();
 
-            $table->unsignedBigInteger('file_size')
+            $table
+                ->string('checksum', 64)
                 ->nullable();
 
-            $table->string('checksum', 64)
-                ->nullable();
+            $table->text('failure_reason')->nullable();
 
-            $table->text('failure_reason')
-                ->nullable();
-
-            $table->unsignedBigInteger('generated_by')
+            $table
+                ->unsignedBigInteger('generated_by')
                 ->nullable()
                 ->index();
 
-            $table->timestamp('generation_started_at')
+            $table
+                ->timestamp('generation_started_at')
                 ->nullable();
 
-            $table->timestamp('generated_at')
+            $table
+                ->timestamp('generated_at')
                 ->nullable();
 
-            $table->timestamp('failed_at')
+            $table
+                ->timestamp('failed_at')
                 ->nullable();
 
             $table->timestamps();

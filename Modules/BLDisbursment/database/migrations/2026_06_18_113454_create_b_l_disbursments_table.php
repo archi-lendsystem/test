@@ -15,30 +15,14 @@ return new class extends Migration
             $table->id();
 
             $table->uuid('lead_uuid');
-
             $table->foreign('lead_uuid')
-                ->references('uuid')
-                ->on('b_l_lead_creations')
-                ->onDelete('cascade');
+                  ->references('uuid')
+                  ->on('b_l_lead_creations')
+                  ->onDelete('cascade');
 
-            $table->string('loan_number', 50)
-                ->nullable()
-                ->unique();
-
-            $table->decimal('disbursement_amount', 15, 2)
-                ->nullable();
-
-            $table->date('disbursement_date')
-                ->nullable();
-
-            $table->date('first_emi_date')
-                ->nullable();
-
-            $table->string('bank_name')
-                ->nullable();
-
-            $table->string('utr_number')
-                ->nullable();
+            $table->decimal('disbursement_amount', 15, 2)->nullable();
+            $table->string('bank_name')->nullable();
+            $table->string('utr_number')->nullable();
 
             $table->timestamps();
             $table->softDeletes();

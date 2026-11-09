@@ -6,7 +6,6 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Support\Str;
 use Illuminate\Contracts\Validation\Validator;
-use Illuminate\Validation\Rule;
 
 
 class StoreBLSchemeSelectRequest extends FormRequest
@@ -16,29 +15,16 @@ class StoreBLSchemeSelectRequest extends FormRequest
         return true;
     }
 
-      public function rules(): array
+    public function rules(): array
     {
         return [
             'product_scheme_uuid' => [
                 'required',
                 'uuid',
-                Rule::exists('product_schemes', 'uuid')
-                    ->whereNull('deleted_at')
-                    ->where('is_active', true),
+                'exists:product_schemes,uuid',
             ],
         ];
     }
-
-    // public function rules(): array
-    // {
-    //     return [
-    //         'product_scheme_uuid' => [
-    //             'required',
-    //             'uuid',
-    //             'exists:product_schemes,uuid',
-    //         ],
-    //     ];
-    // }
 
     public function messages(): array
     {

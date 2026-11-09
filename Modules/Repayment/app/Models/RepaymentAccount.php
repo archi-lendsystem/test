@@ -279,7 +279,7 @@ class RepaymentAccount extends Model
      */
     public function isClosed(): bool
     {
-        return $this->status === RepaymentAccountStatus::CLOSED;
+        return $this->status->isFinal();
     }
 
     /**

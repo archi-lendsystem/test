@@ -20,6 +20,7 @@ use Modules\BLSaction\Models\BLSaction;
 use Modules\BLWorkDetails\Models\BLWorkDetails;
 use Modules\Charges\Models\Charge;
 use Modules\Insurance\Models\Insurance;
+use Modules\BLSchemeSelect\Models\BLSchemeSelect;
 
 final class BLReportDataService
 {
@@ -45,6 +46,9 @@ final class BLReportDataService
             );
         }
 
+        $branchName = $lead->branch()
+    ->value('name');
+
         $disbursement = BLDisbursment::query()
             ->where('lead_uuid', $leadUuid)
             ->latest('id')
@@ -62,6 +66,12 @@ final class BLReportDataService
                 errorCode: 'SANCTION_NOT_FOUND'
             );
         }
+
+        $schemeSelection = BLSchemeSelect::query()
+    ->with('productScheme')
+    ->where('lead_uuid', $leadUuid)
+    ->latest('id')
+    ->first();
 
         /*
          * Financial data used mainly by the Key Facts Statement.
@@ -187,8 +197,10 @@ final class BLReportDataService
 
         return [
             'lead' => $lead,
+              'branch_name' => $branchName,
             'disbursement' => $disbursement,
             'sanction' => $sanction,
+            'selected_scheme' => $schemeSelection?->productScheme,
 
             'cam' => $cam,
             'charge' => $charge,

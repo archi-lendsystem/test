@@ -222,17 +222,14 @@
     $applicantName = $financialAmounts['applicant_name']
     ?? 'N/A';
 
-    $branchName = $financialAmounts['branch_name']
+$loanNumber = $financialAmounts['loan_number']
     ?? 'N/A';
 
-    $loanNumber = $financialAmounts['loan_number']
-    ?? 'N/A';
-
-    $disbursementDate = ! empty(
+$disbursementDate = ! empty(
     $financialAmounts['disbursement_date']
-    )
+)
     ? \Carbon\Carbon::parse(
-    $financialAmounts['disbursement_date']
+        $financialAmounts['disbursement_date']
     )->format('d M Y')
     : 'N/A';
 
@@ -361,56 +358,14 @@
 
         <table class="summary-table">
 
-            <!-- <tr>
-                <td colspan="2">
-                    <span class="summary-label">
-                        Applicant Name
-                    </span>
-
-                    <span class="summary-value">
-                        {{ $applicantName }}
-                    </span>
-                </td>
-
-                <td>
-                    <span class="summary-label">
-                        Loan Number
-                    </span>
-
-                    <span class="summary-value">
-                        {{ $loanNumber }}
-                    </span>
-                </td>
-
-                <td>
-                    <span class="summary-label">
-                        Disbursement Date
-                    </span>
-
-                    <span class="summary-value">
-                        {{ $disbursementDate }}
-                    </span>
-                </td>
-            </tr> -->
-
-            <tr>
-    <td>
+        <tr>
+    <td colspan="2">
         <span class="summary-label">
             Applicant Name
         </span>
 
         <span class="summary-value">
             {{ $applicantName }}
-        </span>
-    </td>
-
-    <td>
-        <span class="summary-label">
-            Branch Name
-        </span>
-
-        <span class="summary-value">
-            {{ $branchName }}
         </span>
     </td>
 
@@ -449,7 +404,8 @@
                 </td>
                 <td>
                     <span class="summary-label">Total Payable</span>
-                    <span class="summary-value">{{ $money($amortization->total_payable) }}</span>
+                    <!-- <span class="summary-value">{{ $money($amortization->total_payable) }}</span> -->
+                      <span class="summary-value">{{ $money($totals['installment_amount']) }}</span>
                 </td>
             </tr>
             <tr>
@@ -465,7 +421,7 @@
                     <span class="summary-label">Loan Tenure</span>
                     <span class="summary-value">{{ rtrim(rtrim(number_format((float) $amortization->tenure, 2), '0'), '.') }} {{ $tenureUnit }}</span>
                 </td>
-                <td colspan="2">
+                <td>
                     <span class="summary-label">Number of Installments</span>
                     <span class="summary-value">{{ (int) $amortization->number_of_payments }}</span>
                 </td>

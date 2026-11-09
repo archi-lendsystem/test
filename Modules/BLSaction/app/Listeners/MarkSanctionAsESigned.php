@@ -4,83 +4,91 @@ namespace Modules\BLSaction\Listeners;
 
 use Illuminate\Support\Facades\Log;
 use Modules\BLSaction\Models\BLSaction;
-use Modules\ESign\Enums\DocumentStatus;
 use Modules\ESign\Events\ESignCompleted;
-use Modules\ESign\Services\BLCombinedDocumentService;
 
 class MarkSanctionAsESigned
 {
     public function handle(
         ESignCompleted $event
     ): void {
-        /*
-         * New ESignCompleted event contains
-         * the ESignDocument.
-         */
-        $document = $event->document;
+        $signingRequest = $event->signingRequest;
 
         /*
-         * Ignore normal agreements or any other
-         * eSign document.
+         * This listener is ONLY for BL Sanction Letter eSign.
          *
-         * This listener is interested only in
-         * the combined BL package.
+         * BL Reports and every other eSign document
+         * are ignored here.
          */
         if (
-            $document->document_type
-                !== BLCombinedDocumentService::DOCUMENT_TYPE
-            || empty($document->lead_uuid)
-            || $document->status
-                !== DocumentStatus::Completed
-            || empty(
-                $document->final_signed_document_path
-            )
+            $signingRequest->module_type !== 'bl'
+            || $signingRequest->document_type !== 'sanction_letter'
         ) {
             return;
         }
 
         /*
-         * IMPORTANT:
-         *
-         * The sanction is marked "esigned" only after
-         * the complete sequence finishes:
-         *
-         * borrower signed
-         *      ↓
-         * lender signed
-         *      ↓
-         * ESignDocument = completed
-         *      ↓
-         * sanction = esigned
-         *
-         * We never mark it eSigned after borrower
-         * signature alone.
+         * Never mark Sanction as eSigned unless:
+         * 1. Common eSign request is completed.
+         * 2. Signed PDF exists logically.
+         * 3. Signed PDF checksum exists.
          */
-        $updated = BLSaction::query()
-            ->where(
-                'lead_uuid',
-                $document->lead_uuid
-            )
-            ->where(
-                'status',
-                'esign_pending'
-            )
-            ->latest('id')
-            ->limit(1)
-            ->update([
-                'status' =>
-                    'esigned',
-            ]);
+        if (
+            $signingRequest->status !== 'completed'
+            || empty($signingRequest->signed_pdf_path)
+            || empty($signingRequest->signed_pdf_checksum)
+        ) {
+            return;
+        }
 
-        if ($updated > 0) {
-            Log::info(
-                'Sanction marked as eSigned from completed combined BL package.',
+        if (empty($signingRequest->module_id)) {
+            Log::warning(
+                'Unable to synchronize completed eSign with Sanction.',
                 [
-                    'esign_document_uuid' =>
-                        $document->uuid,
+                    'signing_request_uuid' => $signingRequest->uuid,
+                    'reason' => 'module_id_missing',
+                ]
+            );
 
-                    'lead_uuid' =>
-                        $document->lead_uuid,
+            return;
+        }
+
+        /*
+         * IMPORTANT BUSINESS SAFETY:
+         *
+         * Only:
+         *
+         * esign_pending -> esigned
+         *
+         * is allowed.
+         *
+         * generated / confirmed / rejected / esigned
+         * will never be overwritten.
+         */
+        $query = BLSaction::query()
+            ->whereKey($signingRequest->module_id)
+            ->where('status', 'esign_pending');
+
+        /*
+         * Additional cross-lead protection.
+         */
+        if (! empty($signingRequest->lead_uuid)) {
+            $query->where(
+                'lead_uuid',
+                $signingRequest->lead_uuid
+            );
+        }
+
+        $updated = $query->update([
+            'status' => 'esigned',
+        ]);
+
+        if ($updated === 1) {
+            Log::info(
+                'Sanction marked as eSigned.',
+                [
+                    'signing_request_uuid' => $signingRequest->uuid,
+                    'sanction_id' => $signingRequest->module_id,
+                    'lead_uuid' => $signingRequest->lead_uuid,
                 ]
             );
         }

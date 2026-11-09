@@ -38,7 +38,97 @@ class UserProfileController extends Controller
         ]);
     }
 
+    // public function changePassword(Request $request): JsonResponse
+    // {
+    //     $user = $request->user();
+
+    //     if (! $user) {
+    //         return response()->json([
+    //             'status'  => false,
+    //             'message' => 'Unauthenticated.',
+    //         ], 401);
+    //     }
+
    
+
+
+    //     $validator = Validator::make($request->all(), [
+    //         'current_password' => ['required', 'string'],
+    //         'new_password'     => ['required', 'string', 'min:8', 'max:255', 'confirmed', 'different:current_password'],
+    //     ]);
+
+    //     if ($validator->fails()) {
+    //         return response()->json([
+    //             'status'  => false,
+    //             'message' => $validator->errors()->first(),
+    //             'errors'  => $validator->errors(),
+    //         ], 422);
+    //     }
+
+    //     $data = $validator->validated();
+
+    //     $stored = (string) $user->user_password;
+
+
+    //     $isHashed = str_starts_with($stored, '$2y$') || str_starts_with($stored, '$argon');
+    //     $valid    = $isHashed
+    //         ? Hash::check($data['current_password'], $stored)
+    //         : hash_equals($stored, $data['current_password']);
+
+
+
+    //     if (! $valid) {
+    //         return response()->json([
+    //             'status'  => false,
+    //             'message' => 'Current password is incorrect.',
+    //             'errors'  => [
+    //                 'current_password' => ['Current password is incorrect.'],
+    //             ],
+    //         ], 422);
+    //     }
+
+    //     $newHash = Hash::make($data['new_password']);
+    //     $table   = $user->getTable();
+
+    //     $updated = DB::table($table)
+    //         ->where('id', $user->id)
+    //         ->update([
+    //             'user_password' => $newHash,
+    //             'updated_at'    => now(),
+    //         ]);
+
+    //     $storedNow = DB::table($table)->where('id', $user->id)->value('user_password');
+    //     $verified  = $storedNow && Hash::check($data['new_password'], $storedNow);
+
+    //     Log::info('change-password', [
+    //         'user_id'     => $user->id,
+    //         'table'       => $table,
+    //         'rows'        => $updated,
+    //         'hash_len'    => strlen($newHash),
+    //         'stored_len'  => strlen((string) $storedNow),
+    //         'verified'    => $verified,
+    //     ]);
+
+    //     if (! $verified) {
+    //         return response()->json([
+    //             'status'  => false,
+    //             'message' => 'Password could not be saved. Please contact support.',
+    //         ], 500);
+    //     }
+
+
+    //     $currentId = $user->currentAccessToken()?->id;
+    //     if ($currentId) {
+    //         $user->tokens()->where('id', '!=', $currentId)->delete();
+    //     }
+
+    //     return response()->json([
+    //         'status'     => true,
+    //         'message'    => 'Password changed successfully.',
+    //         'request_id' => app('request_id'),
+    //         'timestamp'  => now()->format('Y-m-d H:i:s'),
+    //     ]);
+    // }
 
 
     public function changePassword(Request $request): JsonResponse

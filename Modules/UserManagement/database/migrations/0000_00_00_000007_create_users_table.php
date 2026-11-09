@@ -49,6 +49,11 @@ return new class extends Migration
                 ->constrained('user_types')
                 ->nullOnDelete();
 
+            // $table->foreignId('role_id')
+            //     ->nullable()
+            //     ->constrained('roles')
+            //     ->nullOnDelete();
+
             /*
             |--------------------------------------------------------------------------
             | Organization & Branch
@@ -65,13 +70,13 @@ return new class extends Migration
                 ->constrained('organization_branches')
                 ->nullOnDelete();
 
+            // NEW FIELDS
             $table->foreignId('department_id')
                 ->nullable()
                 ->constrained('departments')
                 ->nullOnDelete();
 
-            $table->string('user_company_name')
-                ->nullable();
+            $table->string('user_company_name')->nullable();
 
             /*
             |--------------------------------------------------------------------------
@@ -85,14 +90,9 @@ return new class extends Migration
 
             $table->string('user_email')->unique();
 
-            $table->text('user_password')
-                ->nullable();
+            $table->string('user_mobile_number', 15)->nullable();
 
-            $table->string('user_mobile_number', 15)
-                ->nullable();
-
-            $table->string('user_designation')
-                ->nullable();
+            $table->string('user_designation')->nullable();
 
             /*
             |--------------------------------------------------------------------------
@@ -100,11 +100,9 @@ return new class extends Migration
             |--------------------------------------------------------------------------
             */
 
-            $table->string('password')
-                ->nullable();
+            $table->string('password')->nullable();
 
-            $table->timestamp('email_verified_at')
-                ->nullable();
+            $table->timestamp('email_verified_at')->nullable();
 
             $table->rememberToken();
 
@@ -114,20 +112,15 @@ return new class extends Migration
             |--------------------------------------------------------------------------
             */
 
-            $table->text('address')
-                ->nullable();
+            $table->text('address')->nullable();
 
-            $table->string('pincode', 10)
-                ->nullable();
+            $table->string('pincode', 10)->nullable();
 
-            $table->string('district')
-                ->nullable();
+            $table->string('district')->nullable();
 
-            $table->string('city')
-                ->nullable();
+            $table->string('city')->nullable();
 
-            $table->string('state')
-                ->nullable();
+            $table->string('state')->nullable();
 
             /*
             |--------------------------------------------------------------------------
@@ -135,8 +128,7 @@ return new class extends Migration
             |--------------------------------------------------------------------------
             */
 
-            $table->boolean('is_active')
-                ->default(true);
+            $table->boolean('is_active')->default(true);
 
             $table->softDeletes();
 

@@ -189,7 +189,11 @@ class RepaymentInstallment extends Model
                 'due_status',
                 InstallmentDueStatus::OVERDUE->value
             )
-            ->where('outstanding_amount', '>', 0);
+            ->whereRaw('ROUND(outstanding_amount, 0) > 0')
+            ->whereIn('payment_status', [
+                InstallmentPaymentStatus::UNPAID->value,
+                InstallmentPaymentStatus::PARTIAL->value,
+            ]);
     }
 
     /**
@@ -305,19 +309,16 @@ class RepaymentInstallment extends Model
     }
 }
 
-
-
-
 // namespace Modules\Repayment\Models;
 
 // use Illuminate\Database\Eloquent\Builder;
+// use Illuminate\Database\Eloquent\Casts\Attribute;
 // use Illuminate\Database\Eloquent\Concerns\HasUuids;
 // use Illuminate\Database\Eloquent\Model;
 // use Illuminate\Database\Eloquent\Relations\BelongsTo;
 // use Illuminate\Database\Eloquent\Relations\HasMany;
 // use Modules\Repayment\Enums\InstallmentDueStatus;
 // use Modules\Repayment\Enums\InstallmentPaymentStatus;
-// use Illuminate\Database\Eloquent\Casts\Attribute;
 
 // class RepaymentInstallment extends Model
 // {
@@ -588,19 +589,27 @@ class RepaymentInstallment extends Model
 //             : $difference;
 //     }
 
-//     //access added
+//     // access added
 
-//     // protected function installmentAmount(): Attribute
-//     // {
-//     //     return Attribute::make(
-//     //         get: fn($value) => round((float) $value)
-//     //     );
-//     // }
+//     protected function outstandingAmount(): Attribute
+//     {
+//         return Attribute::make(
+//             set: function ($value) {
+//                 if ($value === null || $value === '') {
+//                     return '0.00';
+//                 }
 
-//     // protected function outstandingAmount(): Attribute
-//     // {
-//     //     return Attribute::make(
-//     //         get: fn($value) => round((float) $value)
-//     //     );
-//     // }
+//                 return number_format(
+//                     round(
+//                         (float) $value,
+//                         0,
+//                         PHP_ROUND_HALF_UP
+//                     ),
+//                     2,
+//                     '.',
+//                     ''
+//                 );
+//             }
+//         );
+//     }
 // }

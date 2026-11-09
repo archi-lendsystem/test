@@ -96,9 +96,11 @@ class DemandVsCollectionIndexRequest extends FormRequest
                 'before_or_equal:today',
             ],
 
-            /*
-             * Account filters.
-             */
+          'branch_id' => [
+    'nullable',
+    'integer',
+    'exists:organization_branches,id',
+],
             'account_uuid' => [
                 'nullable',
                 'uuid',
@@ -208,6 +210,12 @@ class DemandVsCollectionIndexRequest extends FormRequest
             'as_of_date.before_or_equal' =>
                 'As-of date cannot be in the future.',
 
+                'branch_id.integer' =>
+    'Branch must be a valid integer.',
+
+'branch_id.exists' =>
+    'Selected branch does not exist.',
+
             'account_uuid.uuid' =>
                 'Repayment account UUID must be valid.',
 
@@ -252,6 +260,7 @@ class DemandVsCollectionIndexRequest extends FormRequest
             'from_date' => 'from date',
             'to_date' => 'to date',
             'as_of_date' => 'as-of date',
+            'branch_id' => 'branch',
             'account_uuid' => 'repayment account UUID',
             'loan_number' => 'loan number',
             'loan_type' => 'loan type',

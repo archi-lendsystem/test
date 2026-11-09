@@ -3,12 +3,26 @@
 namespace Modules\BLJourney\Providers;
 
 use Nwidart\Modules\Support\ModuleServiceProvider;
+use Illuminate\Console\Scheduling\Schedule;
 
 class BLJourneyServiceProvider extends ModuleServiceProvider
 {
+    /**
+     * The name of the module.
+     */
     protected string $name = 'BLJourney';
 
+    /**
+     * The lowercase version of the module name.
+     */
     protected string $nameLower = 'bljourney';
+
+    /**
+     * Command classes to register.
+     *
+     * @var string[]
+     */
+    // protected array $commands = [];
 
     /**
      * Provider classes to register.
@@ -21,15 +35,12 @@ class BLJourneyServiceProvider extends ModuleServiceProvider
     ];
 
     /**
-     * Register module services and journey configuration.
+     * Define module schedules.
+     * 
+     * @param $schedule
      */
-    public function register(): void
-    {
-        parent::register();
-
-        $this->mergeConfigFrom(
-            module_path($this->name, 'config/product_journeys.php'),
-            'product_journeys'
-        );
-    }
+    // protected function configureSchedules(Schedule $schedule): void
+    // {
+    //     $schedule->command('inspire')->hourly();
+    // }
 }

@@ -23,16 +23,7 @@
         }
 
         @page {
-            size: A4 portrait;
-            margin: 24px 28px 200px 28px;
-        }
-
-        tr {
-            page-break-inside: avoid;
-        }
-
-        .section-title {
-            page-break-after: avoid;
+            margin: 18px 28px 20px 28px;
         }
 
         * {
@@ -192,21 +183,22 @@
 
 
            $logoPaths = [
-            public_path('assets/images/logo/lendsystem_logo.png'),
-            base_path('public/assets/images/logo/lendsystem_logo.png'),
-        ];
+        base_path('../public_html/images/sabrimala-logo.png'),
+        public_path('images/sabrimala-logo.png'),
+        base_path('public/images/sabrimala-logo.png'),
+    ];
 
-        $logoPath = collect($logoPaths)->first(
-            fn ($path) => is_file($path) && is_readable($path)
-        );
+    $logoPath = collect($logoPaths)->first(
+        fn ($path) => is_file($path) && is_readable($path)
+    );
 
-        $logoMime = $logoPath
-            ? (mime_content_type($logoPath) ?: 'image/png')
-            : 'image/png';
+    $logoMime = $logoPath
+        ? (mime_content_type($logoPath) ?: 'image/png')
+        : 'image/png';
 
-        $logoBase64 = $logoPath
-            ? base64_encode(file_get_contents($logoPath))
-            : null;
+    $logoBase64 = $logoPath
+        ? base64_encode(file_get_contents($logoPath))
+        : null;
 @endphp
 
 <div class="document">
@@ -215,7 +207,7 @@
         @if ($logoBase64)
             <img
                 src="data:{{ $logoMime }};base64,{{ $logoBase64 }}"
-                alt="LendSystem Logo"
+                alt="Sabrimala Fintech Logo"
             >
         @endif
     </div>
@@ -238,7 +230,7 @@
             I do here declare that irrespective of any
             situation/circumstance like Natural Calamities,
             Pandemic, Ill-health or Illness, I shall not be
-            failed to repay the dues of the Lendsystem
+            failed to repay the dues of the Sabrimala Fintech
             Private Limited (the Lender) daily basis through
             UPI/ UPI Mandate/API/NACH/ECH Mandates from my
             Bank Account.
@@ -249,7 +241,7 @@
             Schedule-1 do hereby declare and undertake that I
             shall not close, suspend the API/NACH/ECH
             Mandated Bank Account without approval and
-            confirmation of Lendsystem Private Limited
+            confirmation of Sabrimala Fintech Private Limited
             (SFPL). In case of any breach to the same, I shall
             be criminally liable for the same.
         </p>
@@ -265,7 +257,7 @@
             I/We the Person(s) / Borrower(s) as mentioned in
             Schedule-1 do hereby declare and undertake that I
             have not Offred or given any bribe/incentive to
-            the Employee/Agent of the Lendsystem
+            the Employee/Agent of the Sabrimala Fintech
             Private Limited (SFPL) for obtaining this Credit
             Facility
         </p>
@@ -273,7 +265,7 @@
         <p>
             This declaration is also an integral part of the
             Facility Agreement between the Borrower and the
-            Lender Lendsystem Private Limited (SFPL).
+            Lender Sabrimala Fintech Private Limited (SFPL).
         </p>
     </section>
 

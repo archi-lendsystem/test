@@ -20,6 +20,7 @@ use Modules\Repayment\Enums\RepaymentAccountStatus;
 use Modules\Repayment\Enums\RepaymentChargeStatus;
 use Modules\Repayment\Enums\RepaymentChargeType;
 use Modules\Repayment\Models\RepaymentAccount;
+use Modules\UserManagement\Support\ReportBranchAccess;
 use Modules\Repayment\Models\RepaymentCharge;
 use Modules\Repayment\Services\RepaymentChargeService;
 use Symfony\Component\HttpFoundation\Response;
@@ -40,30 +41,23 @@ class ForeclosureController extends Controller
     public function index(Request $request): JsonResponse
     {
         $validated = $request->validate([
+             'branch_id' => 'nullable|integer|exists:organization_branches,id',
             'search' => 'nullable|string|max:255',
             'per_page' => 'nullable|integer|min:1|max:200',
         ]);
 
-        // $query = RepaymentAccount::query()
-        //     ->whereIn('status', [
-        //         RepaymentAccountStatus::ACTIVE->value,
-        //         RepaymentAccountStatus::SUSPENDED->value,
-        //     ])
-        //     ->whereDoesntHave('foreclosure')
-        //     ->with([
-        //         'lead:uuid,lead_id,branch_id',
-        //         'lead.branch:id,name,branch_code',
-        //         'lead.applicantDetails' => fn ($query) => $query
-        //             ->where('applicant_sno', 0)
-        //             ->select([
-        //                 'id',
-        //                 'lead_uuid',
-        //                 'full_name',
-        //                 'alternate_contact_number',
-        //             ]),
-        //     ]);
+        $branchId = !empty($validated['branch_id'])
+    ? (int) $validated['branch_id']
+    : null;
 
-        $query = RepaymentAccount::query()
+     
+
+      $query = ReportBranchAccess::scopeByRelation(
+    RepaymentAccount::query(),
+    $request->user(),
+    'lead',
+    $branchId
+)
     ->whereIn('status', [
         RepaymentAccountStatus::ACTIVE->value,
         RepaymentAccountStatus::SUSPENDED->value,
@@ -188,7 +182,7 @@ class ForeclosureController extends Controller
             'payment_mode' => ['required', Rule::enum(PaymentMode::class)],
             'transaction_reference' => 'nullable|string|max:150',
             'basis' => 'required|string|in:PERCENTAGE,AMOUNT',
-            'value' => 'required|numeric|min:0.01',
+            'value' => 'required|numeric|min:0',
             'waive_amount' => 'nullable|numeric|min:0.01',
             'waiver_reason' => 'required_with:waive_amount|nullable|string|max:500',
             'remarks' => 'nullable|string|max:1000',
@@ -241,12 +235,15 @@ class ForeclosureController extends Controller
 
                 $actorId = optional($request->user())->id;
 
+                $foreclosureDate = $validated['foreclosure_date'] ?? now()->toDateString();
+
                 $charge = $this->chargeService->levyForeclosureCharge(
                     account: $account,
                     basis: $validated['basis'],
                     value: (float) $validated['value'],
                     reason: $validated['remarks'] ?? null,
-                    leviedBy: $actorId
+                    leviedBy: $actorId,
+                    chargeDate: $foreclosureDate
                 );
 
                 if (isset($validated['waive_amount'])) {
@@ -262,7 +259,7 @@ class ForeclosureController extends Controller
                     account: $account,
                     charge: $charge,
                     foreclosureAmount: (float) $validated['foreclosure_amount'],
-                    foreclosureDate: $validated['foreclosure_date'] ?? now()->toDateString(),
+                    foreclosureDate: $foreclosureDate,
                     paymentMode: PaymentMode::from($validated['payment_mode']),
                     transactionReference: $validated['transaction_reference'] ?? null,
                     remarks: $validated['remarks'] ?? null,
@@ -375,6 +372,7 @@ class ForeclosureController extends Controller
             'waived_charges' => (float) $foreclosure->waived_charges,
             'net_foreclosure_charges' => (float) $foreclosure->net_foreclosure_charges,
             'total_closure_payable' => (float) $foreclosure->totalClosurePayable(),
+            'repayment_posted_amount' => (float) ($foreclosure->transaction?->amount ?? 0),
             'payment_mode' => $foreclosure->payment_mode?->value,
             'transaction_reference' => $foreclosure->transaction_reference,
             'status' => $account?->status?->value,
@@ -394,209 +392,3 @@ class ForeclosureController extends Controller
         ];
     }
 }
-
-
-// namespace Modules\Foreclosure\Http\Controllers;
-
-// use App\Http\Controllers\Controller;
-// use App\Traits\ApiResponse;
-// use Illuminate\Http\JsonResponse;
-// use Illuminate\Http\Request;
-// use Illuminate\Support\Facades\DB;
-// use InvalidArgumentException;
-// use Modules\Repayment\Enums\RepaymentAccountStatus;
-// use Modules\Repayment\Enums\RepaymentChargeStatus;
-// use Modules\Repayment\Enums\RepaymentChargeType;
-// use Modules\Repayment\Enums\StatusHistorySource;
-// use Modules\Repayment\Enums\StatusHistoryType;
-// use Modules\Repayment\Models\RepaymentAccount;
-// use Modules\Repayment\Models\RepaymentCharge;
-// use Modules\Repayment\Models\RepaymentStatusHistory;
-// use Modules\Repayment\Services\RepaymentChargeService;
-// use Throwable;
-
-// class ForeclosureController extends Controller
-// {
-//     use ApiResponse;
-
-//     public function __construct(
-//         private readonly RepaymentChargeService $chargeService
-//     ) {}
-
-//     /**
-//      * Loans eligible for foreclosure — every active/suspended account,
-//      * with its current outstanding.
-//      */
-//     public function index(Request $request): JsonResponse
-//     {
-//         $validated = $request->validate([
-//             'search' => 'nullable|string|max:255',
-//             'per_page' => 'nullable|integer|min:1|max:200',
-//         ]);
-
-//         $query = RepaymentAccount::query()
-//             ->whereIn('status', [
-//                 RepaymentAccountStatus::ACTIVE->value,
-//                 RepaymentAccountStatus::SUSPENDED->value,
-//             ])
-//             ->with([
-//                 'lead:uuid,lead_id,branch_id',
-//                 'lead.branch:id,name,branch_code',
-//                 'lead.applicantDetails' => fn ($q) => $q
-//                     ->where('applicant_sno', 0)
-//                     ->select(['id', 'lead_uuid', 'full_name', 'alternate_contact_number']),
-//             ]);
-
-//         if (!empty($validated['search'])) {
-//             $search = $validated['search'];
-//             $query->where(function ($q) use ($search) {
-//                 $q->where('loan_number', 'like', "%{$search}%")
-//                     ->orWhereHas('lead.applicantDetails', fn ($aq) => $aq->where('full_name', 'like', "%{$search}%"));
-//             });
-//         }
-
-//         $accounts = $query->orderByDesc('id')->paginate((int) ($validated['per_page'] ?? 25));
-
-//         $accounts->getCollection()->transform(function (RepaymentAccount $account) {
-//             $applicant = $account->lead?->applicantDetails->first();
-//             $branch = $account->lead?->branch;
-
-//             $pendingForeclosureCharge = RepaymentCharge::query()
-//                 ->where('repayment_account_id', $account->id)
-//                 ->where('charge_type', RepaymentChargeType::FORECLOSURE->value)
-//                 ->whereNot('status', RepaymentChargeStatus::WAIVED->value)
-//                 ->latest('id')
-//                 ->first();
-
-//             return [
-//                 'repayment_account_uuid' => $account->uuid,
-//                 'loan_number' => $account->loan_number,
-//                 'lead_id' => $account->lead?->lead_id,
-//                 'customer_name' => $applicant?->full_name,
-//                 'mobile_number' => $applicant?->alternate_contact_number,
-//                 'branch' => $branch ? ['id' => $branch->id, 'name' => $branch->name] : null,
-//                 'principal_outstanding' => $account->principal_outstanding,
-//                 'total_outstanding' => $account->total_outstanding,
-//                 'status' => $account->status->value,
-//                 'pending_foreclosure_charge' => $pendingForeclosureCharge,
-//             ];
-//         });
-
-//         return $this->success([
-//             'data' => $accounts->items(),
-//             'meta' => [
-//                 'current_page' => $accounts->currentPage(),
-//                 'per_page' => $accounts->perPage(),
-//                 'total' => $accounts->total(),
-//                 'last_page' => $accounts->lastPage(),
-//             ],
-//         ], 'Foreclosure-eligible loans fetched successfully.');
-//     }
-
-//     /**
-//      * Execute a foreclosure: levy the charge (percentage of outstanding
-//      * principal, or a flat amount — admin's choice), optionally waive part
-//      * or all of it immediately, then close the account.
-//      */
-//     public function store(Request $request, string $accountUuid): JsonResponse
-//     {
-//         $account = RepaymentAccount::where('uuid', $accountUuid)->first();
-
-//         if (!$account) {
-//             return $this->error('Repayment account not found.', null, 404);
-//         }
-
-//         if (!in_array($account->status, [RepaymentAccountStatus::ACTIVE, RepaymentAccountStatus::SUSPENDED], true)) {
-//             return $this->error('Only active or suspended accounts can be foreclosed.', null, 422);
-//         }
-
-//         $validated = $request->validate([
-//             'basis' => 'required|string|in:PERCENTAGE,AMOUNT',
-//             'value' => 'required|numeric|min:0.01',
-//             'waive_amount' => 'nullable|numeric|min:0.01',
-//             'waiver_reason' => 'required_with:waive_amount|nullable|string|max:500',
-//             'remarks' => 'nullable|string|max:1000',
-//         ]);
-
-//         try {
-//             $result = DB::transaction(function () use ($account, $validated, $request) {
-//                 $locked = RepaymentAccount::where('id', $account->id)->lockForUpdate()->first();
-
-//                 if (!in_array($locked->status, [RepaymentAccountStatus::ACTIVE, RepaymentAccountStatus::SUSPENDED], true)) {
-//                     throw new InvalidArgumentException('Only active or suspended accounts can be foreclosed.');
-//                 }
-
-//                 $existingCharge = RepaymentCharge::query()
-//                     ->where('repayment_account_id', $locked->id)
-//                     ->where('charge_type', RepaymentChargeType::FORECLOSURE->value)
-//                     ->whereNot('status', RepaymentChargeStatus::WAIVED->value)
-//                     ->latest('id')
-//                     ->first();
-
-//                 if ($existingCharge) {
-//                     throw new InvalidArgumentException('A foreclosure charge has already been levied on this account.');
-//                 }
-
-//                 $charge = $this->chargeService->levyForeclosureCharge(
-//                     account: $locked,
-//                     basis: $validated['basis'],
-//                     value: (float) $validated['value'],
-//                     reason: $validated['remarks'] ?? null,
-//                     leviedBy: optional($request->user())->id
-//                 );
-
-//                 if (!empty($validated['waive_amount'])) {
-//                     $charge = $this->chargeService->waive(
-//                         charge: $charge,
-//                         waiveAmount: (float) $validated['waive_amount'],
-//                         reason: $validated['waiver_reason'],
-//                         waivedBy: optional($request->user())->id
-//                     );
-//                 }
-
-//                 // A foreclosure isn't just a status flip — the customer is
-//                 // paying off every remaining rupee of principal + interest
-//                 // right now, on top of the foreclosure fee above. Settle the
-//                 // ledger to zero before closing, the same way a normal
-//                 // full-and-final payment would.
-//                 $oldStatus = $locked->status;
-
-//                 $this->chargeService->payOffOutstandingBalance(
-//                     account: $locked,
-//                     reason: $validated['remarks'] ?? 'Foreclosure — full payoff of remaining principal and interest.',
-//                     actorId: optional($request->user())->id
-//                 );
-
-//                 $locked->refresh();
-
-//                 $locked->update([
-//                     'status' => RepaymentAccountStatus::CLOSED->value,
-//                     'closed_at' => now(),
-//                 ]);
-
-//                 RepaymentStatusHistory::create([
-//                     'repayment_account_id' => $locked->id,
-//                     'status_type' => StatusHistoryType::ACCOUNT_STATUS->value,
-//                     'old_status' => $oldStatus->value,
-//                     'new_status' => RepaymentAccountStatus::CLOSED->value,
-//                     'source' => StatusHistorySource::ACCOUNT_CLOSURE->value,
-//                     'reason' => 'Loan foreclosed — full payoff and closure.',
-//                     'metadata' => [
-//                         'foreclosure_charge_uuid' => $charge->uuid,
-//                         'foreclosure_charge_net_payable' => $charge->net_payable,
-//                     ],
-//                     'changed_by' => optional($request->user())->id,
-//                     'changed_at' => now(),
-//                 ]);
-
-//                 return ['account' => $locked->fresh(), 'charge' => $charge];
-//             });
-
-//             return $this->success($result, 'Loan foreclosed successfully.');
-//         } catch (InvalidArgumentException $exception) {
-//             return $this->error($exception->getMessage(), null, 422);
-//         } catch (Throwable $exception) {
-//             return $this->error('Failed to foreclose loan: ' . $exception->getMessage(), null, 500);
-//         }
-//     }
-// }

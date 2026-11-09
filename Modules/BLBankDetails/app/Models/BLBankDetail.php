@@ -20,7 +20,6 @@ class BLBankDetail extends Model
     protected $fillable = [
         'lead_uuid',
         'lead_id',
-        'product_id',
         'applicant_id',
         'applicant_sno',
         'applicant_type',

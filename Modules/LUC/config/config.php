@@ -7,7 +7,7 @@ return [
     'due_after_days' => 15,
 
 
-    'disk' => 'private',
+    'disk' => 'local',
 
 
     'photo_directory' => 'luc-reports',

@@ -1,5 +1,36 @@
 <?php
 
+// namespace Modules\UserManagement\Http\Requests;
+
+// use Illuminate\Foundation\Http\FormRequest;
+
+// class OrganizationBranchRequest extends FormRequest
+// {
+//     public function authorize(): bool
+//     {
+//         return true;
+//     }
+
+//     public function rules(): array
+//     {
+//         $branchId = $this->route('organization_branch')?->id;
+
+//         return [
+//             'organization_id'   => 'required|exists:organizations,id',
+//             'user_type_id'      => 'required|exists:user_types,id',
+//             'parent_branch_id'  => 'nullable|exists:organization_branches,id',
+//             'name'              => 'required|string|max:255',
+//             'branch_code'       => 'nullable|string|max:50|unique:organization_branches,branch_code,' . $branchId,
+//             'type'              => 'nullable|string|in:HO,BRANCH,SUB_BRANCH',
+//             'address'           => 'nullable|string',
+//             'pincode'           => 'nullable|string|max:10',
+//             'city'              => 'nullable|string|max:255',
+//             'state'             => 'nullable|string|max:255',
+//             'is_active'         => 'boolean',
+//         ];
+//     }
+// }
+
 
 
 namespace Modules\UserManagement\Http\Requests;

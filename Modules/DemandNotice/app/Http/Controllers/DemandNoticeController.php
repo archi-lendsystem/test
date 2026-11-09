@@ -15,6 +15,7 @@ use Modules\DemandNotice\Enums\DemandNoticeType;
 use Modules\DemandNotice\Models\DemandNotice;
 use Modules\Repayment\Enums\RepaymentAccountStatus;
 use Modules\Repayment\Models\RepaymentAccount;
+use Modules\UserManagement\Support\ReportBranchAccess;
 use Throwable;
 
 class DemandNoticeController extends Controller
@@ -25,27 +26,37 @@ class DemandNoticeController extends Controller
     public function index(Request $request): JsonResponse
     {
         $validated = $request->validate([
+            'branch_id' => 'nullable|integer|exists:organization_branches,id',
             'search' => 'nullable|string|max:255',
             'per_page' => 'nullable|integer|min:1|max:200',
         ]);
 
-        $query = RepaymentAccount::query()
+        $branchId = !empty($validated['branch_id'])
+            ? (int) $validated['branch_id']
+            : null;
+
+        $query = ReportBranchAccess::scopeByRelation(
+            RepaymentAccount::query(),
+            $request->user(),
+            'lead',
+            $branchId
+        )
             ->whereIn('status', [RepaymentAccountStatus::ACTIVE->value, RepaymentAccountStatus::SUSPENDED->value])
             ->where('overdue_amount', '>', 0)
             ->with([
                 'lead:uuid,lead_id,branch_id',
                 'lead.branch:id,name,branch_code',
-                'lead.applicantDetails' => fn ($q) => $q
+                'lead.applicantDetails' => fn($q) => $q
                     ->where('applicant_sno', 0)
                     ->select(['id', 'lead_uuid', 'full_name', 'alternate_contact_number']),
-                'demandNotices' => fn ($q) => $q->latest('id')->limit(1),
+                'demandNotices' => fn($q) => $q->latest('id')->limit(1),
             ]);
 
         if (!empty($validated['search'])) {
             $search = $validated['search'];
             $query->where(function ($q) use ($search) {
                 $q->where('loan_number', 'like', "%{$search}%")
-                    ->orWhereHas('lead.applicantDetails', fn ($aq) => $aq->where('full_name', 'like', "%{$search}%"));
+                    ->orWhereHas('lead.applicantDetails', fn($aq) => $aq->where('full_name', 'like', "%{$search}%"));
             });
         }
 
@@ -112,7 +123,7 @@ class DemandNoticeController extends Controller
     {
         $account = RepaymentAccount::with([
             'lead:uuid,lead_id',
-            'lead.applicantDetails' => fn ($q) => $q->where('applicant_sno', 0),
+            'lead.applicantDetails' => fn($q) => $q->where('applicant_sno', 0),
         ])->where('uuid', $accountUuid)->first();
 
         if (!$account) {

@@ -10,4 +10,9 @@ Route::middleware(['auth:sanctum', 'user.status'])
         Route::get('/', [NPAController::class, 'index'])
             ->middleware('permission:npa.show')
             ->name('index');
+
+        Route::post('/accounts/{accountUuid}/move-to-settlement', [NPAController::class, 'moveToSettlement'])
+            ->whereUuid('accountUuid')
+            ->middleware('permission:settlements.store')
+            ->name('move-to-settlement');
     });

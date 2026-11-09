@@ -65,6 +65,8 @@ class RepaymentAccountIndexRequest extends FormRequest
     public function rules(): array
     {
         return [
+
+            'branch_id' => 'nullable|integer|exists:organization_branches,id',
             /*
              * Generic search:
              *
@@ -176,52 +178,52 @@ class RepaymentAccountIndexRequest extends FormRequest
     {
         return [
             'search.max' =>
-                'Search text cannot be greater than 150 characters.',
+            'Search text cannot be greater than 150 characters.',
 
             'loan_type.in' =>
-                'Loan type must be BL.',
+            'Loan type must be BL.',
 
             'loan_number.max' =>
-                'Loan number cannot be greater than 50 characters.',
+            'Loan number cannot be greater than 50 characters.',
 
             'lead_uuid.uuid' =>
-                'Lead UUID must be a valid UUID.',
+            'Lead UUID must be a valid UUID.',
 
             'status.enum' =>
-                'Invalid repayment account status selected.',
+            'Invalid repayment account status selected.',
 
             'due_status.enum' =>
-                'Invalid installment due status selected.',
+            'Invalid installment due status selected.',
 
             'from_date.date_format' =>
-                'From date must be in YYYY-MM-DD format.',
+            'From date must be in YYYY-MM-DD format.',
 
             'to_date.date_format' =>
-                'To date must be in YYYY-MM-DD format.',
+            'To date must be in YYYY-MM-DD format.',
 
             'to_date.after_or_equal' =>
-                'To date must be equal to or after from date.',
+            'To date must be equal to or after from date.',
 
             'page.integer' =>
-                'Page must be an integer.',
+            'Page must be an integer.',
 
             'page.min' =>
-                'Page must be at least 1.',
+            'Page must be at least 1.',
 
             'per_page.integer' =>
-                'Per page must be an integer.',
+            'Per page must be an integer.',
 
             'per_page.min' =>
-                'Per page must be at least 1.',
+            'Per page must be at least 1.',
 
             'per_page.max' =>
-                'Per page cannot be greater than 100.',
+            'Per page cannot be greater than 100.',
 
             'sort_by.in' =>
-                'Invalid sorting field selected.',
+            'Invalid sorting field selected.',
 
             'sort_direction.in' =>
-                'Sort direction must be asc or desc.',
+            'Sort direction must be asc or desc.',
         ];
     }
 
@@ -249,7 +251,7 @@ class RepaymentAccountIndexRequest extends FormRequest
                 'status' => false,
                 'status_code' => 422,
                 'request_code' =>
-                    'REQ-'
+                'REQ-'
                     . strtoupper(Str::random(8))
                     . '-'
                     . now()->format('YmdHis'),

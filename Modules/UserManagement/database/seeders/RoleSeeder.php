@@ -150,6 +150,14 @@ class RoleSeeder extends Seeder
                 'guard_name'   => 'web',
                 'status'       => true,
             ],
+
+                        [
+    'name'         => 'area_manager',
+    'display_name' => 'Area Manager',
+    'code'         => 'AREA_MANAGER',
+    'guard_name'   => 'web',
+    'status'       => true,
+],
             [
                 'name'         => 'branch_credit_checker',
                 'display_name' => 'Branch Credit Checker',

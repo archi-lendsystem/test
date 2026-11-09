@@ -21,13 +21,6 @@ return [
         'payday'    => 'Payday Loan',
     ],
 
-      'product_sub_loan_types' => [
-        'LAP' => ['monthly'],
-        'HL'  => ['monthly'],
-        'BL'  => ['weekly', 'bi_weekly', 'monthly', 'daily', 'bullet', 'payday'],
-        'PL'  => ['weekly', 'bi_weekly', 'monthly', 'daily', 'bullet', 'payday'],
-    ],
-
     'repayment_frequencies' => [
         'daily'       => 'Daily',
         'weekly'      => 'Weekly',

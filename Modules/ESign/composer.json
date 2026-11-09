@@ -1,20 +1,25 @@
 {
-    "name": "modules/esign",
-    "description": "Sequential borrower/lender eSign workflow with combined BL report + sanction PDF support",
-    "type": "laravel-module",
-    "license": "proprietary",
-    "require": {
-        "php": "^8.1",
-        "illuminate/contracts": "^10.0|^11.0|^12.0",
-        "illuminate/database": "^10.0|^11.0|^12.0",
-        "illuminate/http": "^10.0|^11.0|^12.0",
-        "illuminate/support": "^10.0|^11.0|^12.0",
-        "setasign/fpdf": "^1.8",
-        "setasign/fpdi": "^2.6"
+    "name": "nwidart/esign",
+    "description": "",
+    "authors": [
+        {
+            "name": "Nicolas Widart",
+            "email": "n.widart@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
     },
     "autoload": {
         "psr-4": {
-            "Modules\\ESign\\": "app/"
+            "Modules\\ESign\\": "app/",
+            "Modules\\ESign\\Database\\Factories\\": "database/factories/",
+            "Modules\\ESign\\Database\\Seeders\\": "database/seeders/"
         }
     },
     "autoload-dev": {

@@ -1,5 +1,7 @@
 <?php
 
+
+
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -16,13 +18,6 @@ return new class extends Migration
                 ->references('uuid')
                 ->on('b_l_lead_creations')
                 ->onDelete('cascade');
-
-                  $table->unsignedBigInteger('product_id')->nullable();
-
-            $table->foreign('product_id')
-                ->references('id')
-                ->on('products')
-                ->nullOnDelete();
 
             $table->unsignedBigInteger('created_by')->nullable();
             $table->string('lead_id');
@@ -43,19 +38,6 @@ return new class extends Migration
 
             $table->string('aadhaar_card_number')->nullable();
             $table->string('pan_card_number')->nullable();
-
-            $table->enum('secondary_kyc_type', [
-                'PAN Card',
-                'Voter ID Card',
-                'Driving Licence',
-                'Passport',
-                'Job Card',
-                'Digital Ration Card',
-            ])->nullable();
-
-            $table->string('secondary_kyc_number', 50)
-                ->nullable();
-
             $table->date('date_of_birth')->nullable();
             $table->string('age')->nullable();
 
@@ -64,11 +46,8 @@ return new class extends Migration
             $table->string('caste')->nullable();
             $table->string('bureau_deviation')->nullable();
 
-            $table->enum('is_income_considered', ['Yes', 'No'])
-                ->nullable();
-
+            $table->enum('is_income_considered', ['Yes', 'No'])->nullable();
             $table->string('applying_as')->nullable();
-
             $table->enum('entity_type', [
                 'Sole Proprietor',
                 'Partnership',
@@ -118,6 +97,7 @@ return new class extends Migration
                 ->default(false)
                 ->comment('1 = same as current address, 0 = different');
 
+            
             $table->string('profile_photo', 500)
                 ->nullable()
                 ->comment('Relative path on private disk; served via signed URL');
@@ -126,6 +106,7 @@ return new class extends Migration
         });
     }
 
+   
     public function down(): void
     {
         Schema::dropIfExists('b_l_applicant_details');

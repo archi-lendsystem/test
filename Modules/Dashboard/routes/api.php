@@ -7,8 +7,11 @@ Route::middleware(['auth:sanctum'])->prefix('v1')->group(function () {
 
     Route::prefix('dashboard')->name('dashboard.')->group(function () {
 
-        Route::get('summary', [DashboardController::class, 'productSummary'])->name('summary');
-        Route::get('leads', [DashboardController::class, 'productLeadsList'])->name('leads');
+        // ── BL (Business Loan) Dashboard ──────────────────────────────────────
+        Route::prefix('bl')->name('bl.')->group(function () {
+            Route::get('summary', [DashboardController::class, 'blSummary'])->name('summary');
+            Route::get('leads',   [DashboardController::class, 'blLeadsList'])->name('leads');
+        });
 
     });
 

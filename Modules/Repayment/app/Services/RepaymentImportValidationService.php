@@ -66,7 +66,7 @@ final class RepaymentImportValidationService
                 $this->error($errors, 'loan_number', 'LOAN_NUMBER_NOT_UNIQUE', "Loan Number {$loanNumber} is not unique.");
             } else {
                 $account = $matches->first();
-                if (! $account->allowsPayment()) {
+                if (!$account->allowsPayment()) {
                     $this->error($errors, 'loan_number', 'ACCOUNT_NOT_PAYABLE', 'This repayment account does not allow collection.');
                 }
             }
@@ -157,17 +157,21 @@ final class RepaymentImportValidationService
 
     private function money(mixed $value, bool $allowZero): ?string
     {
-        if ($value === null || trim((string) $value) === '') return $allowZero ? '0.00' : null;
+        if ($value === null || trim((string) $value) === '')
+            return $allowZero ? '0.00' : null;
         $text = str_replace([',', '₹', ' '], '', trim((string) $value));
-        if (! preg_match('/^\d+(?:\.\d{1,2})?$/', $text)) return null;
+        if (!preg_match('/^\d+(?:\.\d{1,2})?$/', $text))
+            return null;
         $normalized = bcadd($text, '0', self::SCALE);
-        if (! $allowZero && bccomp($normalized, '0.00', self::SCALE) !== 1) return null;
+        if (!$allowZero && bccomp($normalized, '0.00', self::SCALE) !== 1)
+            return null;
         return $normalized;
     }
 
     private function text(mixed $value): ?string
     {
-        if ($value === null) return null;
+        if ($value === null)
+            return null;
         $value = trim((string) $value);
         return $value === '' ? null : $value;
     }
@@ -183,6 +187,44 @@ final class RepaymentImportValidationService
             return now(config('app.timezone'))->toDateString();
         }
     }
+
+    // private function date(mixed $value, array &$errors): string
+    // {
+    //     $raw = trim((string) ($value ?? ''));
+
+    //     if ($raw === '') {
+    //         $this->error(
+    //             $errors,
+    //             'collection_date',
+    //             'DATE_REQUIRED',
+    //             'Collection Date is required.'
+    //         );
+
+    //         return '';
+    //     }
+
+    //     $date = \DateTimeImmutable::createFromFormat('!Y-m-d', $raw);
+    //     $parseErrors = \DateTimeImmutable::getLastErrors();
+
+    //     if (
+    //         $date === false ||
+    //         $date->format('Y-m-d') !== $raw ||
+    //         ($parseErrors !== false &&
+    //             ($parseErrors['warning_count'] > 0 ||
+    //                 $parseErrors['error_count'] > 0))
+    //     ) {
+    //         $this->error(
+    //             $errors,
+    //             'collection_date',
+    //             'DATE_INVALID',
+    //             'Collection Date is invalid. Use YYYY-MM-DD.'
+    //         );
+
+    //         return '';
+    //     }
+
+    //     return $date->format('Y-m-d');
+    // }
 
     private function error(array &$errors, string $field, string $code, string $message): void
     {

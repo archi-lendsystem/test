@@ -32,12 +32,39 @@ class LUCReportController extends Controller
     {
         $validated = $request->validate([
             'luc_status' => ['nullable', Rule::in(array_keys(self::SIMPLE_STATUS_LABELS))],
+             'branch_id' => [
+        'nullable',
+        'integer',
+        'exists:organization_branches,id',
+    ],
             'branch_name' => ['nullable', 'string', 'max:150'],
             'search' => ['nullable', 'string', 'max:100'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
+
+        $allowedBranchIds = $this->allowedBranchIds($request);
+
+$branchId = !empty($validated['branch_id'])
+    ? (int) $validated['branch_id']
+    : null;
+
+if ($branchId !== null) {
+    abort_unless(
+        in_array($branchId, $allowedBranchIds, true),
+        403,
+        'You cannot access data from another branch.'
+    );
+
+    $allowedBranchIds = [$branchId];
+}
  
-        $query = $this->reportQuery();
+$leadsTable = (new BLLeadCreation())->getTable();
+
+$query = $this->reportQuery()
+    ->whereIn(
+        "{$leadsTable}.branch_id",
+        $allowedBranchIds
+    );
  
         if (! empty($validated['luc_status'])) {
             $query->havingRaw('luc_status = ?', [$validated['luc_status']]);
@@ -131,10 +158,7 @@ public function download(string $lead_uuid): Response|JsonResponse
             );
         }
 
-        /*
-         * Disbursed customer ka LUC data fetch karo.
-         * Ye wahi query hai jo show() method use karta hai.
-         */
+     
         $leadsTable = (new BLLeadCreation())->getTable();
 
         $row = $this->reportQuery()
@@ -338,6 +362,18 @@ public function download(string $lead_uuid): Response|JsonResponse
             'verified_at' => optional($report->verified_at)->toIso8601String(),
         ];
     }
+
+    private function allowedBranchIds(Request $request): array
+{
+    return $request->user()
+        ->branches()
+        ->where('organization_branches.is_active', true)
+        ->pluck('organization_branches.id')
+        ->map(fn ($id) => (int) $id)
+        ->unique()
+        ->values()
+        ->all();
+}
  
  
     private function auditLog(string $action, ?string $lead_uuid, array $meta = []): void

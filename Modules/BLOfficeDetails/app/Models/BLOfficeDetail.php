@@ -14,7 +14,6 @@ class BLOfficeDetail extends Model
     protected $primaryKey = 'id';
     protected $fillable = [
         'lead_uuid',
-        'product_id',
         'created_by',
         'lead_id',
         'applicant_type',

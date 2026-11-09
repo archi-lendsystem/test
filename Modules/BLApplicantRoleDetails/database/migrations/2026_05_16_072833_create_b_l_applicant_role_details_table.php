@@ -15,12 +15,6 @@ return new class extends Migration
             $table->id();
              $table->uuid('lead_uuid');
             $table->foreign('lead_uuid')->references('uuid')->on('b_l_lead_creations')->onDelete('cascade');
-              $table->unsignedBigInteger('product_id')->nullable();
-
-            $table->foreign('product_id')
-                ->references('id')
-                ->on('products')
-                ->nullOnDelete();
             $table->unsignedBigInteger('created_by')->nullable();
             $table->string('lead_id');
             $table->integer('applicant_role_id');

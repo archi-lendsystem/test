@@ -20,7 +20,6 @@ class BLReferenceDetails extends Model
 
     protected $fillable = [
         'lead_uuid',
-        'product_id',
         'created_by',
         'lead_id',
         'reference_id',

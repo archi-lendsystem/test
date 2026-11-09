@@ -7,12 +7,21 @@ use App\Traits\ApiResponse;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use InvalidArgumentException;
 use Modules\Repayment\Enums\RepaymentAccountStatus;
 use Modules\Repayment\Models\RepaymentAccount;
+use Modules\Settlement\Enums\SettlementStatus;
+use Modules\Settlement\Models\RepaymentSettlement;
+use Modules\Settlement\Services\SettlementService;
+use Modules\UserManagement\Support\ReportBranchAccess;
 
 class NPAController extends Controller
 {
     use ApiResponse;
+
+    public function __construct(
+        private readonly SettlementService $settlementService
+    ) {}
 
     /**
      * A loan becomes NPA once its oldest overdue installment has been
@@ -44,23 +53,42 @@ class NPAController extends Controller
             'per_page' => 'nullable|integer|min:1|max:200',
         ]);
 
+        $branchId = !empty($validated['branch_id'])
+            ? (int) $validated['branch_id']
+            : null;
+
         $asOf = CarbonImmutable::now(config('app.timezone'))->startOfDay();
 
-        $accounts = RepaymentAccount::query()
+        $accountsQuery = ReportBranchAccess::scopeByRelation(
+            RepaymentAccount::query(),
+            $request->user(),
+            'lead',
+            $branchId
+        );
+
+        $accounts = $accountsQuery
             ->whereIn('status', [
                 RepaymentAccountStatus::ACTIVE->value,
                 RepaymentAccountStatus::SUSPENDED->value,
             ])
             ->with([
-                'installments' => fn ($q) => $q
+                'installments' => fn($q) => $q
                     ->where('outstanding_amount', '>', 0)
                     ->orderBy('due_date')
                     ->orderBy('installment_number'),
+
                 'lead:uuid,lead_id,branch_id',
+
                 'lead.branch:id,name,branch_code',
-                'lead.applicantDetails' => fn ($q) => $q
+
+                'lead.applicantDetails' => fn($q) => $q
                     ->where('applicant_sno', 0)
-                    ->select(['id', 'lead_uuid', 'full_name', 'alternate_contact_number']),
+                    ->select([
+                        'id',
+                        'lead_uuid',
+                        'full_name',
+                        'alternate_contact_number',
+                    ]),
             ])
             ->get();
 
@@ -89,6 +117,14 @@ class NPAController extends Controller
 
                 $applicant = $account->lead?->applicantDetails->first();
                 $branch = $account->lead?->branch;
+                $settlement = RepaymentSettlement::query()
+                    ->where('repayment_account_id', $account->id)
+                    ->whereIn('status', [
+                        SettlementStatus::PROPOSED->value,
+                        SettlementStatus::APPROVED->value,
+                    ])
+                    ->latest('id')
+                    ->first();
 
                 return [
                     'repayment_account_uuid' => $account->uuid,
@@ -109,14 +145,22 @@ class NPAController extends Controller
                     'days_as_npa' => $daysAsNpa,
                     'npa_since_date' => $npaSinceDate,
                     'stage' => $this->stageFor($daysAsNpa),
+                    'settlement_eligible' => $settlement === null,
+                    'settlement' => $settlement ? [
+                        'uuid' => $settlement->uuid,
+                        'status' => $settlement->status->value,
+                        'outstanding_at_proposal' => (float) $settlement->total_outstanding_at_proposal,
+                        'settlement_amount' => (float) $settlement->settlement_amount,
+                        'created_at' => optional($settlement->created_at)->toDateTimeString(),
+                    ] : null,
                 ];
             })
             ->filter()
             ->values();
 
-        if (!empty($validated['branch_id'])) {
-            $rows = $rows->filter(fn ($row) => ($row['branch']['id'] ?? null) === (int) $validated['branch_id']);
-        }
+        // if (!empty($validated['branch_id'])) {
+        //     $rows = $rows->filter(fn ($row) => ($row['branch']['id'] ?? null) === (int) $validated['branch_id']);
+        // }
 
         if (!empty($validated['search'])) {
             $search = strtolower($validated['search']);
@@ -161,6 +205,73 @@ class NPAController extends Controller
                 'last_page' => (int) max(1, ceil($rows->count() / $perPage)),
             ],
         ], 'NPA report fetched successfully.');
+    }
+
+    /**
+     * Move an NPA account into the settlement workflow.
+     * The amount outstanding at movement and negotiated amount are persisted
+     * by the Settlement module for audit/display.
+     */
+    public function moveToSettlement(Request $request, string $accountUuid): JsonResponse
+    {
+        $validated = $request->validate([
+            'settlement_amount' => 'required|numeric|min:0.01',
+            'reason' => 'required|string|max:1000',
+        ]);
+
+        $account = RepaymentAccount::query()
+            ->where('uuid', $accountUuid)
+            ->whereIn('status', [
+                RepaymentAccountStatus::ACTIVE->value,
+                RepaymentAccountStatus::SUSPENDED->value,
+            ])
+            ->first();
+
+        if (! $account) {
+            return $this->error('NPA repayment account not found or is not eligible for settlement.', null, 404);
+        }
+
+        // Re-check DPD so this endpoint cannot move a non-NPA account.
+        $oldestUnpaid = $account->installments()
+            ->where('outstanding_amount', '>', 0)
+            ->orderBy('due_date')
+            ->orderBy('installment_number')
+            ->first();
+
+        $asOf = CarbonImmutable::now(config('app.timezone'))->startOfDay();
+        if (! $oldestUnpaid) {
+            return $this->error('Account has no unpaid installment.', null, 422);
+        }
+
+        $dueDate = CarbonImmutable::parse($oldestUnpaid->due_date, config('app.timezone'))->startOfDay();
+        $dpd = $dueDate->isBefore($asOf) ? $dueDate->diffInDays($asOf) : 0;
+
+        if ($dpd <= self::DPD_NPA_THRESHOLD) {
+            return $this->error('Only accounts with DPD greater than 90 can be moved from NPA to settlement.', null, 422);
+        }
+
+        try {
+            $settlement = $this->settlementService->propose(
+                account: $account,
+                settlementAmount: (float) $validated['settlement_amount'],
+                reason: $validated['reason'],
+                proposedBy: optional($request->user())->id
+            );
+
+            return $this->success([
+                'settlement_uuid' => $settlement->uuid,
+                'repayment_account_uuid' => $account->uuid,
+                'loan_number' => $account->loan_number,
+                'npa_dpd_at_movement' => $dpd,
+                'amount_at_movement' => (float) $settlement->total_outstanding_at_proposal,
+                'settlement_amount' => (float) $settlement->settlement_amount,
+                'waived_amount' => (float) $settlement->waived_amount,
+                'status' => $settlement->status->value,
+                'moved_to_settlement_at' => optional($settlement->created_at)->toDateTimeString(),
+            ], 'NPA lead moved to settlement successfully.', 201);
+        } catch (InvalidArgumentException $exception) {
+            return $this->error($exception->getMessage(), null, 422);
+        }
     }
 
     private function stageFor(int $daysAsNpa): string

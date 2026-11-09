@@ -741,6 +741,13 @@ final class RepaymentPaymentPostingService
                             : null,
             ])->save();
 
+            app(RepaymentInstallmentDueStatusSyncService::class)->sync(
+                $installment,
+                StatusHistorySource::PAYMENT_POSTING,
+                $transaction,
+                $actorId
+            );
+
             if ($oldPaymentStatus !== $newPaymentStatus) {
                 RepaymentStatusHistory::query()->create([
                     'repayment_account_id' =>
@@ -1451,8 +1458,6 @@ final class RepaymentPaymentPostingService
     }
 }
 
-
-
 // namespace Modules\Repayment\Services;
 
 // use Illuminate\Database\QueryException;
@@ -1477,8 +1482,9 @@ final class RepaymentPaymentPostingService
 // {
 //     public function __construct(
 //         private readonly RepaymentTransactionNumberGenerator
-//             $transactionNumberGenerator
-//     ) {}
+//         $transactionNumberGenerator
+//     ) {
+//     }
 
 //     /**
 //      * Post a customer payment against a repayment account.
@@ -1494,7 +1500,7 @@ final class RepaymentPaymentPostingService
 //     ): RepaymentTransaction {
 //         try {
 //             return DB::transaction(
-//                 fn (): RepaymentTransaction =>
+//                 fn(): RepaymentTransaction =>
 //                     $this->postInsideTransaction(
 //                         accountUuid: $accountUuid,
 //                         payload: $payload,
@@ -1525,7 +1531,7 @@ final class RepaymentPaymentPostingService
 //                         ->where('uuid', $accountUuid)
 //                         ->first();
 
-//                     if (! $account) {
+//                     if (!$account) {
 //                         throw RepaymentPaymentException::accountNotFound(
 //                             $accountUuid
 //                         );
@@ -1544,10 +1550,10 @@ final class RepaymentPaymentPostingService
 //                     }
 
 //                     throw RepaymentPaymentException::idempotencyConflict(
-//                         idempotencyKey: (string)
-//                             $existing->idempotency_key,
-//                         existingTransactionUuid: (string)
-//                             $existing->uuid
+//                         idempotencyKey: (string) 
+//                         $existing->idempotency_key,
+//                         existingTransactionUuid: (string) 
+//                         $existing->uuid
 //                     );
 //                 }
 //             }
@@ -1613,7 +1619,7 @@ final class RepaymentPaymentPostingService
 //             ->lockForUpdate()
 //             ->first();
 
-//         if (! $account) {
+//         if (!$account) {
 //             throw RepaymentPaymentException::accountNotFound(
 //                 $accountUuid
 //             );
@@ -1654,7 +1660,7 @@ final class RepaymentPaymentPostingService
 //             );
 //         }
 
-//         if (! $account->allowsPayment()) {
+//         if (!$account->allowsPayment()) {
 //             throw RepaymentPaymentException::
 //                 accountDoesNotAllowPayment(
 //                     accountUuid: (string) $account->uuid,
@@ -1686,7 +1692,7 @@ final class RepaymentPaymentPostingService
 //             )
 //         );
 
-//         if (! $paymentMode) {
+//         if (!$paymentMode) {
 //             throw new RepaymentPaymentException(
 //                 message: 'Invalid payment mode selected.',
 //                 context: [
@@ -1861,7 +1867,7 @@ final class RepaymentPaymentPostingService
 //             account: $account,
 //             receivedAmount: $amount,
 //             unallocatedAmount:
-//                 $allocationResult['remaining_amount'],
+//             $allocationResult['remaining_amount'],
 //             transaction: $transaction,
 //             actorId: $actorId,
 //             postingTimestamp: $postingTimestamp
@@ -1949,6 +1955,19 @@ final class RepaymentPaymentPostingService
 //             $oldPaymentStatus =
 //                 $installment->payment_status;
 
+//             /*
+//              * Repayment collection is based on the rounded installment
+//              * outstanding stored for the customer, not on the exact
+//              * principal + interest component total.
+//              *
+//              * This also self-heals legacy decimal outstanding values during
+//              * the next payment posting because 0.xx can become 0.00 here.
+//              */
+//             $installmentCollectible =
+//                 $this->roundWholeMoney(
+//                     $installment->outstanding_amount
+//                 );
+
 //             $installmentInterestAllocated = '0.00';
 //             $installmentPrincipalAllocated = '0.00';
 
@@ -1957,6 +1976,11 @@ final class RepaymentPaymentPostingService
 //              */
 //             $interestOutstanding =
 //                 $installment->interestOutstanding();
+
+//             $interestOutstanding = $this->minimumMoney(
+//                 $interestOutstanding,
+//                 $installmentCollectible
+//             );
 
 //             $interestAllocation = $this->minimumMoney(
 //                 $remainingAmount,
@@ -2013,6 +2037,22 @@ final class RepaymentPaymentPostingService
 //                     2
 //                 );
 
+//                 $installmentCollectible = bcsub(
+//                     $installmentCollectible,
+//                     $interestAllocation,
+//                     2
+//                 );
+
+//                 if (
+//                     bccomp(
+//                         $installmentCollectible,
+//                         '0.00',
+//                         2
+//                     ) === -1
+//                 ) {
+//                     $installmentCollectible = '0.00';
+//                 }
+
 //                 $interestAllocatedTotal = bcadd(
 //                     $interestAllocatedTotal,
 //                     $interestAllocation,
@@ -2028,8 +2068,14 @@ final class RepaymentPaymentPostingService
 //             /*
 //              * Component 2: principal.
 //              */
+//             /*
+//              * Whatever remains from the rounded collectible after interest
+//              * is treated as the principal-side collectible. This absorbs the
+//              * per-EMI rounding difference without carrying paise to the next
+//              * EMI.
+//              */
 //             $principalOutstanding =
-//                 $installment->principalOutstanding();
+//                 $installmentCollectible;
 
 //             $principalAllocation = $this->minimumMoney(
 //                 $remainingAmount,
@@ -2086,6 +2132,22 @@ final class RepaymentPaymentPostingService
 //                     2
 //                 );
 
+//                 $installmentCollectible = bcsub(
+//                     $installmentCollectible,
+//                     $principalAllocation,
+//                     2
+//                 );
+
+//                 if (
+//                     bccomp(
+//                         $installmentCollectible,
+//                         '0.00',
+//                         2
+//                     ) === -1
+//                 ) {
+//                     $installmentCollectible = '0.00';
+//                 }
+
 //                 $principalAllocatedTotal = bcadd(
 //                     $principalAllocatedTotal,
 //                     $principalAllocation,
@@ -2098,11 +2160,13 @@ final class RepaymentPaymentPostingService
 //                 $allocationCount++;
 //             }
 
-//             $newOutstanding = bcadd(
-//                 $installment->interestOutstanding(),
-//                 $installment->principalOutstanding(),
-//                 2
-//             );
+//             /*
+//              * Always persist outstanding as a whole-rupee amount.
+//              */
+//             $newOutstanding =
+//                 $this->roundWholeMoney(
+//                     $installmentCollectible
+//                 );
 
 //             $totalPaid = bcadd(
 //                 (string) $installment->interest_paid,
@@ -2131,9 +2195,9 @@ final class RepaymentPaymentPostingService
 
 //                 'fully_paid_at' =>
 //                     $newPaymentStatus
-//                         === InstallmentPaymentStatus::PAID
-//                             ? $postingTimestamp
-//                             : null,
+//                     === InstallmentPaymentStatus::PAID
+//                     ? $postingTimestamp
+//                     : null,
 //             ])->save();
 
 //             if ($oldPaymentStatus !== $newPaymentStatus) {
@@ -2215,17 +2279,22 @@ final class RepaymentPaymentPostingService
 //             ->selectRaw(
 //                 '
 //                 COALESCE(
-//                     SUM(principal_due - principal_paid),
-//                     0
-//                 ) AS principal_outstanding,
-
-//                 COALESCE(
-//                     SUM(interest_due - interest_paid),
+//                     SUM(
+//                         LEAST(
+//                             GREATEST(
+//                                 interest_due - interest_paid,
+//                                 0
+//                             ),
+//                             ROUND(outstanding_amount, 0)
+//                         )
+//                     ),
 //                     0
 //                 ) AS interest_outstanding,
 
 //                 COALESCE(
-//                     SUM(outstanding_amount),
+//                     SUM(
+//                         ROUND(outstanding_amount, 0)
+//                     ),
 //                     0
 //                 ) AS total_outstanding,
 
@@ -2233,7 +2302,7 @@ final class RepaymentPaymentPostingService
 //                     SUM(
 //                         CASE
 //                             WHEN due_status = ?
-//                             THEN outstanding_amount
+//                             THEN ROUND(outstanding_amount, 0)
 //                             ELSE 0
 //                         END
 //                     ),
@@ -2244,19 +2313,31 @@ final class RepaymentPaymentPostingService
 //             )
 //             ->first();
 
-//         $principalOutstanding = $this->normalizeMoney(
-//             $totals?->principal_outstanding ?? '0'
-//         );
-
-//         $interestOutstanding = $this->normalizeMoney(
-//             $totals?->interest_outstanding ?? '0'
-//         );
-
-//         $totalOutstanding = $this->normalizeMoney(
+//         $totalOutstanding = $this->roundWholeMoney(
 //             $totals?->total_outstanding ?? '0'
 //         );
 
-//         $overdueAmount = $this->normalizeMoney(
+//         $interestOutstanding = $this->roundWholeMoney(
+//             $totals?->interest_outstanding ?? '0'
+//         );
+
+//         if (
+//             bccomp(
+//                 $interestOutstanding,
+//                 $totalOutstanding,
+//                 2
+//             ) === 1
+//         ) {
+//             $interestOutstanding = $totalOutstanding;
+//         }
+
+//         $principalOutstanding = bcsub(
+//             $totalOutstanding,
+//             $interestOutstanding,
+//             2
+//         );
+
+//         $overdueAmount = $this->roundWholeMoney(
 //             $totals?->overdue_amount ?? '0'
 //         );
 
@@ -2336,7 +2417,9 @@ final class RepaymentPaymentPostingService
 //                 'repayment_account_id',
 //                 $account->id
 //             )
-//             ->where('outstanding_amount', '>', 0)
+//             ->whereRaw(
+//                 'ROUND(outstanding_amount, 0) > 0'
+//             )
 //             ->orderBy('due_date')
 //             ->orderBy('installment_number')
 //             ->value('due_date');
@@ -2349,8 +2432,8 @@ final class RepaymentPaymentPostingService
 //                 '0.00',
 //                 2
 //             ) === 0
-//                 ? RepaymentAccountStatus::CLOSED
-//                 : RepaymentAccountStatus::ACTIVE;
+//             ? RepaymentAccountStatus::CLOSED
+//             : RepaymentAccountStatus::ACTIVE;
 
 //         $account->forceFill([
 //             'principal_outstanding' =>
@@ -2385,9 +2468,9 @@ final class RepaymentPaymentPostingService
 
 //             'closed_at' =>
 //                 $newAccountStatus
-//                     === RepaymentAccountStatus::CLOSED
-//                         ? $postingTimestamp
-//                         : null,
+//                 === RepaymentAccountStatus::CLOSED
+//                 ? $postingTimestamp
+//                 : null,
 
 //             'updated_by' => $actorId,
 //         ])->save();
@@ -2472,11 +2555,11 @@ final class RepaymentPaymentPostingService
 //                 throw RepaymentPaymentException::
 //                     invalidInstallmentState(
 //                         installmentUuid:
-//                             (string) $installment->uuid,
+//                         (string) $installment->uuid,
 
 //                         installmentNumber:
-//                             (int) $installment
-//                                 ->installment_number,
+//                         (int) $installment
+//                             ->installment_number,
 
 //                         details: [
 //                             'field' => $field,
@@ -2486,32 +2569,15 @@ final class RepaymentPaymentPostingService
 //             }
 //         }
 
-//         if (
-//             bccomp(
-//                 $values['principal_paid'],
-//                 $values['principal_due'],
-//                 2
-//             ) === 1
-//         ) {
-//             throw RepaymentPaymentException::
-//                 invalidInstallmentState(
-//                     installmentUuid:
-//                         (string) $installment->uuid,
-
-//                     installmentNumber:
-//                         (int) $installment
-//                             ->installment_number,
-
-//                     details: [
-//                         'principal_due' =>
-//                             $values['principal_due'],
-
-//                         'principal_paid' =>
-//                             $values['principal_paid'],
-//                     ]
-//                 );
-//         }
-
+//         /*
+//          * Interest remains an exact financial component, therefore it may
+//          * never be paid above its due value.
+//          *
+//          * Principal is intentionally not compared with principal_due here:
+//          * the rounded-EMI difference is absorbed on the principal side, so
+//          * principal_paid can differ from the exact amortization principal by
+//          * a few paise.
+//          */
 //         if (
 //             bccomp(
 //                 $values['interest_paid'],
@@ -2522,11 +2588,11 @@ final class RepaymentPaymentPostingService
 //             throw RepaymentPaymentException::
 //                 invalidInstallmentState(
 //                     installmentUuid:
-//                         (string) $installment->uuid,
+//                     (string) $installment->uuid,
 
 //                     installmentNumber:
-//                         (int) $installment
-//                             ->installment_number,
+//                     (int) $installment
+//                         ->installment_number,
 
 //                     details: [
 //                         'interest_due' =>
@@ -2538,45 +2604,15 @@ final class RepaymentPaymentPostingService
 //                 );
 //         }
 
-//         $expectedOutstanding = bcadd(
-//             bcsub(
-//                 $values['principal_due'],
-//                 $values['principal_paid'],
-//                 2
-//             ),
-//             bcsub(
-//                 $values['interest_due'],
-//                 $values['interest_paid'],
-//                 2
-//             ),
-//             2
-//         );
-
-//         if (
-//             bccomp(
-//                 $expectedOutstanding,
-//                 $values['outstanding_amount'],
-//                 2
-//             ) !== 0
-//         ) {
-//             throw RepaymentPaymentException::
-//                 invalidInstallmentState(
-//                     installmentUuid:
-//                         (string) $installment->uuid,
-
-//                     installmentNumber:
-//                         (int) $installment
-//                             ->installment_number,
-
-//                     details: [
-//                         'expected_outstanding' =>
-//                             $expectedOutstanding,
-
-//                         'stored_outstanding' =>
-//                             $values['outstanding_amount'],
-//                     ]
-//                 );
-//         }
+//         /*
+//          * Do not enforce:
+//          *
+//          * principal_due + interest_due - paid == outstanding_amount
+//          *
+//          * because outstanding_amount is deliberately a rounded collectible
+//          * amount. Keeping that old invariant is what caused a fully-paid
+//          * rounded EMI to remain PARTIAL.
+//          */
 //     }
 
 //     /**
@@ -2592,7 +2628,7 @@ final class RepaymentPaymentPostingService
 //          * not treated as a globally reconcilable banking key.
 //          */
 //         if (
-//             ! $paymentMode->requiresReference()
+//             !$paymentMode->requiresReference()
 //             || $transactionReference === null
 //         ) {
 //             return;
@@ -2629,10 +2665,10 @@ final class RepaymentPaymentPostingService
 //                     paymentMode: $paymentMode->value,
 
 //                     transactionReference:
-//                         $transactionReference,
+//                     $transactionReference,
 
 //                     existingTransactionUuid:
-//                         (string) $existing->uuid
+//                     (string) $existing->uuid
 //                 );
 //         }
 //     }
@@ -2650,14 +2686,14 @@ final class RepaymentPaymentPostingService
 //     ): bool {
 //         if (
 //             (int) $transaction->repayment_account_id
-//                 !== (int) $account->id
+//             !== (int) $account->id
 //         ) {
 //             return false;
 //         }
 
 //         if (
 //             $transaction->transaction_type
-//                 !== RepaymentTransactionType::PAYMENT
+//             !== RepaymentTransactionType::PAYMENT
 //         ) {
 //             return false;
 //         }
@@ -2670,7 +2706,7 @@ final class RepaymentPaymentPostingService
 //             )
 //         );
 
-//         if (! $paymentMode) {
+//         if (!$paymentMode) {
 //             return false;
 //         }
 
@@ -2684,29 +2720,29 @@ final class RepaymentPaymentPostingService
 //             paymentMode: $paymentMode,
 
 //             transactionReference:
-//                 $this->normalizeNullableString(
-//                     $payload['transaction_reference'] ?? null
-//                 ),
+//             $this->normalizeNullableString(
+//                 $payload['transaction_reference'] ?? null
+//             ),
 
 //             receivedDate:
-//                 $this->normalizeRequiredString(
-//                     $payload['received_date'] ?? ''
-//                 ),
+//             $this->normalizeRequiredString(
+//                 $payload['received_date'] ?? ''
+//             ),
 
 //             valueDate:
-//                 $this->normalizeRequiredString(
-//                     $payload['value_date'] ?? ''
-//                 ),
+//             $this->normalizeRequiredString(
+//                 $payload['value_date'] ?? ''
+//             ),
 
 //             remarks:
-//                 $this->normalizeNullableString(
-//                     $payload['remarks'] ?? null
-//                 )
+//             $this->normalizeNullableString(
+//                 $payload['remarks'] ?? null
+//             )
 //         );
 
 //         $existingFingerprint =
 //             $transaction->metadata['request_fingerprint']
-//                 ?? null;
+//             ?? null;
 
 //         if (is_string($existingFingerprint)) {
 //             return hash_equals(
@@ -2728,26 +2764,26 @@ final class RepaymentPaymentPostingService
 //         ) === 0
 //             && $transaction->payment_mode === $paymentMode
 //             && $transaction->transaction_reference
-//                 === $this->normalizeNullableString(
-//                     $payload['transaction_reference'] ?? null
-//                 )
+//             === $this->normalizeNullableString(
+//                 $payload['transaction_reference'] ?? null
+//             )
 //             && optional(
 //                 $transaction->received_date
 //             )->format('Y-m-d')
-//                 === $this->normalizeRequiredString(
-//                     $payload['received_date'] ?? ''
-//                 )
+//             === $this->normalizeRequiredString(
+//                 $payload['received_date'] ?? ''
+//             )
 //             && optional(
 //                 $transaction->value_date
 //             )->format('Y-m-d')
-//                 === $this->normalizeRequiredString(
-//                     $payload['value_date'] ?? ''
-//                 )
+//             === $this->normalizeRequiredString(
+//                 $payload['value_date'] ?? ''
+//             )
 //             && $this->normalizeNullableString(
 //                 $transaction->remarks
 //             ) === $this->normalizeNullableString(
-//                 $payload['remarks'] ?? null
-//             );
+//                     $payload['remarks'] ?? null
+//                 );
 //     }
 
 //     /**
@@ -2789,13 +2825,31 @@ final class RepaymentPaymentPostingService
 //             'receipt',
 //             'reversalOf',
 //             'reversal',
-//             'allocations' => fn ($query) =>
+//             'allocations' => fn($query) =>
 //                 $query->allocationOrder(),
 //         ]);
 
 //         $transaction->loadCount('allocations');
 
 //         return $transaction;
+//     }
+
+//     /**
+//      * Round repayment collectible/outstanding to a whole rupee while
+//      * preserving DECIMAL(18,2)-style formatting in the database.
+//      */
+//     private function roundWholeMoney(mixed $value): string
+//     {
+//         return number_format(
+//             round(
+//                 (float) ($value ?? 0),
+//                 0,
+//                 PHP_ROUND_HALF_UP
+//             ),
+//             2,
+//             '.',
+//             ''
+//         );
 //     }
 
 //     /**

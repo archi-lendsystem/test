@@ -14,7 +14,6 @@ class LoginOtpVerification extends Model
     protected $fillable = [
         'user_id',
         'otp',
-        'channel',
         'expires_at',
         'used',
         'session_id',

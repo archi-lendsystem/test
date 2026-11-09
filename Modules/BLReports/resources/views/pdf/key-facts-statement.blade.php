@@ -7,13 +7,15 @@
     $cam = $cam ?? null;
     $charge = $charge ?? null;
     $insurance = $insurance ?? null;
+    $selectedScheme = $selected_scheme ?? null;
     $company = config('blreports.company', []);
 
-    $companyName = 'LENDSYSTEM PVT LTD';
+    $companyName = 'SABRIMALA FINTECH PVT LTD';
 
 $logoPaths = [
-    public_path('assets/images/logo/lendsystem_logo.png'),
-    base_path('public/assets/images/logo/lendsystem_logo.png'),
+    base_path('../public_html/images/sabrimala-logo.png'),
+    public_path('images/sabrimala-logo.png'),
+    base_path('public/images/sabrimala-logo.png'),
 ];
 
 $logoPath = collect($logoPaths)->first(
@@ -118,17 +120,31 @@ $logoBase64 = $logoPath
         data_get($sanction, 'apr')
     );
 
-    $tenure = data_get(
-        $sanction,
-        'tenure_months',
-        data_get($sanction, 'tenure')
-    );
+
+
 
     $emiAmount = data_get(
         $sanction,
         'emi_amount',
         data_get($sanction, 'emi')
     );
+
+
+    $tenure = data_get($sanction, 'tenure');
+
+if ($tenure === null || $tenure === '') {
+    $tenure = data_get(
+        $sanction,
+        'tenure_months'
+    );
+}
+
+if ($tenure === null || $tenure === '') {
+    $tenure = data_get(
+        $selectedScheme,
+        'tenure_value'
+    );
+}
 
     $processingFeePercentage = (float) data_get(
         $cam,
@@ -253,11 +269,70 @@ $logoBase64 = $logoPath
         data_get($sanction, 'emi_start_date')
     );
 
-    $repaymentFrequency = data_get(
-        $sanction,
-        'repayment_frequency',
-        'Monthly'
+/*
+ * Repayment frequency
+ *
+ * Current sanction data stores WEEKLY/MONTHLY
+ * inside repayment_mode.
+ */
+$rawRepaymentFrequency = data_get(
+    $sanction,
+    'repayment_mode'
+);
+
+if (
+    $rawRepaymentFrequency === null
+    || trim((string) $rawRepaymentFrequency) === ''
+) {
+    $rawRepaymentFrequency = data_get(
+        $selectedScheme,
+        'repayment_frequency'
     );
+}
+
+if (
+    $rawRepaymentFrequency === null
+    || trim((string) $rawRepaymentFrequency) === ''
+) {
+    $rawRepaymentFrequency = data_get(
+        $sanction,
+        'repayment_frequency'
+    );
+}
+
+$normalizedFrequency = strtolower(
+    trim((string) $rawRepaymentFrequency)
+);
+
+$tenureUnit = match ($normalizedFrequency) {
+    'daily', 'day', 'days' => 'day',
+    'weekly', 'week', 'weeks' => 'week',
+    'yearly', 'annual', 'year', 'years' => 'year',
+    default => 'month',
+};
+
+$repaymentFrequency = match ($tenureUnit) {
+    'day' => 'Daily',
+    'week' => 'Weekly',
+    'year' => 'Yearly',
+    default => 'Monthly',
+};
+
+/*
+ * Loan tenure value
+ */
+
+
+$tenureUnitLabel = $tenureUnit;
+
+if (
+    is_numeric($tenure)
+    && (float) $tenure !== 1.0
+) {
+    $tenureUnitLabel .= 's';
+}
+
+
 @endphp
 
 <!DOCTYPE html>
@@ -269,16 +344,7 @@ $logoBase64 = $logoPath
 
     <style>
         @page {
-            size: A4 portrait;
-            margin: 24px 28px 200px 28px;
-        }
-
-        tr {
-            page-break-inside: avoid;
-        }
-
-        .section-title {
-            page-break-after: avoid;
+            margin: 24px 28px 34px;
         }
 
         * {
@@ -521,7 +587,7 @@ $logoBase64 = $logoPath
             @if ($logoBase64)
                 <img
                     src="data:{{ $logoMime }};base64,{{ $logoBase64 }}"
-                    alt="LendSystem Logo"
+                    alt="Sabrimala Fintech Logo"
                 >
             @endif
         </td>
@@ -635,13 +701,13 @@ $logoBase64 = $logoPath
             <td>{{ $formatMoney($netDisbursedAmount) }}</td>
         </tr>
 
-        <tr>
+        <!-- <tr>
             <td class="label">Interest Rate</td>
             <td>
                 {{ $formatPercentage($interestRate) }}
                 per annum
             </td>
-        </tr>
+        </tr> -->
 
         <tr>
             <td class="label">Annual Percentage Rate</td>
@@ -653,9 +719,9 @@ $logoBase64 = $logoPath
             <td>
                 {{ $display($tenure) }}
 
-                @if ($tenure !== null && $tenure !== '')
-                    months
-                @endif
+               @if ($tenure !== null && $tenure !== '')
+    {{ $tenureUnitLabel }}
+@endif
             </td>
         </tr>
 

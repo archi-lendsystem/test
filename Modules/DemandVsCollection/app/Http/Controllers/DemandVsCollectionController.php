@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Modules\DemandVsCollection\Http\Requests\DemandVsCollectionIndexRequest;
 use Modules\DemandVsCollection\Services\DemandVsCollectionService;
+use Modules\UserManagement\Support\ReportBranchAccess;
 use Throwable;
 
 final class DemandVsCollectionController extends Controller
@@ -22,14 +23,33 @@ final class DemandVsCollectionController extends Controller
     public function index(
         DemandVsCollectionIndexRequest $request
     ): JsonResponse {
-        $requestId = (string) Str::uuid();
+       $requestId = (string) Str::uuid();
 
-        try {
-            $filters = $request->validated();
+$filters = $request->validated();
 
-            $report = $this->service->getReport(
-                $filters
-            );
+$branchId = !empty($filters['branch_id'])
+    ? (int) $filters['branch_id']
+    : null;
+
+$allowedBranchIds = ReportBranchAccess::branchIds(
+    $request->user()
+);
+
+if ($branchId !== null) {
+    ReportBranchAccess::ensureRequestedBranchAllowed(
+        $request->user(),
+        $branchId
+    );
+
+    $allowedBranchIds = [$branchId];
+}
+
+$filters['allowed_branch_ids'] = $allowedBranchIds;
+
+try {
+    $report = $this->service->getReport(
+        $filters
+    );
 
             return response()->json([
                 'success' => true,

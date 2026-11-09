@@ -58,6 +58,9 @@ final class ForeclosureService
         }
 
         $amount = $this->money($foreclosureAmount);
+        $netForeclosureCharge = $this->money($charge->net_payable);
+        $totalCollected = bcadd($amount, $netForeclosureCharge, 2);
+
         if (bccomp($amount, '0.00', 2) !== 1) {
             throw new InvalidArgumentException(
                 'Foreclosure amount must be greater than zero.'
@@ -82,7 +85,7 @@ final class ForeclosureService
                 ->generateTemporary(),
             'idempotency_key' => 'FORECLOSURE_' . $account->uuid,
             'transaction_type' => RepaymentTransactionType::FORECLOSURE->value,
-            'amount' => $amount,
+            'amount' => $totalCollected,
 
             /*
              * This is an account-level full-and-final settlement. It does not
@@ -90,7 +93,7 @@ final class ForeclosureService
              * appear PAID. The component snapshot is stored in metadata and
              * the whole transaction is treated as consumed by foreclosure.
              */
-            'allocated_amount' => $amount,
+            'allocated_amount' => $totalCollected,
             'unallocated_amount' => '0.00',
             'payment_mode' => $paymentMode->value,
             'transaction_reference' => $transactionReference,
@@ -107,9 +110,11 @@ final class ForeclosureService
                 'interest_outstanding_before_closure' => $interestSnapshot,
                 'total_outstanding_before_closure' => $totalSnapshot,
                 'settlement_variance' => bcsub($totalSnapshot, $amount, 2),
+                'foreclosure_amount' => $amount,
+                'total_amount_collected' => $totalCollected,
                 'foreclosure_charge_total' => $this->money($charge->total_amount),
                 'foreclosure_charge_waived' => $this->money($charge->waived_amount),
-                'foreclosure_charge_net_payable' => $this->money($charge->net_payable),
+                'foreclosure_charge_net_payable' => $netForeclosureCharge,
             ],
             'created_by' => $actorId,
             'approved_by' => $actorId,
@@ -171,11 +176,11 @@ final class ForeclosureService
             'next_due_date' => null,
             'total_received' => bcadd(
                 (string) $account->total_received,
-                $amount,
+                $totalCollected,
                 2
             ),
             'last_payment_at' => $postingTimestamp,
-            'status' => RepaymentAccountStatus::CLOSED->value,
+            'status' => RepaymentAccountStatus::FORECLOSED->value,
             'closed_at' => $postingTimestamp,
             'updated_by' => $actorId,
         ])->save();
@@ -209,13 +214,14 @@ final class ForeclosureService
             'repayment_transaction_id' => $transaction->id,
             'status_type' => StatusHistoryType::ACCOUNT_STATUS->value,
             'old_status' => $oldAccountStatus->value,
-            'new_status' => RepaymentAccountStatus::CLOSED->value,
+            'new_status' => RepaymentAccountStatus::FORECLOSED->value,
             'source' => StatusHistorySource::ACCOUNT_CLOSURE->value,
             'reason' => 'Loan foreclosed after full-and-final payment.',
             'metadata' => [
                 'foreclosure_uuid' => $foreclosure->uuid,
                 'foreclosure_amount' => $amount,
-                'foreclosure_charge_net_payable' => $this->money($charge->net_payable),
+                'foreclosure_charge_net_payable' => $netForeclosureCharge,
+                'total_amount_collected' => $totalCollected,
             ],
             'changed_by' => $actorId,
             'changed_at' => $postingTimestamp,

@@ -202,7 +202,7 @@ class LUCController extends Controller
             ->where('lead_uuid', $lead_uuid)
             ->first();
 
-
+  
         if (! $report) {
             return $this->success(
                 'No LUC report has been submitted for this lead.',
@@ -232,11 +232,11 @@ class LUCController extends Controller
             return $this->error('LUC photo not found for this lead.', 404);
         }
 
-        $disk = Storage::disk(config('luc.disk', 'private'));
+        $disk = Storage::disk(config('luc.disk', 'local'));
 
         if (! $disk->exists($report->photo_path)) {
 
-            Log::channel('bl_audit')->error('luc.photo_file_missing', [
+        Log::channel('bl_audit')->error('luc.photo_file_missing', [
                 'lead_uuid' => $lead_uuid,
                 'luc_uuid' => $report->uuid,
                 'path' => $report->photo_path,
@@ -291,15 +291,9 @@ class LUCController extends Controller
         $dueDate = $this->dueDate($disbursement);
         $this->validateLUCDate($request->date('date_of_luc'), $dueDate);
 
-        // $disk = config('luc.disk', 'local');
-        // $photoPath = $request->file('photo')->store(
-        //     trim(config('luc.photo_directory', 'luc-reports'), '/'),
-        //     $disk
-        // );
-
-        $disk = config('luc.disk', 'private');
+        $disk = config('luc.disk', 'local');
         $photoPath = $request->file('photo')->store(
-            trim(config('luc.photo_directory', 'luc-reports'), '/') . '/' . $lead->lead_id,
+            trim(config('luc.photo_directory', 'luc-reports'), '/'),
             $disk
         );
 
@@ -394,28 +388,13 @@ class LUCController extends Controller
             CarbonImmutable::parse($report->luc_due_date)
         );
 
-        $disk = config('luc.disk', 'private');
+        $disk = config('luc.disk', 'local');
         $oldPhotoPath = $report->photo_path;
         $newPhotoPath = null;
 
-        // if ($request->hasFile('photo')) {
-        //     $newPhotoPath = $request->file('photo')->store(
-        //         trim(config('luc.photo_directory', 'luc-reports'), '/'),
-        //         $disk
-        //     );
-        // }
-
         if ($request->hasFile('photo')) {
-            $lead = BLLeadCreation::query()
-                ->where('uuid', $report->lead_uuid)
-                ->first();
-
-            if (! $lead) {
-                return $this->error('Lead not found for this report. Invalid lead_uuid.', 404);
-            }
-
             $newPhotoPath = $request->file('photo')->store(
-                trim(config('luc.photo_directory', 'luc-reports'), '/') . '/' . $lead->lead_id,
+                trim(config('luc.photo_directory', 'luc-reports'), '/'),
                 $disk
             );
         }
@@ -667,4 +646,6 @@ class LUCController extends Controller
             Log::log($level, $event, $payload);
         }
     }
+
+    
 }

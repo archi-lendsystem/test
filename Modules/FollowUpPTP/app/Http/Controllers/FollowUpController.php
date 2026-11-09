@@ -13,6 +13,7 @@ use Modules\FollowUpPTP\Enums\PtpStatus;
 use Modules\FollowUpPTP\Models\FollowUp;
 use Modules\Repayment\Enums\RepaymentAccountStatus;
 use Modules\Repayment\Models\RepaymentAccount;
+use Modules\UserManagement\Support\ReportBranchAccess;
 
 class FollowUpController extends Controller
 {
@@ -32,26 +33,65 @@ class FollowUpController extends Controller
             'per_page' => 'nullable|integer|min:1|max:200',
         ]);
 
+        $branchId = !empty($validated['branch_id'])
+    ? (int) $validated['branch_id']
+    : null;
+
         $asOf = CarbonImmutable::now(config('app.timezone'))->startOfDay();
 
-        $accounts = RepaymentAccount::query()
-            ->whereIn('status', [
-                RepaymentAccountStatus::ACTIVE->value,
-                RepaymentAccountStatus::SUSPENDED->value,
-            ])
-            ->with([
-                'installments' => fn ($q) => $q
-                    ->where('outstanding_amount', '>', 0)
-                    ->orderBy('due_date')
-                    ->orderBy('installment_number'),
-                'lead:uuid,lead_id,branch_id',
-                'lead.branch:id,name,branch_code',
-                'lead.applicantDetails' => fn ($q) => $q
-                    ->where('applicant_sno', 0)
-                    ->select(['id', 'lead_uuid', 'full_name', 'alternate_contact_number']),
-                'followUps' => fn ($q) => $q->orderByDesc('follow_up_date'),
-            ])
-            ->get();
+        // $accounts = RepaymentAccount::query()
+        //     ->whereIn('status', [
+        //         RepaymentAccountStatus::ACTIVE->value,
+        //         RepaymentAccountStatus::SUSPENDED->value,
+        //     ])
+        //     ->with([
+        //         'installments' => fn ($q) => $q
+        //             ->where('outstanding_amount', '>', 0)
+        //             ->orderBy('due_date')
+        //             ->orderBy('installment_number'),
+        //         'lead:uuid,lead_id,branch_id',
+        //         'lead.branch:id,name,branch_code',
+        //         'lead.applicantDetails' => fn ($q) => $q
+        //             ->where('applicant_sno', 0)
+        //             ->select(['id', 'lead_uuid', 'full_name', 'alternate_contact_number']),
+        //         'followUps' => fn ($q) => $q->orderByDesc('follow_up_date'),
+        //     ])
+        //     ->get();
+
+
+        $accounts = ReportBranchAccess::scopeByRelation(
+    RepaymentAccount::query(),
+    $request->user(),
+    'lead',
+    $branchId
+)
+    ->whereIn('status', [
+        RepaymentAccountStatus::ACTIVE->value,
+        RepaymentAccountStatus::SUSPENDED->value,
+    ])
+    ->with([
+        'installments' => fn ($q) => $q
+            ->where('outstanding_amount', '>', 0)
+            ->orderBy('due_date')
+            ->orderBy('installment_number'),
+
+        'lead:uuid,lead_id,branch_id',
+
+        'lead.branch:id,name,branch_code',
+
+        'lead.applicantDetails' => fn ($q) => $q
+            ->where('applicant_sno', 0)
+            ->select([
+                'id',
+                'lead_uuid',
+                'full_name',
+                'alternate_contact_number',
+            ]),
+
+        'followUps' => fn ($q) => $q
+            ->orderByDesc('follow_up_date'),
+    ])
+    ->get();
 
         $rows = $accounts->map(function (RepaymentAccount $account) use ($asOf) {
             $oldestUnpaid = $account->installments->first();
@@ -108,9 +148,9 @@ class FollowUpController extends Controller
             $rows = $rows->filter(fn ($row) => $row['dpd'] > 0);
         }
 
-        if (!empty($validated['branch_id'])) {
-            $rows = $rows->filter(fn ($row) => ($row['branch']['id'] ?? null) === (int) $validated['branch_id']);
-        }
+        // if (!empty($validated['branch_id'])) {
+        //     $rows = $rows->filter(fn ($row) => ($row['branch']['id'] ?? null) === (int) $validated['branch_id']);
+        // }
 
         if (!empty($validated['ptp_status'])) {
             $wanted = strtoupper($validated['ptp_status']);

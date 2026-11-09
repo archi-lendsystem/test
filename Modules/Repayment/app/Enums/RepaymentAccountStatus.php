@@ -32,6 +32,12 @@ enum RepaymentAccountStatus: string
      */
     case CLOSED = 'CLOSED';
 
+    /** Loan closed through an early foreclosure payment. */
+    case FORECLOSED = 'FORECLOSED';
+
+    /** Loan closed through a negotiated full-and-final settlement. */
+    case SETTLED = 'SETTLED';
+
     /**
      * Account activation/disbursement reversal ke karan
      * permanently cancel hua.
@@ -53,6 +59,8 @@ enum RepaymentAccountStatus: string
     {
         return in_array($this, [
             self::CLOSED,
+            self::FORECLOSED,
+            self::SETTLED,
             self::CANCELLED,
         ], true);
     }
@@ -68,6 +76,8 @@ enum RepaymentAccountStatus: string
             self::ACTIVE => 'Active',
             self::SUSPENDED => 'Suspended',
             self::CLOSED => 'Closed',
+            self::FORECLOSED => 'Foreclosed',
+            self::SETTLED => 'Settled',
             self::CANCELLED => 'Cancelled',
         };
     }

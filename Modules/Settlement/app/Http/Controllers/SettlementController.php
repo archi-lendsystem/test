@@ -35,7 +35,7 @@ class SettlementController extends Controller
 
         $query = RepaymentSettlement::query()
             ->with([
-                'account:id,uuid,loan_number,lead_uuid,total_outstanding',
+                'account:id,uuid,loan_number,lead_uuid,total_outstanding,status',
                 'account.lead:uuid,lead_id',
                 'account.lead.applicantDetails' => fn ($q) => $q
                     ->where('applicant_sno', 0)
@@ -54,6 +54,32 @@ class SettlementController extends Controller
         }
 
         $settlements = $query->orderByDesc('id')->paginate((int) ($validated['per_page'] ?? 25));
+
+        $settlements->getCollection()->transform(function (RepaymentSettlement $settlement): array {
+            $account = $settlement->account;
+            $applicant = $account?->lead?->applicantDetails?->first();
+
+            return [
+                'settlement_uuid' => $settlement->uuid,
+                'repayment_account_uuid' => $account?->uuid,
+                'loan_number' => $account?->loan_number,
+                'lead_id' => $account?->lead?->lead_id,
+                'customer_name' => $applicant?->full_name,
+                'mobile_number' => $applicant?->alternate_contact_number,
+                'amount_at_movement' => (float) $settlement->total_outstanding_at_proposal,
+                'customer_settlement_amount' => (float) $settlement->settlement_amount,
+                'waived_amount' => (float) $settlement->waived_amount,
+                'status' => $settlement->status->value,
+                'account_status' => $account?->status?->value,
+                'moved_to_settlement_at' => optional($settlement->created_at)->toDateTimeString(),
+                'settlement_date' => optional($settlement->settlement_date)->toDateString(),
+                'approved_at' => optional($settlement->approved_at)->toDateTimeString(),
+                'paid_at' => optional($settlement->paid_at)->toDateTimeString(),
+                'reason' => $settlement->reason,
+                'decision_remarks' => $settlement->decision_remarks,
+                'paid_reference' => $settlement->paid_reference,
+            ];
+        });
 
         return $this->success([
             'data' => $settlements->items(),
@@ -123,13 +149,15 @@ class SettlementController extends Controller
 
         $validated = $request->validate([
             'paid_reference' => 'nullable|string|max:255',
+            'settlement_date' => 'nullable|date_format:Y-m-d|before_or_equal:today',
         ]);
 
         try {
             $updated = $this->settlementService->markPaidAndClose(
                 settlement: $settlement,
                 paidReference: $validated['paid_reference'] ?? null,
-                actorId: optional($request->user())->id
+                actorId: optional($request->user())->id,
+                settlementDate: $validated['settlement_date'] ?? now()->toDateString()
             );
 
             return $this->success($updated, 'Settlement marked as paid; loan closed.');

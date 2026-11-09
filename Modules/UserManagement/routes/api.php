@@ -28,15 +28,15 @@ Route::prefix('v1')
             Route::get('roles/{userType}', [UserRoleController::class, 'getRolesByUserType']);
 
             Route::get('/', [UserManagementController::class, 'index']);
-            Route::post('/', [UserManagementController::class, 'store']);
+            Route::post('/', [UserManagementController::class, 'store'])->middleware('permission:usermanagement');
             Route::get('/{user}', [UserManagementController::class, 'show']);
-            Route::put('/{user}', [UserManagementController::class, 'update']);
-            Route::patch('/{user}', [UserManagementController::class, 'update']);
-            Route::delete('/{user}', [UserManagementController::class, 'destroy']);
+            Route::put('/{user}', [UserManagementController::class, 'update'])->middleware('permission:usermanagement');
+            Route::patch('/{user}', [UserManagementController::class, 'update'])->middleware('permission:usermanagement');
+            Route::delete('/{user}', [UserManagementController::class, 'destroy'])->middleware('permission:usermanagement');
 
-            Route::post('/{user}/roles', [UserManagementController::class, 'assignRoles']);
-            Route::post('/{user}/products', [UserManagementController::class, 'assignProducts']);
-            Route::post('/{user}/vendors', [UserManagementController::class, 'assignVendors']);
+            Route::post('/{user}/roles', [UserManagementController::class, 'assignRoles'])->middleware('permission:usermanagement');
+            Route::post('/{user}/products', [UserManagementController::class, 'assignProducts'])->middleware('permission:usermanagement');
+            Route::post('/{user}/vendors', [UserManagementController::class, 'assignVendors'])->middleware('permission:usermanagement');
         });
 
        
@@ -58,9 +58,9 @@ Route::prefix('v1')
 
         Route::get('users/{user}/permissions', [UserPermissionController::class, 'getUserPermissions']);
 
-        Route::post('users/{user}/permissions/assign', [UserPermissionController::class, 'assignPermissions']);
+        Route::post('users/{user}/permissions/assign', [UserPermissionController::class, 'assignPermissions'])->middleware('permission:usermanagement');
 
-        Route::put('users/{user}/permissions', [UserPermissionController::class, 'updatePermissions']);
+        Route::put('users/{user}/permissions', [UserPermissionController::class, 'updatePermissions'])->middleware('permission:usermanagement');
      
         Route::get(
             'organization/branches/dropdown',
@@ -70,10 +70,10 @@ Route::prefix('v1')
         Route::patch(
             'organization/branches/{organizationBranch}/toggle-active',
             [OrganizationBranchController::class, 'toggleActive']
-        );
+        )->middleware('permission:usermanagement');
 
         Route::apiResource(
             'organization/branches',
             OrganizationBranchController::class
-        )->except(['destroy']);
+        )->except(['destroy'])->middleware('permission:usermanagement');
     });

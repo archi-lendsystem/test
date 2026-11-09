@@ -53,8 +53,6 @@ class BLApplicantController extends Controller
             $applicant = BLApplicant::query()->create([
                 'lead_uuid'       => $validated['lead_uuid'],
                 'lead_id'         => $lead->lead_id,
-                 'product_id'      => $lead->product_id,
-    'created_by'      => Auth::id(),
                 'applicant_sno'   => $applicantSno,
                 'applicant_types' => $validated['applicant_type'],
             ]);

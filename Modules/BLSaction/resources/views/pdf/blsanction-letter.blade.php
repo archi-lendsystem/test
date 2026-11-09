@@ -4,16 +4,7 @@
     <meta charset="utf-8">
     <style>
         @page {
-            size: A4 portrait;
-            margin: 24px 28px 200px 28px;
-        }
-
-        tr {
-            page-break-inside: avoid;
-        }
-
-        .section-title {
-            page-break-after: avoid;
+            margin: 12mm 14mm 12mm 14mm;
         }
 
         * { box-sizing: border-box; }
@@ -132,8 +123,8 @@
 
     @php
     $possibleLogoPaths = [
-        public_path('assets/images/logo/lendsystem_logo.png'),
-        base_path('public/assets/images/logo/lendsystem_logo.png'),
+        public_path('images/sabrimala-logo.png'),
+        base_path('../public_html/images/sabrimala-logo.png'),
     ];
 
     $logoPath = null;
@@ -153,7 +144,7 @@
     @if($logoBase64)
         <img
             src="data:image/png;base64,{{ $logoBase64 }}"
-            alt="LendSystem Logo"
+            alt="Sabrimala Logo"
         >
     @else
         <div class="logo-fallback">

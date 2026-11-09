@@ -14,19 +14,7 @@ class BLSchemeSelectResource extends JsonResource
         return [
             'id'                  => $this->id,
             'lead_uuid'           => $this->lead_uuid,
-                        'product_id' => $this->product_id,
             'product_scheme_uuid' => $this->product_scheme_uuid,
-
-               'product' => $this->when(
-                $this->relationLoaded('product'),
-                fn () => $this->product
-                    ? [
-                        'id' => $this->product->id,
-                        'name' => $this->product->name,
-                        'code' => $this->product->code,
-                    ]
-                    : null
-            ),
 
             'scheme' => $this->when(
                 $this->relationLoaded('productScheme'),

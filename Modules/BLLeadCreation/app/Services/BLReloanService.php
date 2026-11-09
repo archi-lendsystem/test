@@ -29,8 +29,7 @@ class BLReloanService
      */
     public function findSourceParticipant(
         string $mobile,
-        string $aadhaar,
-        int $productId
+        string $aadhaar
     ): ?BLApplicantDetails {
         $mobile = preg_replace('/\D/', '', $mobile);
         $aadhaar = preg_replace('/\D/', '', $aadhaar);
@@ -38,7 +37,6 @@ class BLReloanService
         return BLApplicantDetails::query()
             ->where('alternate_contact_number', $mobile)
             ->where('aadhaar_card_number', $aadhaar)
-            ->where('product_id', $productId)
             ->whereNotNull('full_name')
             ->where('full_name', '!=', '')
             ->whereHas('applicant')
@@ -58,8 +56,7 @@ class BLReloanService
         int $detailId,
         string $sourceLeadUuid,
         string $mobile,
-        string $aadhaar,
-        int $productId
+        string $aadhaar
     ): ?BLApplicantDetails {
         $mobile = preg_replace('/\D/', '', $mobile);
         $aadhaar = preg_replace('/\D/', '', $aadhaar);
@@ -69,7 +66,6 @@ class BLReloanService
             ->where('lead_uuid', $sourceLeadUuid)
             ->where('alternate_contact_number', $mobile)
             ->where('aadhaar_card_number', $aadhaar)
-            ->where('product_id', $productId)
             ->with([
                 'applicant',
                 'leadCreation',
@@ -106,7 +102,6 @@ class BLReloanService
         */
         $sourceLead = BLLeadCreation::query()
             ->where('uuid', $sourceLeadUuid)
-            ->where('product_id', $newLead->product_id)
             ->first();
 
         if (! $sourceLead) {
@@ -123,7 +118,6 @@ class BLReloanService
         $sourceApplicants = BLApplicant::query()
             ->with('detail')
             ->where('lead_uuid', $sourceLeadUuid)
-            ->where('product_id', $newLead->product_id)
             ->orderByRaw(
                 "FIELD(
                     applicant_types,
@@ -354,8 +348,6 @@ $createdReferenceDetails = [];
                     'lead_uuid' =>
                         $newLead->uuid,
 
-                    'product_id' => $newLead->product_id,
-
                     'created_by' =>
                         $createdBy,
 
@@ -449,8 +441,6 @@ $createdReferenceDetails = [];
 
             $detailData['lead_uuid'] =
                 $newLead->uuid;
-
-            $detailData['product_id'] = $newLead->product_id;
 
             $detailData['created_by'] =
                 $createdBy;
@@ -748,7 +738,6 @@ private function cloneReferencesForReloan(
                     $referenceSourceLead
                         ->previous_lead_uuid
                 )
-                ->where('product_id', $newLead->product_id)
                 ->first();
     }
 
@@ -782,14 +771,12 @@ private function cloneReferencesForReloan(
             BLReference::query()->create([
                 'lead_uuid' =>
                     $newLead->uuid,
-                'product_id' => $newLead->product_id,
 
                 'created_by' =>
                     $createdBy,
 
                 'lead_id' =>
                     $newLead->lead_id,
-                'product_id' => $newLead->product_id,
 
                 'reference_sno' =>
                     $sourceReference
@@ -831,14 +818,12 @@ private function cloneReferencesForReloan(
                     ->create([
                         'lead_uuid' =>
                             $newLead->uuid,
-                        'product_id' => $newLead->product_id,
 
                         'created_by' =>
                             $createdBy,
 
                         'lead_id' =>
                             $newLead->lead_id,
-                        'product_id' => $newLead->product_id,
 
                         /*
                          * Old reference_id reuse nahi hoga.
@@ -1080,7 +1065,6 @@ private function cloneReferencesForReloan(
             ->create([
                 'lead_uuid' =>
                     $newLead->uuid,
-                'product_id' => $newLead->product_id,
 
                 'lead_id' =>
                     $newLead->lead_id,
@@ -1363,7 +1347,6 @@ private function cloneReferencesForReloan(
     */
     if ($sourceDocuments->isEmpty()) {
         $historyDetails = BLApplicantDetails::query()
-            ->where('product_id', $newLead->product_id)
             ->where(
                 'aadhaar_card_number',
                 $aadhaar
@@ -1391,7 +1374,6 @@ private function cloneReferencesForReloan(
 
             $historyLead = BLLeadCreation::query()
                 ->where('uuid', $historyDetail->lead_uuid)
-                ->where('product_id', $newLead->product_id)
                 ->first();
 
             if (! $historyLead) {
@@ -1475,7 +1457,6 @@ private function cloneReferencesForReloan(
 
             'lead_id' =>
                 $newLead->lead_id,
-            'product_id' => $newLead->product_id,
 
             'applicant_sno' =>
                 (string)

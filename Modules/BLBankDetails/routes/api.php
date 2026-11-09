@@ -25,6 +25,20 @@ Route::middleware([
     ->middleware('permission:bl-lead-creation')
         ->name('bl.bank-details.show');
 
+        Route::get(
+    '/{lead_uuid}/{applicant_id}/{id}/statement/view',
+    [BLBankDetailsController::class, 'viewStatement']
+)
+->middleware('permission:bl-lead-creation')
+->name('bl.bank-details.statement.view');
+
+
+Route::get(
+    '/{lead_uuid}/{applicant_id}/{id}/statement/download',
+    [BLBankDetailsController::class, 'downloadStatement']
+)
+->middleware('permission:bl-lead-creation')
+->name('bl.bank-details.statement.download');
 
     Route::put(
         '/{lead_uuid}/{applicant_id}/{id}',

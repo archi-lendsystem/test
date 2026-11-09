@@ -9,6 +9,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Modules\Repayment\Enums\RepaymentAccountStatus;
 use Modules\Repayment\Models\RepaymentAccount;
+use Modules\UserManagement\Support\ReportBranchAccess;
 
 class DPDController extends Controller
 {
@@ -44,23 +45,42 @@ class DPDController extends Controller
             'per_page' => 'nullable|integer|min:1|max:200',
         ]);
 
+        $branchId = !empty($validated['branch_id'])
+            ? (int) $validated['branch_id']
+            : null;
+
         $asOf = CarbonImmutable::now(config('app.timezone'))->startOfDay();
 
-        $accounts = RepaymentAccount::query()
+        $accountsQuery = ReportBranchAccess::scopeByRelation(
+            RepaymentAccount::query(),
+            $request->user(),
+            'lead',
+            $branchId
+        );
+
+        $accounts = $accountsQuery
             ->whereIn('status', [
                 RepaymentAccountStatus::ACTIVE->value,
                 RepaymentAccountStatus::SUSPENDED->value,
             ])
             ->with([
-                'installments' => fn ($q) => $q
+                'installments' => fn($q) => $q
                     ->where('outstanding_amount', '>', 0)
                     ->orderBy('due_date')
                     ->orderBy('installment_number'),
+
                 'lead:uuid,lead_id,branch_id',
+
                 'lead.branch:id,name,branch_code',
-                'lead.applicantDetails' => fn ($q) => $q
+
+                'lead.applicantDetails' => fn($q) => $q
                     ->where('applicant_sno', 0)
-                    ->select(['id', 'lead_uuid', 'full_name', 'alternate_contact_number']),
+                    ->select([
+                        'id',
+                        'lead_uuid',
+                        'full_name',
+                        'alternate_contact_number',
+                    ]),
             ])
             ->get();
 
@@ -104,9 +124,9 @@ class DPDController extends Controller
             ];
         });
 
-        if (!empty($validated['branch_id'])) {
-            $rows = $rows->filter(fn ($row) => ($row['branch']['id'] ?? null) === (int) $validated['branch_id']);
-        }
+        // if (!empty($validated['branch_id'])) {
+        //     $rows = $rows->filter(fn($row) => ($row['branch']['id'] ?? null) === (int) $validated['branch_id']);
+        // }
 
         if (!empty($validated['search'])) {
             $search = strtolower($validated['search']);

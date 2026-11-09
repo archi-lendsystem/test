@@ -1,6 +1,3 @@
-
-
-
 <!DOCTYPE html>
 <html>
 <head>
@@ -81,11 +78,37 @@
             letter-spacing: 1px;
         }
 
+        /* NOC No (left) + Print Date (right) row */
         .noc-number {
             margin-bottom: 22px;
             font-size: 11px;
             color: #555;
+        }
+
+        .noc-number-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .noc-number-table td {
+            padding: 0;
+            font-size: 11px;
+            color: #555;
+            vertical-align: middle;
+        }
+
+        .noc-number-spacer {
+            width: 25%;
+        }
+
+        .noc-number-center {
+            width: 50%;
             text-align: center;
+        }
+
+        .noc-number-right {
+            width: 25%;
+            text-align: right;
         }
 
         table.meta {
@@ -161,6 +184,13 @@
         $logoBase64 = is_readable($logoPath)
             ? base64_encode(file_get_contents($logoPath))
             : null;
+
+        // Print date: whatever the employee fills in while generating/printing.
+        // If it was not filled in, fall back to "today" so the certificate
+        // always shows a valid print date.
+        $resolvedPrintDate = !empty($printDate)
+            ? \Carbon\Carbon::parse($printDate)->format('d-m-Y')
+            : \Carbon\Carbon::now()->format('d-m-Y');
     @endphp
 
     <div class="header">
@@ -188,10 +218,19 @@
     </div>
 
     <div class="noc-number">
-        NOC No: {{ $noc->noc_number }}
-        &nbsp;|&nbsp;
-        Date:
-        {{ \Carbon\Carbon::parse($noc->issue_date)->format('d-m-Y') }}
+        <table class="noc-number-table">
+            <tr>
+                <td class="noc-number-spacer">&nbsp;</td>
+                <td class="noc-number-center">NOC No: {{ $noc->noc_number }}</td>
+                <td class="noc-number-right">Print Date: {{ $resolvedPrintDate }}</td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="body-text">
+        This is certify that Sabrimala Fintech PVT LTD. loan taken by
+        <strong>{{ $applicantName }}</strong> is closed in our books and
+        Balance is found Nil.
     </div>
 
     <table class="meta">
@@ -231,15 +270,6 @@
         </tr>
     </table>
 
-    <!-- <div class="body-text">
-        This is to certify that the above-referenced loan account has been
-        fully closed and all dues, including principal, interest, and
-        applicable charges, have been settled in full to the satisfaction
-        of the lender. The lender has no further financial claim against
-        the borrower in respect of this loan account, and this certificate
-        is issued as a No Objection Certificate (NOC) confirming the same.
-    </div> -->
-
     @if (!empty($noc->remarks))
         <div class="body-text">
             <strong>Remarks:</strong>
@@ -256,11 +286,7 @@
                     </div>
                 </td>
 
-                <td>
-                    <div class="sig-line sig-line-right">
-                        Company Seal
-                    </div>
-                </td>
+             
             </tr>
         </table>
     </div>

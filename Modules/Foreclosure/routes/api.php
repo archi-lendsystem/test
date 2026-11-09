@@ -25,17 +25,3 @@ Route::middleware(['auth:sanctum', 'user.status'])
             ->middleware('permission:foreclosure.store')
             ->name('store');
     });
-
-// Route::middleware(['auth:sanctum', 'user.status'])
-//     ->prefix('v1/foreclosure')
-//     ->name('foreclosure.')
-//     ->group(function () {
-//         Route::get('/', [ForeclosureController::class, 'index'])
-//             ->middleware('permission:foreclosure.show')
-//             ->name('index');
-
-//         Route::post('/accounts/{accountUuid}', [ForeclosureController::class, 'store'])
-//             ->whereUuid('accountUuid')
-//             ->middleware('permission:foreclosure.store')
-//             ->name('store');
-//     });

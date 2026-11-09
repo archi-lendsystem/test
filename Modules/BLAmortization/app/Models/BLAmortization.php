@@ -14,7 +14,6 @@ use Modules\BLLeadCreation\Models\BLLeadCreation;
 use Modules\BLSchemeSelect\Models\BLSchemeSelect;
 use Modules\ProductScheme\Models\ProductScheme;
 use Modules\UserManagement\Models\User;
-use Illuminate\Database\Eloquent\Casts\Attribute;
 use RuntimeException;
 
 class BLAmortization extends Model
@@ -40,7 +39,6 @@ class BLAmortization extends Model
         'net_disbursed_amount',
         'schedule',
         'created_by',
-        'first_emi_date',
     ];
 
     protected $casts = [
@@ -48,7 +46,6 @@ class BLAmortization extends Model
         'interest_rate'        => 'decimal:3',
         'tenure'               => 'decimal:2',
         'start_date'           => 'date:Y-m-d',
-        'first_emi_date' => 'date:Y-m-d',
         'processing_fee'       => 'decimal:2',
         'installment_amount'   => 'decimal:2',
         'number_of_payments'   => 'integer',
@@ -80,7 +77,7 @@ class BLAmortization extends Model
         );
     }
 
-
+ 
     public function cam(): HasOne
     {
         return $this->hasOne(
@@ -90,7 +87,7 @@ class BLAmortization extends Model
         )->latestOfMany('id');
     }
 
-
+ 
     public function disbursement(): HasOne
     {
         return $this->hasOne(
@@ -100,7 +97,7 @@ class BLAmortization extends Model
         )->latestOfMany('id');
     }
 
-
+ 
     public function schemeSelection(): HasOne
     {
         return $this->hasOne(
@@ -110,7 +107,7 @@ class BLAmortization extends Model
         );
     }
 
-
+  
 
     public function getSelectedProductScheme(): ?ProductScheme
     {
@@ -124,7 +121,7 @@ class BLAmortization extends Model
 
     public function buildCalculationInputFromModels(): array
     {
-
+       
 
         $lead = $this->lead()->first();
 
@@ -132,23 +129,23 @@ class BLAmortization extends Model
             throw new RuntimeException('BL lead not found.');
         }
 
+    
 
-
-
+     
 
         $cam = BLCam::query()
-            ->where('lead_uuid', $this->lead_uuid)
-            ->where('status', 'Approve')
-            ->latest('id')
-            ->first();
+    ->where('lead_uuid', $this->lead_uuid)
+    ->where('status', 'Approve')
+    ->latest('id')
+    ->first();
 
-        if (! $cam) {
-            throw new RuntimeException(
-                'Approved BL CAM record not found for this lead.'
-            );
-        }
+      if (! $cam) {
+    throw new RuntimeException(
+        'Approved BL CAM record not found for this lead.'
+    );
+}
 
-
+    
 
         $scheme = $this->getSelectedProductScheme();
 
@@ -164,7 +161,7 @@ class BLAmortization extends Model
             );
         }
 
-
+     
 
         if (
             $scheme->valid_from &&
@@ -184,7 +181,7 @@ class BLAmortization extends Model
             );
         }
 
-
+    
 
         $disbursement = $this->disbursement()->first();
 
@@ -194,19 +191,19 @@ class BLAmortization extends Model
             );
         }
 
+     
 
 
 
+$loanAmount = (float) ($cam->loan_amount ?? 0);
 
-        $loanAmount = (float) ($cam->loan_amount ?? 0);
+if ($loanAmount <= 0) {
+    throw new RuntimeException(
+        'A valid approved loan amount is required in CAM.'
+    );
+}
 
-        if ($loanAmount <= 0) {
-            throw new RuntimeException(
-                'A valid approved loan amount is required in CAM.'
-            );
-        }
-
-
+  
 
         if (
             $scheme->minimum_loan_amount !== null &&
@@ -226,7 +223,7 @@ class BLAmortization extends Model
             );
         }
 
-
+   
 
         $interestRate = (float) ($scheme->interest_rate ?? 0);
 
@@ -237,62 +234,62 @@ class BLAmortization extends Model
         }
 
 
-
+    
 
         $tenure = (float) ($cam->loan_tenure ?? 0);
 
-        if ($tenure <= 0) {
-            throw new RuntimeException(
-                'A valid approved loan tenure is required in CAM.'
-            );
-        }
+if ($tenure <= 0) {
+    throw new RuntimeException(
+        'A valid approved loan tenure is required in CAM.'
+    );
+}
 
-        $tenureType = strtolower(
-            trim((string) ($scheme->tenure_type ?: 'fixed'))
+$tenureType = strtolower(
+    trim((string) ($scheme->tenure_type ?: 'fixed'))
+);
+
+if ($tenureType === 'fixed') {
+    if (
+        $scheme->tenure_value === null ||
+        (float) $scheme->tenure_value <= 0
+    ) {
+        throw new RuntimeException(
+            'Fixed tenure is missing in the selected scheme.'
         );
+    }
 
-        if ($tenureType === 'fixed') {
-            if (
-                $scheme->tenure_value === null ||
-                (float) $scheme->tenure_value <= 0
-            ) {
-                throw new RuntimeException(
-                    'Fixed tenure is missing in the selected scheme.'
-                );
-            }
+    if ($tenure !== (float) $scheme->tenure_value) {
+        throw new RuntimeException(
+            'CAM tenure does not match the selected fixed scheme tenure.'
+        );
+    }
+}
 
-            if ($tenure !== (float) $scheme->tenure_value) {
-                throw new RuntimeException(
-                    'CAM tenure does not match the selected fixed scheme tenure.'
-                );
-            }
-        }
+if ($tenureType === 'range') {
+    if (
+        $scheme->minimum_tenure === null ||
+        $scheme->maximum_tenure === null
+    ) {
+        throw new RuntimeException(
+            'Tenure range is missing in the selected scheme.'
+        );
+    }
 
-        if ($tenureType === 'range') {
-            if (
-                $scheme->minimum_tenure === null ||
-                $scheme->maximum_tenure === null
-            ) {
-                throw new RuntimeException(
-                    'Tenure range is missing in the selected scheme.'
-                );
-            }
+    if (
+        $tenure < (float) $scheme->minimum_tenure ||
+        $tenure > (float) $scheme->maximum_tenure
+    ) {
+        throw new RuntimeException(
+            'CAM tenure is outside the selected scheme tenure range.'
+        );
+    }
+}
 
-            if (
-                $tenure < (float) $scheme->minimum_tenure ||
-                $tenure > (float) $scheme->maximum_tenure
-            ) {
-                throw new RuntimeException(
-                    'CAM tenure is outside the selected scheme tenure range.'
-                );
-            }
-        }
-
-        if (! in_array($tenureType, ['fixed', 'range'], true)) {
-            throw new RuntimeException(
-                'Selected scheme contains an invalid tenure type.'
-            );
-        }
+if (! in_array($tenureType, ['fixed', 'range'], true)) {
+    throw new RuntimeException(
+        'Selected scheme contains an invalid tenure type.'
+    );
+}
 
         $tenureUnit = $this->normalizeTenureUnit(
             $scheme->tenure_unit
@@ -308,7 +305,7 @@ class BLAmortization extends Model
             $scheme->calculation_method
         );
 
-
+      
 
         $lpfRate = (float) ($scheme->lpf_rate ?? 0);
 
@@ -317,7 +314,7 @@ class BLAmortization extends Model
             2
         );
 
-
+     
         if (
             $scheme->minimum_pf !== null &&
             $processingFee < (float) $scheme->minimum_pf
@@ -355,7 +352,7 @@ class BLAmortization extends Model
             'lead_uuid' => $this->lead_uuid,
             'product_scheme_uuid' => $scheme->uuid,
             'scheme_name'         => $scheme->scheme_name,
-            'sub_loan_type' => $scheme->sub_loan_type,
+             'sub_loan_type' => $scheme->sub_loan_type,
             'loan_amount' => $loanAmount,
             'interest_rate'      => $interestRate,
             'tenure'             => $tenure,
@@ -392,108 +389,106 @@ class BLAmortization extends Model
 
 
     private function normalizeFrequency(
-        ?string $frequency
-    ): string {
-        $value = strtolower(trim((string) $frequency));
+    ?string $frequency
+): string {
+    $value = strtolower(trim((string) $frequency));
 
-        return match ($value) {
-            'daily',
-            'daily loan' => 'daily',
+    return match ($value) {
+        'daily',
+        'daily loan' => 'daily',
 
-            'weekly',
-            'weekly loan' => 'weekly',
+        'weekly',
+        'weekly loan' => 'weekly',
 
+      
+        'bi_weekly',
+        'bi-weekly',
+        'biweekly',
+        'by-weekly',
+        'by-weekly loan',
+       'bi-weekly loan' => 'bi_weekly',
 
-            'bi_weekly',
-            'bi-weekly',
-            'biweekly',
-            'by-weekly',
-            'by-weekly loan',
-            'bi-weekly loan' => 'bi_weekly',
+        'monthly',
+        'monthly loan' => 'monthly',
 
-            'monthly',
-            'monthly loan' => 'monthly',
+        'quarterly',
+        'quarterly loan' => 'quarterly',
 
-            'quarterly',
-            'quarterly loan' => 'quarterly',
+        'half_yearly',
+        'half-yearly',
+        'half yearly',
+        'halfyearly' => 'half_yearly',
 
-            'half_yearly',
-            'half-yearly',
-            'half yearly',
-            'halfyearly' => 'half_yearly',
+        'yearly',
+        'annual',
+        'yearly loan' => 'yearly',
 
-            'yearly',
-            'annual',
-            'yearly loan' => 'yearly',
+        'one_time',
+        'one-time',
+        'one time',
+        'onetime' => 'one_time',
 
-            'one_time',
-            'one-time',
-            'one time',
-            'onetime' => 'one_time',
+        'bullet',
+        'bullet loan' => 'bullet',
 
-            'bullet',
-            'bullet loan' => 'bullet',
-
-            default => throw new RuntimeException(
-                "Unsupported repayment frequency: {$frequency}."
-            ),
-        };
-    }
+        default => throw new RuntimeException(
+            "Unsupported repayment frequency: {$frequency}."
+        ),
+    };
+}
 
 
 
 
     private function normalizeTenureUnit(
-        ?string $tenureUnit
-    ): string {
-        $value = strtolower(trim((string) $tenureUnit));
+    ?string $tenureUnit
+): string {
+    $value = strtolower(trim((string) $tenureUnit));
 
-        return match ($value) {
-            'day',
-            'days' => 'days',
+    return match ($value) {
+        'day',
+        'days' => 'days',
 
-            'week',
-            'weeks' => 'weeks',
+        'week',
+        'weeks' => 'weeks',
 
-            'month',
-            'months' => 'months',
+        'month',
+        'months' => 'months',
 
-            'year',
-            'years' => 'years',
+        'year',
+        'years' => 'years',
 
-            default => throw new RuntimeException(
-                "Unsupported tenure unit: {$tenureUnit}."
-            ),
-        };
-    }
+        default => throw new RuntimeException(
+            "Unsupported tenure unit: {$tenureUnit}."
+        ),
+    };
+}
 
 
 
     private function normalizeCalculationMethod(
-        ?string $calculationMethod
-    ): string {
-        $value = strtolower(
-            trim((string) $calculationMethod)
-        );
+    ?string $calculationMethod
+): string {
+    $value = strtolower(
+        trim((string) $calculationMethod)
+    );
 
-        return match ($value) {
-            'reducing_balance',
-            'reducing-balance',
-            'reducing balance' => 'reducing_balance',
+    return match ($value) {
+        'reducing_balance',
+        'reducing-balance',
+        'reducing balance' => 'reducing_balance',
 
-            'flat_rate',
-            'flat-rate',
-            'flat rate' => 'flat_rate',
+        'flat_rate',
+        'flat-rate',
+        'flat rate' => 'flat_rate',
 
-            'daily_reducing',
-            'daily-reducing',
-            'daily reducing' => 'daily_reducing',
+        'daily_reducing',
+        'daily-reducing',
+        'daily reducing' => 'daily_reducing',
 
-            default => throw new RuntimeException(
-                "Unsupported calculation method: {$calculationMethod}."
-            ),
-        };
-    }
-
-
+        default => throw new RuntimeException(
+            "Unsupported calculation method: {$calculationMethod}."
+        ),
+    };
+}
 }

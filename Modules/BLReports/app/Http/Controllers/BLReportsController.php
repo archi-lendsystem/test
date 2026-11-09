@@ -16,16 +16,29 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 use Modules\BLReports\Services\BLReportESignService;
 use Modules\ESign\Exceptions\DigioApiException;
 use Modules\BLReports\Services\BLReportSignedDownloadService;
+use Modules\BLReports\Enums\BLReportStatus;
+use Modules\BLReports\Models\BLReport;
 use Throwable;
 
 final class BLReportsController extends Controller
 {
-    public function __construct(
-        private readonly BLReportCatalogService $catalogService,
-        private readonly BLReportDownloadService $downloadService,
-        private readonly BLReportGenerationService $generationService,
-        private readonly BLReportESignService $eSignService,
-        private readonly BLReportSignedDownloadService $signedDownloadService
+//     public function __construct(
+//         private readonly BLReportCatalogService $catalogService,
+//         private readonly BLReportDownloadService $downloadService,
+//         private readonly BLReportGenerationService $generationService,
+//         private readonly BLReportESignService $eSignService,
+//         private readonly BLReportSignedDownloadService $signedDownloadService,
+      
+//     private readonly BLReportStorageService $storageService
+// ) {
+// }
+
+public function __construct(
+    private readonly BLReportCatalogService $catalogService,
+    private readonly BLReportDownloadService $downloadService,
+    private readonly BLReportGenerationService $generationService,
+    private readonly BLReportESignService $eSignService,
+    private readonly BLReportSignedDownloadService $signedDownloadService
 ) {
 }
 
@@ -128,35 +141,112 @@ final class BLReportsController extends Controller
     /**
      * Securely download a generated report from private storage.
      */
-    public function download(
-        string $leadUuid,
-        string $reportUuid
-    ): StreamedResponse|JsonResponse {
-        try {
-            return $this->downloadService->download(
-                leadUuid: $leadUuid,
-                reportUuid: $reportUuid
-            );
-        } catch (BLReportException $exception) {
-            return $this->reportExceptionResponse(
-                $exception
-            );
-        } catch (Throwable $exception) {
-            $this->logUnexpectedException(
-                message: 'Failed to download BL report.',
-                exception: $exception,
-                context: [
-                    'lead_uuid' => $leadUuid,
-                    'report_uuid' => $reportUuid,
-                ]
-            );
+    // public function download(
+    //     string $leadUuid,
+    //     string $reportUuid
+    // ): StreamedResponse|JsonResponse {
+    //     try {
+    //         return $this->downloadService->download(
+    //             leadUuid: $leadUuid,
+    //             reportUuid: $reportUuid
+    //         );
+    //     } catch (BLReportException $exception) {
+    //         return $this->reportExceptionResponse(
+    //             $exception
+    //         );
+    //     } catch (Throwable $exception) {
+    //         $this->logUnexpectedException(
+    //             message: 'Failed to download BL report.',
+    //             exception: $exception,
+    //             context: [
+    //                 'lead_uuid' => $leadUuid,
+    //                 'report_uuid' => $reportUuid,
+    //             ]
+    //         );
 
-            return $this->serverErrorResponse(
-                code: 'REPORT_DOWNLOAD_FAILED',
-                message: 'Unable to download report.'
+    //         return $this->serverErrorResponse(
+    //             code: 'REPORT_DOWNLOAD_FAILED',
+    //             message: 'Unable to download report.'
+    //         );
+    //     }
+    // }
+
+
+    public function download(
+    string $leadUuid,
+    string $reportUuid
+): StreamedResponse|JsonResponse {
+    try {
+        /*
+         * Find the requested report.
+         */
+        $report = BLReport::query()
+            ->where('lead_uuid', $leadUuid)
+            ->where('uuid', $reportUuid)
+            ->first();
+
+        if (! $report) {
+            throw new BLReportException(
+                message: 'Report not found.',
+                statusCode: Response::HTTP_NOT_FOUND,
+                errorCode: 'REPORT_NOT_FOUND'
             );
         }
+
+        /*
+         * Download API is the only API available to the frontend.
+         * Therefore regenerate the requested report using current
+         * database data and the latest Blade before downloading.
+         */
+        $authUserId = auth()->id();
+
+        $generationResult = $this->generationService
+            ->regenerateForDownload(
+                report: $report,
+                generatedBy: is_numeric($authUserId)
+                    ? (int) $authUserId
+                    : null
+            );
+
+        if (
+            data_get($generationResult, 'status')
+            !== BLReportStatus::GENERATED->value
+        ) {
+            throw new BLReportException(
+                message: 'Updated report could not be generated.',
+                statusCode: Response::HTTP_INTERNAL_SERVER_ERROR,
+                errorCode: 'REPORT_REGENERATION_FAILED'
+            );
+        }
+
+        /*
+         * Regeneration is complete. Now download the newly
+         * overwritten private-storage PDF.
+         */
+        return $this->downloadService->download(
+            leadUuid: $leadUuid,
+            reportUuid: $reportUuid
+        );
+    } catch (BLReportException $exception) {
+        return $this->reportExceptionResponse(
+            $exception
+        );
+    } catch (Throwable $exception) {
+        $this->logUnexpectedException(
+            message: 'Failed to regenerate or download BL report.',
+            exception: $exception,
+            context: [
+                'lead_uuid' => $leadUuid,
+                'report_uuid' => $reportUuid,
+            ]
+        );
+
+        return $this->serverErrorResponse(
+            code: 'REPORT_DOWNLOAD_FAILED',
+            message: 'Unable to download report.'
+        );
     }
+}
 
     /**
  * Securely download the completed signed BL report.

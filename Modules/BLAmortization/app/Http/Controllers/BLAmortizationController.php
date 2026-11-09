@@ -221,9 +221,9 @@ class BLAmortizationController extends Controller
                 $financialAmounts['first_emi_date'];
 
             if (empty($calculationInput['first_emi_date'])) {
-                $calculationInput['first_emi_date'] =
-                    $request->validated()['first_emi_date'] ?? null;
-            }
+    $calculationInput['first_emi_date'] =
+        $request->validated()['first_emi_date'] ?? null;
+}    
 
             if (empty($calculationInput['first_emi_date'])) {
                 throw ValidationException::withMessages([
@@ -234,73 +234,73 @@ class BLAmortizationController extends Controller
             }
 
             $frequency = strtolower(
-                trim((string) ($calculationInput['frequency'] ?? ''))
-            );
+    trim((string) ($calculationInput['frequency'] ?? ''))
+);
 
-            $frequency = str_replace(
-                [' ', '-'],
-                '_',
-                $frequency
-            );
+$frequency = str_replace(
+    [' ', '-'],
+    '_',
+    $frequency
+);
 
-            $isOneTimePayment = in_array(
-                $frequency,
-                [
-                    'one_time',
-                    'one_time_payment',
-                    'payday',
-                    'payday_loan',
-                    'bullet',
-                ],
-                true
-            );
+$isOneTimePayment = in_array(
+    $frequency,
+    [
+        'one_time',
+        'one_time_payment',
+        'payday',
+        'payday_loan',
+        'bullet',
+    ],
+    true
+);
 
-            $selectedFirstEmiDate = Carbon::parse(
-                $calculationInput['first_emi_date']
-            )->startOfDay();
+$selectedFirstEmiDate = Carbon::parse(
+    $calculationInput['first_emi_date']
+)->startOfDay();
 
-            $disbursementDate = Carbon::parse(
-                $calculationInput['start_date']
-            )->startOfDay();
+$disbursementDate = Carbon::parse(
+    $calculationInput['start_date']
+)->startOfDay();
 
-            if ($isOneTimePayment) {
-                /*
+if ($isOneTimePayment) {
+    /*
      * Payday/One-time loan mein EMI schedule nahi hota.
      * Disbursement mein saved first_emi_date hi maturity date hai.
      */
-                if ($selectedFirstEmiDate->lte($disbursementDate)) {
-                    throw ValidationException::withMessages([
-                        'first_emi_date' => [
-                            'One-time payment date must be after the disbursement date.',
-                        ],
-                    ]);
-                }
-            } else {
-                /*
+    if ($selectedFirstEmiDate->lte($disbursementDate)) {
+        throw ValidationException::withMessages([
+            'first_emi_date' => [
+                'One-time payment date must be after the disbursement date.',
+            ],
+        ]);
+    }
+} else {
+    /*
      * Daily, Weekly, Monthly etc. ka existing validation same rahega.
      */
-                $standardFirstEmiDate =
-                    $this->calculatorService->getStandardFirstEmiDate(
-                        $calculationInput['start_date'],
-                        $calculationInput['frequency']
-                    );
+    $standardFirstEmiDate =
+        $this->calculatorService->getStandardFirstEmiDate(
+            $calculationInput['start_date'],
+            $calculationInput['frequency']
+        );
 
-                if ($selectedFirstEmiDate->lt($standardFirstEmiDate)) {
-                    throw ValidationException::withMessages([
-                        'first_emi_date' => [
-                            'First EMI date cannot be earlier than '
-                                . $standardFirstEmiDate->toDateString()
-                                . ' based on the disbursement date and '
-                                . str_replace(
-                                    '_',
-                                    ' ',
-                                    $calculationInput['frequency']
-                                )
-                                . ' schedule.',
-                        ],
-                    ]);
-                }
-            }
+    if ($selectedFirstEmiDate->lt($standardFirstEmiDate)) {
+        throw ValidationException::withMessages([
+            'first_emi_date' => [
+                'First EMI date cannot be earlier than '
+                    . $standardFirstEmiDate->toDateString()
+                    . ' based on the disbursement date and '
+                    . str_replace(
+                        '_',
+                        ' ',
+                        $calculationInput['frequency']
+                    )
+                    . ' schedule.',
+            ],
+        ]);
+    }
+}
 
             // $standardFirstEmiDate =
             //     $this->calculatorService->getStandardFirstEmiDate(

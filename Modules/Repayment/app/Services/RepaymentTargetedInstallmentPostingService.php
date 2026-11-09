@@ -1884,6 +1884,13 @@ final class RepaymentTargetedInstallmentPostingService
                 ])
                 ->save();
 
+            app(RepaymentInstallmentDueStatusSyncService::class)->sync(
+                $installment,
+                StatusHistorySource::PAYMENT_POSTING,
+                $transaction,
+                $actorId
+            );
+
             /*
              * Same payment-status history behaviour as normal
              * payment posting.
@@ -2835,9 +2842,6 @@ final class RepaymentTargetedInstallmentPostingService
     }
 }
 
-
-
-
 // namespace Modules\Repayment\Services;
 
 // use Illuminate\Database\QueryException;
@@ -2864,7 +2868,7 @@ final class RepaymentTargetedInstallmentPostingService
 
 //     public function __construct(
 //         private readonly RepaymentTransactionNumberGenerator
-//             $transactionNumberGenerator
+//         $transactionNumberGenerator
 //     ) {
 //     }
 
@@ -2889,22 +2893,22 @@ final class RepaymentTargetedInstallmentPostingService
 //     ): RepaymentTransaction {
 //         try {
 //             return DB::transaction(
-//                 fn (): RepaymentTransaction =>
+//                 fn(): RepaymentTransaction =>
 //                     $this->postInsideTransaction(
 //                         accountUuid:
-//                             $accountUuid,
+//                         $accountUuid,
 
 //                         payload:
-//                             $payload,
+//                         $payload,
 
 //                         targets:
-//                             $targets,
+//                         $targets,
 
 //                         actorId:
-//                             $actorId,
+//                         $actorId,
 
 //                         metadata:
-//                             $metadata
+//                         $metadata
 //                     ),
 //                 attempts: 3
 //             );
@@ -2944,7 +2948,7 @@ final class RepaymentTargetedInstallmentPostingService
 //                             )
 //                             ->first();
 
-//                     if (! $account) {
+//                     if (!$account) {
 //                         throw RepaymentPaymentException::
 //                             accountNotFound(
 //                                 $accountUuid
@@ -2954,16 +2958,16 @@ final class RepaymentTargetedInstallmentPostingService
 //                     if (
 //                         $this->requestMatchesTransaction(
 //                             account:
-//                                 $account,
+//                             $account,
 
 //                             transaction:
-//                                 $existing,
+//                             $existing,
 
 //                             payload:
-//                                 $payload,
+//                             $payload,
 
 //                             targets:
-//                                 $targets
+//                             $targets
 //                         )
 //                     ) {
 //                         return $this
@@ -2975,14 +2979,14 @@ final class RepaymentTargetedInstallmentPostingService
 //                     throw RepaymentPaymentException::
 //                         idempotencyConflict(
 //                             idempotencyKey:
-//                                 (string)
-//                                 $existing
-//                                     ->idempotency_key,
+//                             (string) 
+//                             $existing
+//                                 ->idempotency_key,
 
 //                             existingTransactionUuid:
-//                                 (string)
-//                                 $existing
-//                                     ->uuid
+//                             (string) 
+//                             $existing
+//                                 ->uuid
 //                         );
 //                 }
 //             }
@@ -3020,19 +3024,19 @@ final class RepaymentTargetedInstallmentPostingService
 
 //         return $this->postInsideTransaction(
 //             accountUuid:
-//                 $accountUuid,
+//             $accountUuid,
 
 //             payload:
-//                 $payload,
+//             $payload,
 
 //             targets:
-//                 $targets,
+//             $targets,
 
 //             actorId:
-//                 $actorId,
+//             $actorId,
 
 //             metadata:
-//                 $metadata
+//             $metadata
 //         );
 //     }
 
@@ -3065,7 +3069,7 @@ final class RepaymentTargetedInstallmentPostingService
 //                 ->lockForUpdate()
 //                 ->first();
 
-//         if (! $account) {
+//         if (!$account) {
 //             throw RepaymentPaymentException::
 //                 accountNotFound(
 //                     $accountUuid
@@ -3113,16 +3117,16 @@ final class RepaymentTargetedInstallmentPostingService
 //             if (
 //                 $this->requestMatchesTransaction(
 //                     account:
-//                         $account,
+//                     $account,
 
 //                     transaction:
-//                         $existing,
+//                     $existing,
 
 //                     payload:
-//                         $payload,
+//                     $payload,
 
 //                     targets:
-//                         $normalizedTargets
+//                     $normalizedTargets
 //                 )
 //             ) {
 //                 return $this
@@ -3134,11 +3138,11 @@ final class RepaymentTargetedInstallmentPostingService
 //             throw RepaymentPaymentException::
 //                 idempotencyConflict(
 //                     idempotencyKey:
-//                         $idempotencyKey,
+//                     $idempotencyKey,
 
 //                     existingTransactionUuid:
-//                         (string)
-//                         $existing->uuid
+//                     (string) 
+//                     $existing->uuid
 //                 );
 //         }
 
@@ -3148,18 +3152,18 @@ final class RepaymentTargetedInstallmentPostingService
 //          * =========================================================
 //          */
 //         if (
-//             ! $account->allowsPayment()
+//             !$account->allowsPayment()
 //         ) {
 //             throw RepaymentPaymentException::
 //                 accountDoesNotAllowPayment(
 //                     accountUuid:
-//                         (string)
-//                         $account->uuid,
+//                     (string) 
+//                     $account->uuid,
 
 //                     accountStatus:
-//                         $account
-//                             ->status
-//                             ->value
+//                     $account
+//                         ->status
+//                         ->value
 //                 );
 //         }
 
@@ -3184,7 +3188,7 @@ final class RepaymentTargetedInstallmentPostingService
 //         ) {
 //             throw new RepaymentPaymentException(
 //                 message:
-//                     'Payment amount must be greater than zero.',
+//                 'Payment amount must be greater than zero.',
 
 //                 context: [
 //                     'repayment_account_uuid' =>
@@ -3195,7 +3199,7 @@ final class RepaymentTargetedInstallmentPostingService
 //                 ],
 
 //                 statusCode:
-//                     422
+//                 422
 //             );
 //         }
 
@@ -3216,7 +3220,7 @@ final class RepaymentTargetedInstallmentPostingService
 //         ) {
 //             throw new RepaymentPaymentException(
 //                 message:
-//                     'Targeted EMI collection total does not match the payment amount.',
+//                 'Targeted EMI collection total does not match the payment amount.',
 
 //                 context: [
 //                     'repayment_account_uuid' =>
@@ -3230,7 +3234,7 @@ final class RepaymentTargetedInstallmentPostingService
 //                 ],
 
 //                 statusCode:
-//                     422
+//                 422
 //             );
 //         }
 
@@ -3251,10 +3255,10 @@ final class RepaymentTargetedInstallmentPostingService
 //                 )
 //             );
 
-//         if (! $paymentMode) {
+//         if (!$paymentMode) {
 //             throw new RepaymentPaymentException(
 //                 message:
-//                     'Invalid payment mode selected.',
+//                 'Invalid payment mode selected.',
 
 //                 context: [
 //                     'repayment_account_uuid' =>
@@ -3267,7 +3271,7 @@ final class RepaymentTargetedInstallmentPostingService
 //                 ],
 
 //                 statusCode:
-//                     422
+//                 422
 //             );
 //         }
 
@@ -3282,11 +3286,11 @@ final class RepaymentTargetedInstallmentPostingService
 //             $paymentMode
 //                 ->requiresReference()
 //             && $transactionReference
-//                 === null
+//             === null
 //         ) {
 //             throw new RepaymentPaymentException(
 //                 message:
-//                     'Transaction reference is required for the selected payment mode.',
+//                 'Transaction reference is required for the selected payment mode.',
 
 //                 context: [
 //                     'repayment_account_uuid' =>
@@ -3298,19 +3302,19 @@ final class RepaymentTargetedInstallmentPostingService
 //                 ],
 
 //                 statusCode:
-//                     422
+//                 422
 //             );
 //         }
 
 //         $this->assertReferenceIsAvailable(
 //             account:
-//                 $account,
+//             $account,
 
 //             paymentMode:
-//                 $paymentMode,
+//             $paymentMode,
 
 //             transactionReference:
-//                 $transactionReference
+//             $transactionReference
 //         );
 
 //         /*
@@ -3374,7 +3378,7 @@ final class RepaymentTargetedInstallmentPostingService
 //         ) {
 //             $liveByUuid[
 //                 strtolower(
-//                     (string)
+//                     (string) 
 //                     $installment->uuid
 //                 )
 //             ] =
@@ -3394,15 +3398,15 @@ final class RepaymentTargetedInstallmentPostingService
 //                 ];
 
 //             if (
-//                 ! isset(
-//                     $liveByUuid[
-//                         $targetUuid
-//                     ]
-//                 )
+//                 !isset(
+//                 $liveByUuid[
+//                     $targetUuid
+//                 ]
+//             )
 //             ) {
 //                 throw new RepaymentPaymentException(
 //                     message:
-//                         'A targeted repayment installment no longer exists.',
+//                     'A targeted repayment installment no longer exists.',
 
 //                     context: [
 //                         'repayment_account_uuid' =>
@@ -3418,7 +3422,7 @@ final class RepaymentTargetedInstallmentPostingService
 //                     ],
 
 //                     statusCode:
-//                         409
+//                     409
 //                 );
 //             }
 
@@ -3430,13 +3434,13 @@ final class RepaymentTargetedInstallmentPostingService
 
 //             $this->assertTargetStillEligible(
 //                 account:
-//                     $account,
+//                 $account,
 
 //                 installment:
-//                     $installment,
+//                 $installment,
 
 //                 target:
-//                     $target
+//                 $target
 //             );
 //         }
 
@@ -3455,28 +3459,28 @@ final class RepaymentTargetedInstallmentPostingService
 //         $requestFingerprint =
 //             $this->buildRequestFingerprint(
 //                 accountUuid:
-//                     $accountUuid,
+//                 $accountUuid,
 
 //                 amount:
-//                     $amount,
+//                 $amount,
 
 //                 paymentMode:
-//                     $paymentMode,
+//                 $paymentMode,
 
 //                 transactionReference:
-//                     $transactionReference,
+//                 $transactionReference,
 
 //                 receivedDate:
-//                     $receivedDate,
+//                 $receivedDate,
 
 //                 valueDate:
-//                     $valueDate,
+//                 $valueDate,
 
 //                 remarks:
-//                     $remarks,
+//                 $remarks,
 
 //                 targets:
-//                     $normalizedTargets
+//                 $normalizedTargets
 //             );
 
 //         /*
@@ -3505,7 +3509,7 @@ final class RepaymentTargetedInstallmentPostingService
 
 //                     'transaction_type' =>
 //                         RepaymentTransactionType::
-//                             PAYMENT
+//                         PAYMENT
 //                             ->value,
 
 //                     'amount' =>
@@ -3536,7 +3540,7 @@ final class RepaymentTargetedInstallmentPostingService
 
 //                     'status' =>
 //                         RepaymentTransactionStatus::
-//                             PENDING
+//                         PENDING
 //                             ->value,
 
 //                     'remarks' =>
@@ -3566,24 +3570,24 @@ final class RepaymentTargetedInstallmentPostingService
 //                                  */
 //                                 'targeted_installments' =>
 //                                     array_map(
-//                                         static fn (
-//                                             array $target
-//                                         ): array => [
-//                                             'repayment_installment_uuid' =>
-//                                                 $target[
-//                                                     'repayment_installment_uuid'
-//                                                 ],
+//                                         static fn(
+//                                         array $target
+//                                     ): array => [
+//                                                 'repayment_installment_uuid' =>
+//                                                     $target[
+//                                                         'repayment_installment_uuid'
+//                                                     ],
 
-//                                             'installment_number' =>
-//                                                 $target[
-//                                                     'installment_number'
-//                                                 ],
+//                                                 'installment_number' =>
+//                                                     $target[
+//                                                         'installment_number'
+//                                                     ],
 
-//                                             'collection_amount' =>
-//                                                 $target[
-//                                                     'collection_amount'
-//                                                 ],
-//                                         ],
+//                                                 'collection_amount' =>
+//                                                     $target[
+//                                                         'collection_amount'
+//                                                     ],
+//                                             ],
 //                                         $normalizedTargets
 //                                     ),
 //                             ]
@@ -3598,16 +3602,16 @@ final class RepaymentTargetedInstallmentPostingService
 //          */
 //         $transaction
 //             ->transaction_number =
-//                 $this
-//                     ->transactionNumberGenerator
-//                     ->generateFinal(
-//                         transactionId:
-//                             (int)
-//                             $transaction->id,
+//             $this
+//                 ->transactionNumberGenerator
+//                 ->generateFinal(
+//                     transactionId:
+//                     (int) 
+//                     $transaction->id,
 
-//                         businessDate:
-//                             $receivedDate
-//                     );
+//                     businessDate:
+//                     $receivedDate
+//                 );
 
 //         $transaction->save();
 
@@ -3622,22 +3626,22 @@ final class RepaymentTargetedInstallmentPostingService
 //         $allocationResult =
 //             $this->allocateTargets(
 //                 account:
-//                     $account,
+//                 $account,
 
 //                 transaction:
-//                     $transaction,
+//                 $transaction,
 
 //                 targets:
-//                     $normalizedTargets,
+//                 $normalizedTargets,
 
 //                 liveByUuid:
-//                     $liveByUuid,
+//                 $liveByUuid,
 
 //                 actorId:
-//                     $actorId,
+//                 $actorId,
 
 //                 postingTimestamp:
-//                     $postingTimestamp
+//                 $postingTimestamp
 //             );
 
 //         /*
@@ -3656,7 +3660,7 @@ final class RepaymentTargetedInstallmentPostingService
 //             throw RepaymentPaymentException::
 //                 financialInvariantViolation(
 //                     message:
-//                         'Targeted repayment payment could not be fully allocated to the selected installments.',
+//                     'Targeted repayment payment could not be fully allocated to the selected installments.',
 
 //                     context: [
 //                         'repayment_account_uuid' =>
@@ -3695,7 +3699,7 @@ final class RepaymentTargetedInstallmentPostingService
 //             throw RepaymentPaymentException::
 //                 financialInvariantViolation(
 //                     message:
-//                         'Targeted repayment allocated amount does not match transaction amount.',
+//                     'Targeted repayment allocated amount does not match transaction amount.',
 
 //                     context: [
 //                         'repayment_account_uuid' =>
@@ -3731,7 +3735,7 @@ final class RepaymentTargetedInstallmentPostingService
 
 //                 'status' =>
 //                     RepaymentTransactionStatus::
-//                         POSTED
+//                     POSTED
 //                         ->value,
 
 //                 'approved_by' =>
@@ -3741,7 +3745,7 @@ final class RepaymentTargetedInstallmentPostingService
 //                     array_merge(
 //                         $transaction
 //                             ->metadata
-//                             ?? [],
+//                         ?? [],
 //                         [
 //                             'allocation_count' =>
 //                                 $allocationResult[
@@ -3771,22 +3775,22 @@ final class RepaymentTargetedInstallmentPostingService
 //          */
 //         $this->refreshAccountBalances(
 //             account:
-//                 $account,
+//             $account,
 
 //             receivedAmount:
-//                 $amount,
+//             $amount,
 
 //             unallocatedAmount:
-//                 '0.00',
+//             '0.00',
 
 //             transaction:
-//                 $transaction,
+//             $transaction,
 
 //             actorId:
-//                 $actorId,
+//             $actorId,
 
 //             postingTimestamp:
-//                 $postingTimestamp
+//             $postingTimestamp
 //         );
 
 //         return $this
@@ -3815,12 +3819,12 @@ final class RepaymentTargetedInstallmentPostingService
 //         if ($targets === []) {
 //             throw new RepaymentPaymentException(
 //                 message:
-//                     'At least one targeted repayment installment is required.',
+//                 'At least one targeted repayment installment is required.',
 
 //                 context: [],
 
 //                 statusCode:
-//                     422
+//                 422
 //             );
 //         }
 
@@ -3832,10 +3836,10 @@ final class RepaymentTargetedInstallmentPostingService
 //         foreach (
 //             $targets as $index => $target
 //         ) {
-//             if (! is_array($target)) {
+//             if (!is_array($target)) {
 //                 throw new RepaymentPaymentException(
 //                     message:
-//                         'Targeted repayment installment structure is invalid.',
+//                     'Targeted repayment installment structure is invalid.',
 
 //                     context: [
 //                         'target_index' =>
@@ -3843,7 +3847,7 @@ final class RepaymentTargetedInstallmentPostingService
 //                     ],
 
 //                     statusCode:
-//                         422
+//                     422
 //                 );
 //             }
 
@@ -3873,7 +3877,7 @@ final class RepaymentTargetedInstallmentPostingService
 //             if ($uuid === '') {
 //                 throw new RepaymentPaymentException(
 //                     message:
-//                         'Targeted repayment installment UUID is required.',
+//                     'Targeted repayment installment UUID is required.',
 
 //                     context: [
 //                         'target_index' =>
@@ -3881,14 +3885,14 @@ final class RepaymentTargetedInstallmentPostingService
 //                     ],
 
 //                     statusCode:
-//                         422
+//                     422
 //                 );
 //             }
 
 //             if ($installmentNumber < 1) {
 //                 throw new RepaymentPaymentException(
 //                     message:
-//                         'Targeted repayment installment number is invalid.',
+//                     'Targeted repayment installment number is invalid.',
 
 //                     context: [
 //                         'target_index' =>
@@ -3901,7 +3905,7 @@ final class RepaymentTargetedInstallmentPostingService
 //                     ],
 
 //                     statusCode:
-//                         422
+//                     422
 //                 );
 //             }
 
@@ -3914,7 +3918,7 @@ final class RepaymentTargetedInstallmentPostingService
 //             ) {
 //                 throw new RepaymentPaymentException(
 //                     message:
-//                         'Targeted EMI collection amount must be greater than zero.',
+//                     'Targeted EMI collection amount must be greater than zero.',
 
 //                     context: [
 //                         'target_index' =>
@@ -3931,14 +3935,14 @@ final class RepaymentTargetedInstallmentPostingService
 //                     ],
 
 //                     statusCode:
-//                         422
+//                     422
 //                 );
 //             }
 
 //             if (isset($seenUuids[$uuid])) {
 //                 throw new RepaymentPaymentException(
 //                     message:
-//                         'The same repayment installment UUID was targeted more than once.',
+//                     'The same repayment installment UUID was targeted more than once.',
 
 //                     context: [
 //                         'repayment_installment_uuid' =>
@@ -3946,20 +3950,20 @@ final class RepaymentTargetedInstallmentPostingService
 //                     ],
 
 //                     statusCode:
-//                         422
+//                     422
 //                 );
 //             }
 
 //             if (
 //                 isset(
-//                     $seenNumbers[
-//                         $installmentNumber
-//                     ]
-//                 )
+//                 $seenNumbers[
+//                     $installmentNumber
+//                 ]
+//             )
 //             ) {
 //                 throw new RepaymentPaymentException(
 //                     message:
-//                         'The same repayment installment number was targeted more than once.',
+//                     'The same repayment installment number was targeted more than once.',
 
 //                     context: [
 //                         'installment_number' =>
@@ -3967,7 +3971,7 @@ final class RepaymentTargetedInstallmentPostingService
 //                     ],
 
 //                     statusCode:
-//                         422
+//                     422
 //                 );
 //             }
 
@@ -3998,10 +4002,7 @@ final class RepaymentTargetedInstallmentPostingService
 //          */
 //         usort(
 //             $normalized,
-//             static function (
-//                 array $left,
-//                 array $right
-//             ): int {
+//             static function (array $left, array $right): int {
 //                 $numberComparison =
 //                     $left[
 //                         'installment_number'
@@ -4069,16 +4070,16 @@ final class RepaymentTargetedInstallmentPostingService
 //         array $target
 //     ): void {
 //         if (
-//             (int)
+//             (int) 
 //             $installment
 //                 ->repayment_account_id
 //             !==
-//             (int)
+//             (int) 
 //             $account->id
 //         ) {
 //             throw new RepaymentPaymentException(
 //                 message:
-//                     'Targeted repayment installment does not belong to this repayment account.',
+//                 'Targeted repayment installment does not belong to this repayment account.',
 
 //                 context: [
 //                     'repayment_account_uuid' =>
@@ -4089,22 +4090,22 @@ final class RepaymentTargetedInstallmentPostingService
 //                 ],
 
 //                 statusCode:
-//                     409
+//                 409
 //             );
 //         }
 
 //         if (
-//             (int)
+//             (int) 
 //             $installment
 //                 ->schedule_version
 //             !==
-//             (int)
+//             (int) 
 //             $account
 //                 ->schedule_version
 //         ) {
 //             throw new RepaymentPaymentException(
 //                 message:
-//                     'Targeted repayment installment is no longer part of the current repayment schedule.',
+//                 'Targeted repayment installment is no longer part of the current repayment schedule.',
 
 //                 context: [
 //                     'repayment_account_uuid' =>
@@ -4114,53 +4115,53 @@ final class RepaymentTargetedInstallmentPostingService
 //                         $installment->uuid,
 
 //                     'installment_schedule_version' =>
-//                         (int)
+//                         (int) 
 //                         $installment
 //                             ->schedule_version,
 
 //                     'account_schedule_version' =>
-//                         (int)
+//                         (int) 
 //                         $account
 //                             ->schedule_version,
 //                 ],
 
 //                 statusCode:
-//                     409
+//                 409
 //             );
 //         }
 
 //         if (
-//             (int)
+//             (int) 
 //             $installment
 //                 ->installment_number
 //             !==
-//             (int)
+//             (int) 
 //             $target[
 //                 'installment_number'
 //             ]
 //         ) {
 //             throw new RepaymentPaymentException(
 //                 message:
-//                     'Targeted EMI number no longer matches its installment UUID.',
+//                 'Targeted EMI number no longer matches its installment UUID.',
 
 //                 context: [
 //                     'repayment_installment_uuid' =>
 //                         $installment->uuid,
 
 //                     'expected_installment_number' =>
-//                         (int)
+//                         (int) 
 //                         $target[
 //                             'installment_number'
 //                         ],
 
 //                     'current_installment_number' =>
-//                         (int)
+//                         (int) 
 //                         $installment
 //                             ->installment_number,
 //                 ],
 
 //                 statusCode:
-//                     409
+//                 409
 //             );
 //         }
 
@@ -4169,7 +4170,7 @@ final class RepaymentTargetedInstallmentPostingService
 //         );
 
 //         $currentOutstanding =
-//             $this->normalizeMoney(
+//             $this->roundWholeMoney(
 //                 $installment
 //                     ->outstanding_amount
 //             );
@@ -4183,7 +4184,7 @@ final class RepaymentTargetedInstallmentPostingService
 //         ) {
 //             throw new RepaymentPaymentException(
 //                 message:
-//                     'Targeted EMI has no outstanding balance.',
+//                 'Targeted EMI has no outstanding balance.',
 
 //                 context: [
 //                     'repayment_installment_uuid' =>
@@ -4198,18 +4199,18 @@ final class RepaymentTargetedInstallmentPostingService
 //                 ],
 
 //                 statusCode:
-//                     409
+//                 409
 //             );
 //         }
 
 //         if (
-//             ! $installment
+//             !$installment
 //                 ->payment_status
 //                 ->allowsAllocation()
 //         ) {
 //             throw new RepaymentPaymentException(
 //                 message:
-//                     'Targeted EMI no longer allows payment allocation.',
+//                 'Targeted EMI no longer allows payment allocation.',
 
 //                 context: [
 //                     'repayment_installment_uuid' =>
@@ -4226,7 +4227,7 @@ final class RepaymentTargetedInstallmentPostingService
 //                 ],
 
 //                 statusCode:
-//                     409
+//                 409
 //             );
 //         }
 
@@ -4246,7 +4247,7 @@ final class RepaymentTargetedInstallmentPostingService
 //         ) {
 //             throw new RepaymentPaymentException(
 //                 message:
-//                     'Targeted EMI collection amount is greater than the current installment outstanding.',
+//                 'Targeted EMI collection amount is greater than the current installment outstanding.',
 
 //                 context: [
 //                     'repayment_installment_uuid' =>
@@ -4264,7 +4265,7 @@ final class RepaymentTargetedInstallmentPostingService
 //                 ],
 
 //                 statusCode:
-//                     409
+//                 409
 //             );
 //         }
 //     }
@@ -4334,6 +4335,16 @@ final class RepaymentTargetedInstallmentPostingService
 //                 $installment
 //                     ->payment_status;
 
+//             /*
+//              * Targeted collection also uses the same whole-rupee
+//              * collectible as normal repayment posting.
+//              */
+//             $installmentCollectible =
+//                 $this->roundWholeMoney(
+//                     $installment
+//                         ->outstanding_amount
+//                 );
+
 //             $targetAmount =
 //                 $this->normalizeMoney(
 //                     $target[
@@ -4359,6 +4370,12 @@ final class RepaymentTargetedInstallmentPostingService
 //                 $installment
 //                     ->interestOutstanding();
 
+//             $interestOutstanding =
+//                 $this->minimumMoney(
+//                     $interestOutstanding,
+//                     $installmentCollectible
+//                 );
+
 //             $interestAllocation =
 //                 $this->minimumMoney(
 //                     $targetRemaining,
@@ -4382,7 +4399,7 @@ final class RepaymentTargetedInstallmentPostingService
 
 //                         'component' =>
 //                             AllocationComponent::
-//                                 INTEREST
+//                             INTEREST
 //                                 ->value,
 
 //                         'amount' =>
@@ -4405,7 +4422,7 @@ final class RepaymentTargetedInstallmentPostingService
 
 //                             'component_priority' =>
 //                                 AllocationComponent::
-//                                     INTEREST
+//                                 INTEREST
 //                                     ->priority(),
 
 //                             'allocation_strategy' =>
@@ -4418,15 +4435,15 @@ final class RepaymentTargetedInstallmentPostingService
 
 //                 $installment
 //                     ->interest_paid =
-//                         bcadd(
-//                             (string)
-//                             $installment
-//                                 ->interest_paid,
+//                     bcadd(
+//                         (string) 
+//                         $installment
+//                             ->interest_paid,
 
-//                             $interestAllocation,
+//                         $interestAllocation,
 
-//                             self::MONEY_SCALE
-//                         );
+//                         self::MONEY_SCALE
+//                     );
 
 //                 $targetRemaining =
 //                     bcsub(
@@ -4434,6 +4451,23 @@ final class RepaymentTargetedInstallmentPostingService
 //                         $interestAllocation,
 //                         self::MONEY_SCALE
 //                     );
+
+//                 $installmentCollectible =
+//                     bcsub(
+//                         $installmentCollectible,
+//                         $interestAllocation,
+//                         self::MONEY_SCALE
+//                     );
+
+//                 if (
+//                     bccomp(
+//                         $installmentCollectible,
+//                         '0.00',
+//                         self::MONEY_SCALE
+//                     ) === -1
+//                 ) {
+//                     $installmentCollectible = '0.00';
+//                 }
 
 //                 $transactionRemaining =
 //                     bcsub(
@@ -4460,9 +4494,12 @@ final class RepaymentTargetedInstallmentPostingService
 //              * COMPONENT 2: PRINCIPAL
 //              * =====================================================
 //              */
+//             /*
+//              * Remaining rounded collectible is the principal-side
+//              * collectible, so paise are not carried to another EMI.
+//              */
 //             $principalOutstanding =
-//                 $installment
-//                     ->principalOutstanding();
+//                 $installmentCollectible;
 
 //             $principalAllocation =
 //                 $this->minimumMoney(
@@ -4487,7 +4524,7 @@ final class RepaymentTargetedInstallmentPostingService
 
 //                         'component' =>
 //                             AllocationComponent::
-//                                 PRINCIPAL
+//                             PRINCIPAL
 //                                 ->value,
 
 //                         'amount' =>
@@ -4510,7 +4547,7 @@ final class RepaymentTargetedInstallmentPostingService
 
 //                             'component_priority' =>
 //                                 AllocationComponent::
-//                                     PRINCIPAL
+//                                 PRINCIPAL
 //                                     ->priority(),
 
 //                             'allocation_strategy' =>
@@ -4523,15 +4560,15 @@ final class RepaymentTargetedInstallmentPostingService
 
 //                 $installment
 //                     ->principal_paid =
-//                         bcadd(
-//                             (string)
-//                             $installment
-//                                 ->principal_paid,
+//                     bcadd(
+//                         (string) 
+//                         $installment
+//                             ->principal_paid,
 
-//                             $principalAllocation,
+//                         $principalAllocation,
 
-//                             self::MONEY_SCALE
-//                         );
+//                         self::MONEY_SCALE
+//                     );
 
 //                 $targetRemaining =
 //                     bcsub(
@@ -4539,6 +4576,23 @@ final class RepaymentTargetedInstallmentPostingService
 //                         $principalAllocation,
 //                         self::MONEY_SCALE
 //                     );
+
+//                 $installmentCollectible =
+//                     bcsub(
+//                         $installmentCollectible,
+//                         $principalAllocation,
+//                         self::MONEY_SCALE
+//                     );
+
+//                 if (
+//                     bccomp(
+//                         $installmentCollectible,
+//                         '0.00',
+//                         self::MONEY_SCALE
+//                     ) === -1
+//                 ) {
+//                     $installmentCollectible = '0.00';
+//                 }
 
 //                 $transactionRemaining =
 //                     bcsub(
@@ -4576,7 +4630,7 @@ final class RepaymentTargetedInstallmentPostingService
 //                 throw RepaymentPaymentException::
 //                     financialInvariantViolation(
 //                         message:
-//                             'Targeted EMI collection amount could not be fully allocated to the selected installment.',
+//                         'Targeted EMI collection amount could not be fully allocated to the selected installment.',
 
 //                         context: [
 //                             'repayment_account_uuid' =>
@@ -4607,23 +4661,17 @@ final class RepaymentTargetedInstallmentPostingService
 //              * =====================================================
 //              */
 //             $newOutstanding =
-//                 bcadd(
-//                     $installment
-//                         ->interestOutstanding(),
-
-//                     $installment
-//                         ->principalOutstanding(),
-
-//                     self::MONEY_SCALE
+//                 $this->roundWholeMoney(
+//                     $installmentCollectible
 //                 );
 
 //             $totalPaid =
 //                 bcadd(
-//                     (string)
+//                     (string) 
 //                     $installment
 //                         ->interest_paid,
 
-//                     (string)
+//                     (string) 
 //                     $installment
 //                         ->principal_paid,
 
@@ -4638,7 +4686,7 @@ final class RepaymentTargetedInstallmentPostingService
 //                         self::MONEY_SCALE
 //                     ) === 0 =>
 //                         InstallmentPaymentStatus::
-//                             PAID,
+//                         PAID,
 
 //                     bccomp(
 //                         $totalPaid,
@@ -4646,11 +4694,11 @@ final class RepaymentTargetedInstallmentPostingService
 //                         self::MONEY_SCALE
 //                     ) === 1 =>
 //                         InstallmentPaymentStatus::
-//                             PARTIAL,
+//                         PARTIAL,
 
 //                     default =>
 //                         InstallmentPaymentStatus::
-//                             UNPAID,
+//                         UNPAID,
 //                 };
 
 //             $installment
@@ -4669,9 +4717,9 @@ final class RepaymentTargetedInstallmentPostingService
 //                         $newPaymentStatus
 //                         ===
 //                         InstallmentPaymentStatus::
-//                             PAID
-//                             ? $postingTimestamp
-//                             : null,
+//                         PAID
+//                         ? $postingTimestamp
+//                         : null,
 //                 ])
 //                 ->save();
 
@@ -4697,7 +4745,7 @@ final class RepaymentTargetedInstallmentPostingService
 
 //                         'status_type' =>
 //                             StatusHistoryType::
-//                                 PAYMENT_STATUS
+//                             PAYMENT_STATUS
 //                                 ->value,
 
 //                         'old_status' =>
@@ -4710,7 +4758,7 @@ final class RepaymentTargetedInstallmentPostingService
 
 //                         'source' =>
 //                             StatusHistorySource::
-//                                 PAYMENT_POSTING
+//                             PAYMENT_POSTING
 //                                 ->value,
 
 //                         'reason' =>
@@ -4781,17 +4829,22 @@ final class RepaymentTargetedInstallmentPostingService
 //                 ->selectRaw(
 //                     '
 //                     COALESCE(
-//                         SUM(principal_due - principal_paid),
-//                         0
-//                     ) AS principal_outstanding,
-
-//                     COALESCE(
-//                         SUM(interest_due - interest_paid),
+//                         SUM(
+//                             LEAST(
+//                                 GREATEST(
+//                                     interest_due - interest_paid,
+//                                     0
+//                                 ),
+//                                 ROUND(outstanding_amount, 0)
+//                             )
+//                         ),
 //                         0
 //                     ) AS interest_outstanding,
 
 //                     COALESCE(
-//                         SUM(outstanding_amount),
+//                         SUM(
+//                             ROUND(outstanding_amount, 0)
+//                         ),
 //                         0
 //                     ) AS total_outstanding,
 
@@ -4799,7 +4852,7 @@ final class RepaymentTargetedInstallmentPostingService
 //                         SUM(
 //                             CASE
 //                                 WHEN due_status = ?
-//                                 THEN outstanding_amount
+//                                 THEN ROUND(outstanding_amount, 0)
 //                                 ELSE 0
 //                             END
 //                         ),
@@ -4810,31 +4863,42 @@ final class RepaymentTargetedInstallmentPostingService
 //                 )
 //                 ->first();
 
-//         $principalOutstanding =
-//             $this->normalizeMoney(
+//         $totalOutstanding =
+//             $this->roundWholeMoney(
 //                 $totals
-//                     ?->principal_outstanding
+//                         ?->total_outstanding
 //                 ?? '0'
 //             );
 
 //         $interestOutstanding =
-//             $this->normalizeMoney(
+//             $this->roundWholeMoney(
 //                 $totals
-//                     ?->interest_outstanding
+//                         ?->interest_outstanding
 //                 ?? '0'
 //             );
 
-//         $totalOutstanding =
-//             $this->normalizeMoney(
-//                 $totals
-//                     ?->total_outstanding
-//                 ?? '0'
+//         if (
+//             bccomp(
+//                 $interestOutstanding,
+//                 $totalOutstanding,
+//                 self::MONEY_SCALE
+//             ) === 1
+//         ) {
+//             $interestOutstanding =
+//                 $totalOutstanding;
+//         }
+
+//         $principalOutstanding =
+//             bcsub(
+//                 $totalOutstanding,
+//                 $interestOutstanding,
+//                 self::MONEY_SCALE
 //             );
 
 //         $overdueAmount =
-//             $this->normalizeMoney(
+//             $this->roundWholeMoney(
 //                 $totals
-//                     ?->overdue_amount
+//                         ?->overdue_amount
 //                 ?? '0'
 //             );
 
@@ -4863,7 +4927,7 @@ final class RepaymentTargetedInstallmentPostingService
 //                 throw RepaymentPaymentException::
 //                     financialInvariantViolation(
 //                         message:
-//                             'Repayment balance became negative after targeted payment allocation.',
+//                         'Repayment balance became negative after targeted payment allocation.',
 
 //                         context: [
 //                             'repayment_account_uuid' =>
@@ -4899,7 +4963,7 @@ final class RepaymentTargetedInstallmentPostingService
 //             throw RepaymentPaymentException::
 //                 financialInvariantViolation(
 //                     message:
-//                         'Repayment account component balances do not match total outstanding.',
+//                     'Repayment account component balances do not match total outstanding.',
 
 //                     context: [
 //                         'repayment_account_uuid' =>
@@ -4929,10 +4993,8 @@ final class RepaymentTargetedInstallmentPostingService
 //                     'repayment_account_id',
 //                     $account->id
 //                 )
-//                 ->where(
-//                     'outstanding_amount',
-//                     '>',
-//                     0
+//                 ->whereRaw(
+//                     'ROUND(outstanding_amount, 0) > 0'
 //                 )
 //                 ->orderBy(
 //                     'due_date'
@@ -4953,10 +5015,10 @@ final class RepaymentTargetedInstallmentPostingService
 //                 '0.00',
 //                 self::MONEY_SCALE
 //             ) === 0
-//                 ? RepaymentAccountStatus::
-//                     CLOSED
-//                 : RepaymentAccountStatus::
-//                     ACTIVE;
+//             ? RepaymentAccountStatus::
+//             CLOSED
+//             : RepaymentAccountStatus::
+//             ACTIVE;
 
 //         $account
 //             ->forceFill([
@@ -4977,7 +5039,7 @@ final class RepaymentTargetedInstallmentPostingService
 //                  */
 //                 'advance_amount' =>
 //                     bcadd(
-//                         (string)
+//                         (string) 
 //                         $account
 //                             ->advance_amount,
 
@@ -4988,7 +5050,7 @@ final class RepaymentTargetedInstallmentPostingService
 
 //                 'total_received' =>
 //                     bcadd(
-//                         (string)
+//                         (string) 
 //                         $account
 //                             ->total_received,
 
@@ -5011,9 +5073,9 @@ final class RepaymentTargetedInstallmentPostingService
 //                     $newAccountStatus
 //                     ===
 //                     RepaymentAccountStatus::
-//                         CLOSED
-//                         ? $postingTimestamp
-//                         : null,
+//                     CLOSED
+//                     ? $postingTimestamp
+//                     : null,
 
 //                 'updated_by' =>
 //                     $actorId,
@@ -5035,7 +5097,7 @@ final class RepaymentTargetedInstallmentPostingService
 
 //                     'status_type' =>
 //                         StatusHistoryType::
-//                             ACCOUNT_STATUS
+//                         ACCOUNT_STATUS
 //                             ->value,
 
 //                     'old_status' =>
@@ -5048,7 +5110,7 @@ final class RepaymentTargetedInstallmentPostingService
 
 //                     'source' =>
 //                         StatusHistorySource::
-//                             ACCOUNT_CLOSURE
+//                         ACCOUNT_CLOSURE
 //                             ->value,
 
 //                     'reason' =>
@@ -5134,14 +5196,14 @@ final class RepaymentTargetedInstallmentPostingService
 //                 throw RepaymentPaymentException::
 //                     invalidInstallmentState(
 //                         installmentUuid:
-//                             (string)
-//                             $installment
-//                                 ->uuid,
+//                         (string) 
+//                         $installment
+//                             ->uuid,
 
 //                         installmentNumber:
-//                             (int)
-//                             $installment
-//                                 ->installment_number,
+//                         (int) 
+//                         $installment
+//                             ->installment_number,
 
 //                         details: [
 //                             'field' =>
@@ -5154,42 +5216,12 @@ final class RepaymentTargetedInstallmentPostingService
 //             }
 //         }
 
-//         if (
-//             bccomp(
-//                 $values[
-//                     'principal_paid'
-//                 ],
-//                 $values[
-//                     'principal_due'
-//                 ],
-//                 self::MONEY_SCALE
-//             ) === 1
-//         ) {
-//             throw RepaymentPaymentException::
-//                 invalidInstallmentState(
-//                     installmentUuid:
-//                         (string)
-//                         $installment->uuid,
-
-//                     installmentNumber:
-//                         (int)
-//                         $installment
-//                             ->installment_number,
-
-//                     details: [
-//                         'principal_due' =>
-//                             $values[
-//                                 'principal_due'
-//                             ],
-
-//                         'principal_paid' =>
-//                             $values[
-//                                 'principal_paid'
-//                             ],
-//                     ]
-//                 );
-//         }
-
+//         /*
+//          * Interest remains exact and may not be over-allocated.
+//          * Principal may differ from principal_due by the EMI rounding
+//          * adjustment, so the old principal_due/expected-outstanding
+//          * invariants are intentionally not enforced.
+//          */
 //         if (
 //             bccomp(
 //                 $values[
@@ -5204,13 +5236,13 @@ final class RepaymentTargetedInstallmentPostingService
 //             throw RepaymentPaymentException::
 //                 invalidInstallmentState(
 //                     installmentUuid:
-//                         (string)
-//                         $installment->uuid,
+//                     (string) 
+//                     $installment->uuid,
 
 //                     installmentNumber:
-//                         (int)
-//                         $installment
-//                             ->installment_number,
+//                     (int) 
+//                     $installment
+//                         ->installment_number,
 
 //                     details: [
 //                         'interest_due' =>
@@ -5221,61 +5253,6 @@ final class RepaymentTargetedInstallmentPostingService
 //                         'interest_paid' =>
 //                             $values[
 //                                 'interest_paid'
-//                             ],
-//                     ]
-//                 );
-//         }
-
-//         $expectedOutstanding =
-//             bcadd(
-//                 bcsub(
-//                     $values[
-//                         'principal_due'
-//                     ],
-//                     $values[
-//                         'principal_paid'
-//                     ],
-//                     self::MONEY_SCALE
-//                 ),
-//                 bcsub(
-//                     $values[
-//                         'interest_due'
-//                     ],
-//                     $values[
-//                         'interest_paid'
-//                     ],
-//                     self::MONEY_SCALE
-//                 ),
-//                 self::MONEY_SCALE
-//             );
-
-//         if (
-//             bccomp(
-//                 $expectedOutstanding,
-//                 $values[
-//                     'outstanding_amount'
-//                 ],
-//                 self::MONEY_SCALE
-//             ) !== 0
-//         ) {
-//             throw RepaymentPaymentException::
-//                 invalidInstallmentState(
-//                     installmentUuid:
-//                         (string)
-//                         $installment->uuid,
-
-//                     installmentNumber:
-//                         (int)
-//                         $installment
-//                             ->installment_number,
-
-//                     details: [
-//                         'expected_outstanding' =>
-//                             $expectedOutstanding,
-
-//                         'stored_outstanding' =>
-//                             $values[
-//                                 'outstanding_amount'
 //                             ],
 //                     ]
 //                 );
@@ -5291,10 +5268,10 @@ final class RepaymentTargetedInstallmentPostingService
 //         ?string $transactionReference
 //     ): void {
 //         if (
-//             ! $paymentMode
+//             !$paymentMode
 //                 ->requiresReference()
 //             || $transactionReference
-//                 === null
+//             === null
 //         ) {
 //             return;
 //         }
@@ -5318,14 +5295,14 @@ final class RepaymentTargetedInstallmentPostingService
 //                 ->where(
 //                     'transaction_type',
 //                     RepaymentTransactionType::
-//                         PAYMENT
+//                     PAYMENT
 //                         ->value
 //                 )
 //                 ->where(
 //                     'status',
 //                     '!=',
 //                     RepaymentTransactionStatus::
-//                         FAILED
+//                     FAILED
 //                         ->value
 //                 )
 //                 ->lockForUpdate()
@@ -5335,16 +5312,16 @@ final class RepaymentTargetedInstallmentPostingService
 //             throw RepaymentPaymentException::
 //                 transactionReferenceAlreadyUsed(
 //                     paymentMode:
-//                         $paymentMode
-//                             ->value,
+//                     $paymentMode
+//                         ->value,
 
 //                     transactionReference:
-//                         $transactionReference,
+//                     $transactionReference,
 
 //                     existingTransactionUuid:
-//                         (string)
-//                         $existing
-//                             ->uuid
+//                     (string) 
+//                     $existing
+//                         ->uuid
 //                 );
 //         }
 //     }
@@ -5363,11 +5340,11 @@ final class RepaymentTargetedInstallmentPostingService
 //         array $targets
 //     ): bool {
 //         if (
-//             (int)
+//             (int) 
 //             $transaction
 //                 ->repayment_account_id
 //             !==
-//             (int)
+//             (int) 
 //             $account->id
 //         ) {
 //             return false;
@@ -5378,7 +5355,7 @@ final class RepaymentTargetedInstallmentPostingService
 //                 ->transaction_type
 //             !==
 //             RepaymentTransactionType::
-//                 PAYMENT
+//             PAYMENT
 //         ) {
 //             return false;
 //         }
@@ -5395,7 +5372,7 @@ final class RepaymentTargetedInstallmentPostingService
 //                 )
 //             );
 
-//         if (! $paymentMode) {
+//         if (!$paymentMode) {
 //             return false;
 //         }
 
@@ -5413,60 +5390,60 @@ final class RepaymentTargetedInstallmentPostingService
 //         $fingerprint =
 //             $this->buildRequestFingerprint(
 //                 accountUuid:
-//                     (string)
-//                     $account->uuid,
+//                 (string) 
+//                 $account->uuid,
 
 //                 amount:
-//                     $this->normalizeMoney(
-//                         $payload[
-//                             'amount'
-//                         ] ?? '0'
-//                     ),
+//                 $this->normalizeMoney(
+//                     $payload[
+//                         'amount'
+//                     ] ?? '0'
+//                 ),
 
 //                 paymentMode:
-//                     $paymentMode,
+//                 $paymentMode,
 
 //                 transactionReference:
-//                     $this
-//                         ->normalizeNullableString(
-//                             $payload[
-//                                 'transaction_reference'
-//                             ] ?? null
-//                         ),
+//                 $this
+//                     ->normalizeNullableString(
+//                         $payload[
+//                             'transaction_reference'
+//                         ] ?? null
+//                     ),
 
 //                 receivedDate:
-//                     $this
-//                         ->normalizeRequiredString(
-//                             $payload[
-//                                 'received_date'
-//                             ] ?? ''
-//                         ),
+//                 $this
+//                     ->normalizeRequiredString(
+//                         $payload[
+//                             'received_date'
+//                         ] ?? ''
+//                     ),
 
 //                 valueDate:
-//                     $this
-//                         ->normalizeRequiredString(
-//                             $payload[
-//                                 'value_date'
-//                             ] ?? ''
-//                         ),
+//                 $this
+//                     ->normalizeRequiredString(
+//                         $payload[
+//                             'value_date'
+//                         ] ?? ''
+//                     ),
 
 //                 remarks:
-//                     $this
-//                         ->normalizeNullableString(
-//                             $payload[
-//                                 'remarks'
-//                             ] ?? null
-//                         ),
+//                 $this
+//                     ->normalizeNullableString(
+//                         $payload[
+//                             'remarks'
+//                         ] ?? null
+//                     ),
 
 //                 targets:
-//                     $normalizedTargets
+//                 $normalizedTargets
 //             );
 
 //         $existingFingerprint =
 //             $transaction
 //                 ->metadata[
-//                     'request_fingerprint'
-//                 ]
+//                 'request_fingerprint'
+//             ]
 //             ?? null;
 
 //         /*
@@ -5477,7 +5454,7 @@ final class RepaymentTargetedInstallmentPostingService
 //          * the original transaction targeted the same EMIs.
 //          */
 //         if (
-//             ! is_string(
+//             !is_string(
 //                 $existingFingerprint
 //             )
 //         ) {
@@ -5537,26 +5514,26 @@ final class RepaymentTargetedInstallmentPostingService
 
 //                     'targets' =>
 //                         array_map(
-//                             static fn (
-//                                 array $target
-//                             ): array => [
-//                                 'repayment_installment_uuid' =>
-//                                     $target[
-//                                         'repayment_installment_uuid'
-//                                     ],
+//                             static fn(
+//                             array $target
+//                         ): array => [
+//                                     'repayment_installment_uuid' =>
+//                                         $target[
+//                                             'repayment_installment_uuid'
+//                                         ],
 
-//                                 'installment_number' =>
-//                                     (int)
-//                                     $target[
-//                                         'installment_number'
-//                                     ],
+//                                     'installment_number' =>
+//                                         (int) 
+//                                         $target[
+//                                             'installment_number'
+//                                         ],
 
-//                                 'collection_amount' =>
-//                                     (string)
-//                                     $target[
-//                                         'collection_amount'
-//                                     ],
-//                             ],
+//                                     'collection_amount' =>
+//                                         (string) 
+//                                         $target[
+//                                             'collection_amount'
+//                                         ],
+//                                 ],
 //                             $targets
 //                         ),
 //                 ],
@@ -5580,7 +5557,7 @@ final class RepaymentTargetedInstallmentPostingService
 //             'reversal',
 
 //             'allocations' =>
-//                 fn ($query) =>
+//                 fn($query) =>
 //                     $query
 //                         ->allocationOrder(),
 //         ]);
@@ -5594,6 +5571,25 @@ final class RepaymentTargetedInstallmentPostingService
 //     }
 
 //     /**
+//      * Round collectible/outstanding to a whole rupee while preserving
+//      * two-decimal database formatting.
+//      */
+//     private function roundWholeMoney(
+//         mixed $value
+//     ): string {
+//         return number_format(
+//             round(
+//                 (float) ($value ?? 0),
+//                 0,
+//                 PHP_ROUND_HALF_UP
+//             ),
+//             self::MONEY_SCALE,
+//             '.',
+//             ''
+//         );
+//     }
+
+//     /**
 //      * Normalize decimal value to two places.
 //      */
 //     private function normalizeMoney(
@@ -5601,7 +5597,7 @@ final class RepaymentTargetedInstallmentPostingService
 //     ): string {
 //         return bcadd(
 //             trim(
-//                 (string)
+//                 (string) 
 //                 ($value ?? '0')
 //             ),
 //             '0.00',
@@ -5629,7 +5625,7 @@ final class RepaymentTargetedInstallmentPostingService
 //         mixed $value
 //     ): string {
 //         return trim(
-//             (string)
+//             (string) 
 //             $value
 //         );
 //     }
@@ -5643,7 +5639,7 @@ final class RepaymentTargetedInstallmentPostingService
 
 //         $normalized =
 //             trim(
-//                 (string)
+//                 (string) 
 //                 $value
 //             );
 
@@ -5661,19 +5657,19 @@ final class RepaymentTargetedInstallmentPostingService
 //         $sqlState =
 //             $exception
 //                 ->errorInfo[
-//                     0
-//                 ]
+//                 0
+//             ]
 //             ?? null;
 
 //         $driverCode =
 //             $exception
 //                 ->errorInfo[
-//                     1
-//                 ]
+//                 1
+//             ]
 //             ?? null;
 
 //         return $sqlState === '23000'
-//             && (int)
-//                 $driverCode === 1062;
+//             && (int) 
+//             $driverCode === 1062;
 //     }
 // }

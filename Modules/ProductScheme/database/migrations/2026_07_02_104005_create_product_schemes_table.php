@@ -16,6 +16,8 @@ return new class extends Migration
 
             $table->uuid('uuid')->unique();
 
+          
+
             $table->foreignId('product_id')
                 ->nullable()
                 ->constrained('products')
@@ -33,6 +35,8 @@ return new class extends Migration
 
             $table->decimal('lpf_rate', 8, 2)->default(0);
 
+
+            // new fields adding
             $table->float('platform_charges')->default(0);
 
             $table->float('sms_charges')->default(0);
@@ -44,6 +48,8 @@ return new class extends Migration
             $table->decimal('minimum_pf', 8, 2)->default(0);
 
             $table->decimal('maximum_pf', 8, 2)->default(0);
+            
+            // added till here
 
             $table->unsignedInteger('moratorium_days')->default(0);
 
@@ -55,13 +61,7 @@ return new class extends Migration
 
             $table->decimal('emi_round_up_value', 8, 2)->default(0);
 
-            $table->string('tenure_type', 20)->nullable();
-
             $table->unsignedInteger('tenure_value')->nullable();
-
-            $table->unsignedInteger('minimum_tenure')->nullable();
-
-            $table->unsignedInteger('maximum_tenure')->nullable();
 
             $table->string('tenure_unit', 30)->default('months');
 
@@ -86,35 +86,9 @@ return new class extends Migration
             $table->timestamps();
             $table->softDeletes();
 
-            $table->index(
-                ['product_id', 'is_active'],
-                'ps_product_active_idx'
-            );
-
-            $table->index(
-                ['sub_loan_type', 'repayment_frequency'],
-                'ps_subloan_repayment_idx'
-            );
-
-            $table->index(
-                ['valid_from', 'valid_till'],
-                'ps_validity_idx'
-            );
-
-            $table->index(
-                ['tenure_type', 'tenure_unit', 'tenure_value'],
-                'ps_fixed_tenure_idx'
-            );
-
-            $table->index(
-                [
-                    'tenure_type',
-                    'tenure_unit',
-                    'minimum_tenure',
-                    'maximum_tenure',
-                ],
-                'ps_range_tenure_idx'
-            );
+            $table->index(['product_id', 'is_active'], 'ps_product_active_idx');
+            $table->index(['sub_loan_type', 'repayment_frequency'], 'ps_subloan_repayment_idx');
+            $table->index(['valid_from', 'valid_till'], 'ps_validity_idx');
         });
     }
 

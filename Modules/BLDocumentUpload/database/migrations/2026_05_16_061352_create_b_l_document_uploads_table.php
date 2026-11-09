@@ -14,12 +14,9 @@ return new class extends Migration
         Schema::create('b_l_document_uploads', function (Blueprint $table) {
             $table->id();
 
-            $table->uuid('uuid')
-                ->unique()
-                ->nullable();
+            $table->uuid('uuid')->unique()->nullable();
 
-            $table->unsignedBigInteger('created_by')
-                ->nullable();
+            $table->unsignedBigInteger('created_by')->nullable();
 
             $table->longText('lead_id');
 
@@ -34,23 +31,6 @@ return new class extends Migration
             $table->longText('document_name');
 
             $table->longText('document');
-
-            $table->string('verification_status', 20)
-                ->default('PENDING');
-
-            $table->unsignedBigInteger('verified_by')
-                ->nullable();
-
-            $table->timestamp('verified_at')
-                ->nullable();
-
-            $table->text('rejection_remarks')
-                ->nullable();
-
-            $table->foreign('verified_by')
-                ->references('id')
-                ->on('users')
-                ->onDelete('set null');
 
             $table->timestamps();
 

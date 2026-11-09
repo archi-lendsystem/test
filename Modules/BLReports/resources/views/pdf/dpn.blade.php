@@ -6,11 +6,12 @@
     $disbursement = $disbursement ?? null;
     $company = config('blreports.company', []);
 
-    $companyName = 'LENDSYSTEM PVT LTD';
+    $companyName = 'SABRIMALA FINTECH PVT LTD';
 
 $logoPaths = [
-    public_path('assets/images/logo/lendsystem_logo.png'),
-    base_path('public/assets/images/logo/lendsystem_logo.png'),
+    base_path('../public_html/images/sabrimala-logo.png'),
+    public_path('images/sabrimala-logo.png'),
+    base_path('public/images/sabrimala-logo.png'),
 ];
 
 $logoPath = collect($logoPaths)->first(
@@ -124,16 +125,7 @@ $logoBase64 = $logoPath
 
     <style>
         @page {
-            size: A4 portrait;
-            margin: 24px 28px 200px 28px;
-        }
-
-        tr {
-            page-break-inside: avoid;
-        }
-
-        .section-title {
-            page-break-after: avoid;
+            margin: 35px 40px;
         }
 
         * {
@@ -312,7 +304,7 @@ $logoBase64 = $logoPath
             @if ($logoBase64)
                 <img
                     src="data:{{ $logoMime }};base64,{{ $logoBase64 }}"
-                    alt="LendSystem Logo"
+                    alt="Sabrimala Fintech Logo"
                 >
             @endif
         </td>
@@ -347,7 +339,7 @@ $logoBase64 = $logoPath
                 06742303999
                 &nbsp;&nbsp;
                 <strong>Email:</strong>
-                info@lendsystem.com
+                info@sabrimalafintech.com
             </div>
         </td>
 
@@ -500,11 +492,11 @@ $logoBase64 = $logoPath
         or its order, the principal sum of
         <strong>{{ $formatMoney($sanctionAmount) }}</strong>,
         together with interest thereon at the rate of
-        <strong>
-            {{ $display($interestRate) }}
+        <strong> ___________
+            <!-- {{ $display($interestRate) }}
             @if ($interestRate !== null && $interestRate !== '')
                 % per annum
-            @endif
+            @endif -->
         </strong>
         from the date of disbursement until full and final repayment.
     </p>

@@ -1,15 +1,8 @@
 {
     "name": "ESign",
     "alias": "esign",
-    "description": "Combined BL sanction + reports package with sequential borrower/lender Aadhaar eSign and webhook handling.",
-    "keywords": [
-        "esign",
-        "loan",
-        "bl",
-        "sanction",
-        "reports",
-        "webhook"
-    ],
+    "description": "",
+    "keywords": [],
     "priority": 0,
     "providers": [
         "Modules\\ESign\\Providers\\ESignServiceProvider"

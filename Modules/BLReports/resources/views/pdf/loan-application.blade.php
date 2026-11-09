@@ -51,7 +51,7 @@
         : null;
 
     /* Fixed company details for the Loan Application PDF. */
-    $companyName = 'Lendsystem Pvt Ltd.';
+    $companyName = 'Sabrimala Fintech Pvt Ltd.';
     $companyCin = 'U65929DL2017PTC313170';
     $companyGst = '21AAYCS1713M1Z1';
     $corporateOffice = 'Universal Trade Tower, Third Floor, Unit Number';
@@ -59,10 +59,11 @@
     $companyLandline = '06742303999';
     $companyEmail = 'null';
 
-    /* LendSystem logo from public/assets/images/logo. */
+    /* Use the working production path first and keep local fallbacks. */
     $logoCandidates = [
-        public_path('assets/images/logo/lendsystem_logo.png'),
-        base_path('public/assets/images/logo/lendsystem_logo.png'),
+        base_path('../public_html/images/sabrimala-logo.png'),
+        public_path('images/sabrimala-logo.png'),
+        base_path('public/images/sabrimala-logo.png'),
     ];
 
     $logoPath = collect($logoCandidates)->first(
@@ -114,6 +115,26 @@
         data_get($coApplicantDetails, 'current_state'),
         data_get($coApplicantDetails, 'current_pincode'),
     ])->filter()->implode(', ');
+
+
+    $rawRepaymentFrequency = data_get($sanction, 'repayment_mode');
+
+$normalizedFrequency = strtolower(trim((string) $rawRepaymentFrequency));
+
+$tenureUnit = match ($normalizedFrequency) {
+    'daily', 'day', 'days' => 'day',
+    'weekly', 'week', 'weeks' => 'week',
+    'yearly', 'annual', 'year', 'years' => 'year',
+    default => 'month',
+};
+
+$tenureValue = data_get($sanction, 'tenure_months');
+
+$tenureUnitLabel = $tenureUnit;
+
+if (is_numeric($tenureValue) && (float) $tenureValue !== 1.0) {
+    $tenureUnitLabel .= 's';
+}
 @endphp
 
 <!DOCTYPE html>
@@ -127,16 +148,7 @@
 
     <style>
         @page {
-            size: A4 portrait;
-            margin: 24px 28px 200px 28px;
-        }
-
-        tr {
-            page-break-inside: avoid;
-        }
-
-        .section-title {
-            page-break-after: avoid;
+            margin: 18px 22px;
         }
 
         * {
@@ -311,7 +323,7 @@
             @if ($logoBase64)
                 <img
                     src="data:{{ $logoMime }};base64,{{ $logoBase64 }}"
-                    alt="LendSystem Logo"
+                    alt="Sabrimala Logo"
                 >
             @endif
         </td>
@@ -786,10 +798,20 @@
             <td>{{ $display(data_get($sanction, 'sanctioned_amount')) }}</td>
         </tr>
 
-        <tr>
+        <!-- <tr>
             <td class="label">Loan Tenure</td>
             <td>{{ $display(data_get($sanction, 'tenure_months')) }}</td>
-        </tr>
+        </tr> -->
+
+     <tr>
+    <td class="label">Loan Tenure</td>
+    <td>
+        {{ $display($tenureValue) }}
+        @if ($tenureValue !== null && $tenureValue !== '')
+            {{ $tenureUnitLabel }}
+        @endif
+    </td>
+</tr>
 
         <tr>
             <td class="label">Repayment Mode</td>

@@ -14,41 +14,146 @@ use Modules\Customers\Transformers\CustomerResource;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Modules\UserManagement\Support\ReportBranchAccess;
 use Throwable;
 
 class CustomersController extends Controller
 {
-    public function index(Request $request): JsonResponse
-    {
-        try {
-            $customers = Customer::query()
-                ->withCount('leads')
-                ->when($request->filled('search'), function ($q) use ($request) {
-                    $search = $request->get('search');
-                    $q->where(function ($sub) use ($search) {
-                        $sub->where('customer_application_id', 'like', "%{$search}%")
-                            ->orWhere('full_name', 'like', "%{$search}%")
-                            ->orWhere('mobile_number', 'like', "%{$search}%")
-                            ->orWhere('pan_card_number', 'like', "%{$search}%")
-                            ->orWhere('aadhaar_card_number', 'like', "%{$search}%");
-                    });
-                })
-                ->orderByDesc('id')
-                ->paginate((int) $request->get('per_page', 15));
+    // public function index(Request $request): JsonResponse
+    // {
+    //     try {
+    //         $customers = Customer::query()
+    //             ->withCount('leads')
+    //             ->when($request->filled('search'), function ($q) use ($request) {
+    //                 $search = $request->get('search');
+    //                 $q->where(function ($sub) use ($search) {
+    //                     $sub->where('customer_application_id', 'like', "%{$search}%")
+    //                         ->orWhere('full_name', 'like', "%{$search}%")
+    //                         ->orWhere('mobile_number', 'like', "%{$search}%")
+    //                         ->orWhere('pan_card_number', 'like', "%{$search}%")
+    //                         ->orWhere('aadhaar_card_number', 'like', "%{$search}%");
+    //                 });
+    //             })
+    //             ->orderByDesc('id')
+    //             ->paginate((int) $request->get('per_page', 15));
 
-            return (new CustomerCollection($customers))
-                ->response()
-                ->setStatusCode(200);
-        } catch (Throwable $e) {
-            return response()->json([
-                'success'    => false,
-                'message'    => 'Something went wrong while fetching customers.',
-                'request_id' => (string) Str::uuid(),
-                'timestamp'  => now()->format('Y-m-d H:i:s'),
-                'errors'     => app()->environment('local') ? $e->getMessage() : null,
-            ], 500);
-        }
+    //         return (new CustomerCollection($customers))
+    //             ->response()
+    //             ->setStatusCode(200);
+    //     } catch (Throwable $e) {
+    //         return response()->json([
+    //             'success'    => false,
+    //             'message'    => 'Something went wrong while fetching customers.',
+    //             'request_id' => (string) Str::uuid(),
+    //             'timestamp'  => now()->format('Y-m-d H:i:s'),
+    //             'errors'     => app()->environment('local') ? $e->getMessage() : null,
+    //         ], 500);
+    //     }
+    // }
+
+
+    public function index(Request $request): JsonResponse
+{
+    $validated = $request->validate([
+        'branch_id' => 'nullable|integer|exists:organization_branches,id',
+        'search' => 'nullable|string|max:255',
+        'per_page' => 'nullable|integer|min:1|max:200',
+    ]);
+
+    $branchId = !empty($validated['branch_id'])
+        ? (int) $validated['branch_id']
+        : null;
+
+    /*
+     * IMPORTANT:
+     * Isko try/catch ke bahar rakha hai taaki agar user kisi
+     * unassigned branch_id ko request kare to proper 403 aaye,
+     * 500 me convert na ho.
+     */
+    $branchIds = ReportBranchAccess::resolveBranchIds(
+        $request->user(),
+        $branchId
+    );
+
+    try {
+        $customers = Customer::query()
+
+            /*
+             * Customer tabhi visible hoga jab uski kam se kam
+             * ek lead user ki assigned branch me ho.
+             */
+            ->whereHas('leads', function ($leadQuery) use ($branchIds) {
+                $leadQuery->whereIn('branch_id', $branchIds);
+            })
+
+            /*
+             * leads_count me bhi sirf allowed branches ki
+             * leads count hongi.
+             */
+            ->withCount([
+                'leads' => function ($leadQuery) use ($branchIds) {
+                    $leadQuery->whereIn('branch_id', $branchIds);
+                },
+            ])
+
+            ->when(
+                !empty($validated['search']),
+                function ($query) use ($validated) {
+                    $search = trim($validated['search']);
+
+                    $query->where(function ($subQuery) use ($search) {
+                        $subQuery
+                            ->where(
+                                'customer_application_id',
+                                'like',
+                                "%{$search}%"
+                            )
+                            ->orWhere(
+                                'full_name',
+                                'like',
+                                "%{$search}%"
+                            )
+                            ->orWhere(
+                                'mobile_number',
+                                'like',
+                                "%{$search}%"
+                            )
+                            ->orWhere(
+                                'pan_card_number',
+                                'like',
+                                "%{$search}%"
+                            )
+                            ->orWhere(
+                                'aadhaar_card_number',
+                                'like',
+                                "%{$search}%"
+                            );
+                    });
+                }
+            )
+
+            ->orderByDesc('id')
+
+            ->paginate(
+                (int) ($validated['per_page'] ?? 15)
+            );
+
+        return (new CustomerCollection($customers))
+            ->response()
+            ->setStatusCode(200);
+
+    } catch (Throwable $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Something went wrong while fetching customers.',
+            'request_id' => (string) Str::uuid(),
+            'timestamp' => now()->format('Y-m-d H:i:s'),
+            'errors' => app()->environment('local')
+                ? $e->getMessage()
+                : null,
+        ], 500);
     }
+}
 
     public function show(string $customer_application_id): JsonResponse
     {

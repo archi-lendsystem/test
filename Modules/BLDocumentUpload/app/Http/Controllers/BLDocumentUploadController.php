@@ -9,17 +9,29 @@ namespace Modules\BLDocumentUpload\Http\Controllers;
 use App\Http\Controllers\Controller;
 
 use Illuminate\Http\JsonResponse;
+
 use Illuminate\Http\Request;
+
 use Illuminate\Support\Facades\Storage;
+
 use Illuminate\Validation\ValidationException;
+
 use Modules\BLDocumentCheckList\Models\BLDocument;
+
 use Modules\BLDocumentCheckList\Models\BLDocumentGroup;
+
 use Modules\BLDocumentUpload\Models\BLDocumentUpload;
+
 use Illuminate\Support\Facades\DB;
+
 use Illuminate\Support\Facades\Schema;
+
 use Modules\BLJourney\Models\BLJourney;
+
 use Modules\BLLeadCreation\Models\BLLeadCreation;
+
 use Illuminate\Support\Facades\URL;
+
 use Throwable;
 
 
@@ -105,6 +117,17 @@ class BLDocumentUploadController extends Controller
 
         $rules = $this->validationRules();
 
+
+
+        // if ($request->hasFile('document')) {
+
+        //     $rules['document'] = ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:5120'];
+
+        // } else {
+
+        //     $rules['document'] = ['required', 'string'];
+
+        // }
 
         if ($request->hasFile('document')) {
 
@@ -210,6 +233,17 @@ class BLDocumentUploadController extends Controller
 
         $rules = $this->validationRules(true);
 
+
+
+        // if ($request->hasFile('document')) {
+
+        //     $rules['document'] = ['sometimes', 'required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:5120'];
+
+        // } else {
+
+        //     $rules['document'] = ['sometimes', 'required', 'string'];
+
+        // }
 
         if ($request->hasFile('document')) {
 
@@ -350,6 +384,98 @@ class BLDocumentUploadController extends Controller
 
         ], 200);
     }
+
+
+
+
+
+    // public function viewDocument(string $upload_uuid)
+
+    // {
+
+    //     $documentUpload = $this->findUpload($upload_uuid);
+
+
+
+    //     if (
+
+    //         empty($documentUpload->document) ||
+
+    //         ! Storage::disk(self::STORAGE_DISK)->exists($documentUpload->document)
+
+    //     ) {
+
+    //         abort(404, 'Document file not found.');
+
+    //     }
+
+
+
+    //     $disk = Storage::disk(self::STORAGE_DISK);
+
+
+
+    //     $filePath = $disk->path($documentUpload->document);
+
+    //     $fileName = basename($documentUpload->document);
+
+
+
+    //     $extension = strtolower(
+
+    //         pathinfo($documentUpload->document, PATHINFO_EXTENSION)
+
+    //     );
+
+
+
+    //     $mimeTypes = [
+
+    //         'pdf'  => 'application/pdf',
+
+    //         'jpg'  => 'image/jpeg',
+
+    //         'jpeg' => 'image/jpeg',
+
+    //         'png'  => 'image/png',
+
+    //         'webp' => 'image/webp',
+
+    //     ];
+
+
+
+    //     $mimeType = $mimeTypes[$extension] ?? null;
+
+
+
+    //     if (! $mimeType && is_file($filePath)) {
+
+    //         $mimeType = mime_content_type($filePath);
+
+    //     }
+
+
+
+    //     $mimeType = $mimeType ?: 'application/octet-stream';
+
+
+
+    //     return response()->file($filePath, [
+
+    //         'Content-Type' => $mimeType,
+
+    //         'Content-Disposition' => 'inline; filename="' . $fileName . '"',
+
+    //         'Cache-Control' => 'private, no-store, no-cache, must-revalidate, max-age=0',
+
+    //         'Pragma' => 'no-cache',
+
+    //         'X-Content-Type-Options' => 'nosniff',
+
+    //     ]);
+
+    // }
 
 
 

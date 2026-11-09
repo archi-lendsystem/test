@@ -17,13 +17,6 @@ return new class extends Migration
           $table->foreign('lead_uuid')->references('uuid')->on('b_l_lead_creations')->onDelete('cascade');
               $table->unsignedBigInteger('created_by')->nullable();
             $table->string('lead_id');
-
-              $table->unsignedBigInteger('product_id')->nullable();
-
-            $table->foreign('product_id')
-                ->references('id')
-                ->on('products')
-                ->nullOnDelete();
             // $table->integer('reference_id')->unique();
             $table->foreignId('reference_id')
             ->constrained('b_l_references')

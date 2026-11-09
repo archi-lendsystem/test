@@ -4,14 +4,15 @@ namespace Modules\ESign\Events;
 
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
-use Modules\ESign\Models\ESignDocument;
+use Modules\ESign\Models\SigningRequest;
 
-final class ESignCompleted
+class ESignCompleted
 {
     use Dispatchable;
     use SerializesModels;
 
-    public function __construct(public ESignDocument $document)
-    {
+    public function __construct(
+        public readonly SigningRequest $signingRequest
+    ) {
     }
 }

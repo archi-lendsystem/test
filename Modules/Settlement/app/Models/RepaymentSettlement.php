@@ -26,6 +26,7 @@ class RepaymentSettlement extends Model
         'approved_by',
         'approved_at',
         'decision_remarks',
+        'settlement_date',
         'paid_at',
         'paid_reference',
     ];
@@ -45,6 +46,7 @@ class RepaymentSettlement extends Model
             'proposed_by' => 'integer',
             'approved_by' => 'integer',
             'approved_at' => 'datetime',
+            'settlement_date' => 'date',
             'paid_at' => 'datetime',
         ];
     }

@@ -17,7 +17,7 @@ class ProductSeeder extends Seeder
             [
                 'name'   => 'Loan Against Property',
                 'code'   => 'LAP',
-                'status' => true,
+                'status' => false,
             ],
 
             [
@@ -29,13 +29,13 @@ class ProductSeeder extends Seeder
             [
                 'name'   => 'Personal Loan',
                 'code'   => 'PL',
-                'status' => true,
+                'status' => false,
             ],
 
             [
                 'name'   => 'Home Loan',
                 'code'   => 'HL',
-                'status' => true,
+                'status' => false,
             ],
         ];
 
