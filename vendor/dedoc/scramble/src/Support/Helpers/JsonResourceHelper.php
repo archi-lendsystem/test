@@ -1,0 +1,94 @@
+<?php
+
+namespace Dedoc\Scramble\Support\Helpers;
+
+use Dedoc\Scramble\Diagnostics\DiagnosticsCollector;
+use Dedoc\Scramble\Diagnostics\JsonResource\Jr001UnknownModelDiagnostic;
+use Dedoc\Scramble\Infer\Definition\ClassDefinition;
+use Dedoc\Scramble\Infer\Reflector\ClassReflector;
+use Dedoc\Scramble\Infer\Services\FileNameResolver;
+use Dedoc\Scramble\Support\Type\ObjectType;
+use Dedoc\Scramble\Support\Type\Type;
+use Dedoc\Scramble\Support\Type\UnknownType;
+use Illuminate\Http\Resources\Json\ResourceCollection;
+use Illuminate\Support\Str;
+
+class JsonResourceHelper
+{
+    public static $jsonResourcesModelTypesCache = [];
+
+    /**
+     * @internal
+     */
+    public static function modelType(ClassDefinition $jsonClass): ?Type
+    {
+        if ($cachedModelType = static::$jsonResourcesModelTypesCache[$jsonClass->name] ?? null) {
+            return $cachedModelType;
+        }
+
+        $modelClass = static::getModelName(
+            $jsonClass->name,
+            new \ReflectionClass($jsonClass->name),
+            new FileNameResolver(ClassReflector::make($jsonClass->name)->getNameContext()),
+        );
+
+        $modelType = new UnknownType("Cannot resolve [$modelClass] model type.");
+        if ($modelClass) {
+            $modelType = new ObjectType($modelClass);
+        }
+
+        static::$jsonResourcesModelTypesCache[$jsonClass->name] = $modelType;
+
+        return $modelType;
+    }
+
+    /**
+     * @internal
+     */
+    public static function reportUnknownModelDiagnostic(DiagnosticsCollector $diagnostics, ClassDefinition $jsonClass): void
+    {
+        if (is_a($jsonClass->name, ResourceCollection::class, true)) {
+            return;
+        }
+
+        $modelType = static::modelType($jsonClass);
+
+        if (! $modelType instanceof UnknownType) {
+            return;
+        }
+
+        $diagnostics->reportOnce(
+            Jr001UnknownModelDiagnostic::forResource($jsonClass->name),
+        );
+    }
+
+    private static function getModelName(string $jsonResourceClassName, \ReflectionClass $reflectionClass, FileNameResolver $getFqName)
+    {
+        $phpDoc = $reflectionClass->getDocComment() ?: '';
+
+        $mixinOrPropertyLine = Str::of($phpDoc)
+            ->replace(['/**', '*/'], '')
+            ->explode("\n")
+            ->first(fn ($str) => Str::is(['*@property*$resource*', '*@mixin*'], $str));
+
+        if ($mixinOrPropertyLine) {
+            $modelName = Str::replace(['@property-read', '@property', '$resource', '@mixin', ' ', '*', "\r"], '', $mixinOrPropertyLine);
+
+            $modelClass = $getFqName($modelName);
+
+            if (class_exists($modelClass)) {
+                return $modelClass;
+            }
+        }
+
+        if (! Str::contains($jsonResourceClassName, '\\Http\\Resources\\')) {
+            return null;
+        }
+
+        $modelClass = (string) Str::of($jsonResourceClassName)
+            ->replaceFirst('\\Http\\Resources\\', '\\Models\\')
+            ->replaceEnd('Resource', '');
+
+        return class_exists($modelClass) ? $modelClass : null;
+    }
+}
