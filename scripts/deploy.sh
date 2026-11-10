@@ -750,7 +750,49 @@ log 'Validating new environment and encryption key'
 check_config "$RELEASE"
 
 if [[ "$ACTION" == deploy ]]; then
+
+  log 'Diagnosing APP_KEY mismatch safely'
+
+  for app in "$OLD_APP" "$RELEASE"; do
+    (
+      cd "$app"
+
+      "$PHP_BIN" -r '
+        require "vendor/autoload.php";
+
+        $app = require "bootstrap/app.php";
+
+        $app->make(
+            Illuminate\Contracts\Console\Kernel::class
+        )->bootstrap();
+
+        $effective = (string) config("app.key");
+
+        $env = Dotenv\Dotenv::parse(
+            file_get_contents(".env")
+        );
+
+        $fileKey = (string) ($env["APP_KEY"] ?? "");
+
+        echo "APP_KEY effective SHA256: ",
+            hash("sha256", $effective), PHP_EOL;
+
+        echo "APP_KEY .env SHA256: ",
+            hash("sha256", $fileKey), PHP_EOL;
+
+        echo "Configuration cached: ",
+            $app->configurationIsCached() ? "YES" : "NO",
+            PHP_EOL;
+
+        echo "Effective key matches .env: ",
+            hash_equals($effective, $fileKey) ? "YES" : "NO",
+            PHP_EOL;
+      '
+    )
+  done
+
   check_key_unchanged "$OLD_APP" "$RELEASE"
+
 else
   log 'Bootstrap: existing database encryption-key compatibility cannot be proven automatically'
 fi
