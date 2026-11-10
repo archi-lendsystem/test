@@ -289,6 +289,39 @@ jobs:
             "bash -se -- '${{ steps.mode.outputs.preflight_action }}' '$REMOTE_DEPLOY_DIR' '${REMOTE_WEB_ROOT:-public_html}' '$RELEASE_ID' '$BACKEND_URL' '$EXPECTED_DB_HOST' '$EXPECTED_DB_DATABASE'" \
             < scripts/deploy.sh
 
+
+      - name: Verify staging APP_KEY
+        run: |
+          set -euo pipefail
+
+          test -r "$LOCAL_ENV_PATH" || {
+            echo "::error::Environment file not readable"
+            exit 1
+          }
+
+          ENV_FILE="$LOCAL_ENV_PATH" php <<'PHP'
+          <?php
+          $env = parse_ini_file(
+              getenv('ENV_FILE'),
+              false,
+              INI_SCANNER_RAW
+          );
+
+          $key = trim(
+              (string) ($env['APP_KEY'] ?? ''),
+              "\"'"
+          );
+
+          $expected = '61a14ec1802024cba80b001cc776967ef72f2e260b9f2981a24a128d0447a1a7';
+
+          if (!hash_equals($expected, hash('sha256', $key))) {
+              fwrite(STDERR, "APP_KEY mismatch in runner file\n");
+              exit(1);
+          }
+
+          echo "Staging APP_KEY verified successfully\n";
+          PHP
+
       # ======================================================
       # 5. Package source code and generate SHA-256
       # ======================================================
@@ -407,4 +440,3 @@ jobs:
             "$RUNNER_TEMP/health-response"
 
           echo "Temporary cleanup completed"
-          
