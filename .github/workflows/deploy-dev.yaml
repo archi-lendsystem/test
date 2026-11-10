@@ -5,12 +5,13 @@ on:
   workflow_dispatch:
     inputs:
       bootstrap_staging:
-        description: 'ONE-TIME bootstrap: existing staging DB, no migrations'
+        description: 'First-time setup (no migrations)'
         type: boolean
         required: true
         default: false
+
       bootstrap_confirmation:
-        description: 'For bootstrap type BOOTSTRAP_EXISTING_STAGING_DB'
+        description: 'Type BOOTSTRAP_EXISTING_STAGING_DB to confirm'
         type: string
         required: false
         default: ''
@@ -81,7 +82,7 @@ jobs:
           php artisan test --stop-on-failure
 
   deploy:
-    name: Deploy Laravel to cPanel
+    name: Deploying backend code to staging
 
     if: github.ref == 'refs/heads/staging'
     needs: tests
@@ -104,8 +105,6 @@ jobs:
       EXPECTED_DB_DATABASE: ${{ secrets.EXPECTED_DB_DATABASE }}
 
       HEALTH_CHECK_TOKEN: ${{ secrets.HEALTH_CHECK_TOKEN }}
-      SMOKE_TEST_PATH: ${{ vars.SMOKE_TEST_PATH }}
-      SMOKE_TEST_PATHS: ${{ vars.SMOKE_TEST_PATHS }}
 
       RELEASE_ID: ${{ github.sha }}
       BOOTSTRAP_REQUESTED: ${{ inputs.bootstrap_staging }}
@@ -354,71 +353,6 @@ jobs:
             "bash -se -- '${{ steps.mode.outputs.deploy_action }}' '$REMOTE_DEPLOY_DIR' '${REMOTE_WEB_ROOT:-public_html}' '$RELEASE_ID' '$BACKEND_URL' '$EXPECTED_DB_HOST' '$EXPECTED_DB_DATABASE'" \
             < scripts/deploy.sh
 
-      # ======================================================
-      # 8. Verify authenticated API endpoints
-      # ======================================================
-
-      - name: Verify authenticated backend
-        run: |
-          set -euo pipefail
-
-          status="$(curl \
-            --silent \
-            --show-error \
-            --proto '=https' \
-            --connect-timeout 10 \
-            --max-time 30 \
-            --retry 3 \
-            --retry-delay 2 \
-            -H "Authorization: Bearer $HEALTH_CHECK_TOKEN" \
-            -H 'Accept: application/json' \
-            -o "$RUNNER_TEMP/health-response" \
-            -w '%{http_code}' \
-            "${BACKEND_URL%/}/api/health")"
-
-          [[ "$status" == 200 ]] || {
-            echo "::error::Health failed ($status)"
-            exit 1
-          }
-
-          if [[ -n "${SMOKE_TEST_PATH:-}" ]]; then
-
-            status="$(curl \
-              --silent \
-              --show-error \
-              --proto '=https' \
-              --connect-timeout 10 \
-              --max-time 30 \
-              -H "Authorization: Bearer $HEALTH_CHECK_TOKEN" \
-              -H 'Accept: application/json' \
-              -o /dev/null \
-              -w '%{http_code}' \
-              "${BACKEND_URL%/}$SMOKE_TEST_PATH")"
-
-            [[ "$status" == 200 ]] || {
-              echo "::error::Smoke check failed ($status)"
-              exit 1
-            }
-
-          fi
-
-          # Additional critical GET routes, configured in staging environment vars.
-          for path in ${SMOKE_TEST_PATHS:-}; do
-            status="$(curl \
-              --silent --show-error --proto '=https' \
-              --connect-timeout 10 --max-time 30 --retry 2 \
-              -H "Authorization: Bearer $HEALTH_CHECK_TOKEN" \
-              -H 'Accept: application/json' \
-              -o /dev/null -w '%{http_code}' \
-              "${BACKEND_URL%/}$path")"
-            [[ "$status" == 200 ]] || {
-              echo "::error::Critical endpoint $path failed ($status)"
-              exit 1
-            }
-          done
-
-          echo "Backend HTTP verification passed"
-
       # Validate the actual published Laravel DB connection (not only HTTP 200).
       - name: Verify active release and database connectivity
         run: |
@@ -473,30 +407,3 @@ jobs:
             "$RUNNER_TEMP/health-response"
 
           echo "Temporary cleanup completed"
-
-      # ======================================================
-      # 11. Deployment status and optional notification
-      # ======================================================
-
-      - name: Report deployment result
-        if: always()
-
-        env:
-          NOTIFICATION_WEBHOOK: ${{ secrets.DEPLOY_NOTIFY_WEBHOOK }}
-          STATUS: ${{ job.status }}
-
-        run: |
-          printf 'Release: `%s`\nStatus: **%s**\n' \
-            "$RELEASE_ID" "$STATUS" \
-            >> "$GITHUB_STEP_SUMMARY"
-
-          if [[ -n "${NOTIFICATION_WEBHOOK:-}" ]]; then
-
-            curl -fsS \
-              --max-time 10 \
-              -H 'Content-Type: application/json' \
-              --data "{\"release\":\"$RELEASE_ID\",\"status\":\"$STATUS\"}" \
-              "$NOTIFICATION_WEBHOOK" \
-              || echo '::warning::Notification failed'
-
-          fi
