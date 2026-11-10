@@ -1,0 +1,96 @@
+<?php
+
+namespace Dedoc\Scramble\Support\Generator\Types;
+
+class ArrayType extends Type
+{
+    /** @var Type */
+    public $items;
+
+    /** @var Type[] */
+    public $prefixItems = [];
+
+    public $minItems = null;
+
+    public $maxItems = null;
+
+    public ?bool $uniqueItems = null;
+
+    public function __construct()
+    {
+        parent::__construct('array');
+
+        $defaultMissingType = new StringType;
+        $defaultMissingType->setAttribute('missing', true);
+
+        $this->items = $defaultMissingType;
+    }
+
+    public function clone(): static
+    {
+        $clone = parent::clone();
+        $clone->items = $clone->items->clone();
+        $clone->prefixItems = array_map(
+            fn (Type $item) => $item->clone(),
+            $clone->prefixItems,
+        );
+
+        return $clone;
+    }
+
+    public function setMin($min)
+    {
+        $this->minItems = $min;
+
+        return $this;
+    }
+
+    public function setMax($max)
+    {
+        $this->maxItems = $max;
+
+        return $this;
+    }
+
+    public function setItems($items)
+    {
+        $this->items = $items;
+
+        return $this;
+    }
+
+    public function setPrefixItems($prefixItems)
+    {
+        $this->prefixItems = $prefixItems;
+
+        return $this;
+    }
+
+    public function setUniqueItems(bool $uniqueItems): static
+    {
+        $this->uniqueItems = $uniqueItems;
+
+        return $this;
+    }
+
+    public function toArray()
+    {
+        $shouldOmitItems = $this->items->getAttribute('missing')
+            && count($this->prefixItems);
+
+        return array_merge(
+            parent::toArray(),
+            $shouldOmitItems ? [] : [
+                'items' => $this->items->toArray(),
+            ],
+            $this->prefixItems ? [
+                'prefixItems' => array_map(fn ($item) => $item->toArray(), $this->prefixItems),
+            ] : [],
+            array_filter([
+                'minItems' => $this->minItems,
+                'maxItems' => $this->maxItems,
+                'uniqueItems' => $this->uniqueItems,
+            ], fn ($v) => $v !== null)
+        );
+    }
+}

@@ -1,0 +1,49 @@
+<?php
+
+namespace Dedoc\Scramble\Console\Commands;
+
+use Dedoc\Scramble\Console\Commands\Concerns\CreatesGenerator;
+use Dedoc\Scramble\Console\Commands\Concerns\RendersDiagnostics;
+use Dedoc\Scramble\Scramble;
+use Dedoc\Scramble\Support\Generator\Types\UnknownType;
+use Illuminate\Console\Command;
+
+class AnalyzeDocumentation extends Command
+{
+    use CreatesGenerator;
+    use RendersDiagnostics;
+
+    protected $signature = 'scramble:analyze
+        {--api=default : The API to analyze}
+        {--routes= : Comma-separated route names to analyze}
+        {--fail-on-unknown : Fail when an UnknownType schema is generated}
+    ';
+
+    protected $description = 'Analyzes the documentation generation process to surface any issues.';
+
+    public function handle(): int
+    {
+        $generator = $this->createGenerator();
+        $generator->setThrowExceptions(false);
+        Scramble::throwOnError(false);
+
+        if ($this->option('fail-on-unknown')) {
+            Scramble::preventSchema(UnknownType::class, throw: false);
+        }
+
+        $api = $this->option('api');
+        if (! is_string($api)) {
+            return self::FAILURE;
+        }
+
+        $result = $generator->generate(Scramble::getGeneratorConfig($api));
+
+        $this->renderDiagnostics(
+            result: $result,
+            successMessage: null,
+            issuesMessage: fn ($summary) => "Found {$summary}."
+        );
+
+        return $this->getDiagnosticsBasedReturnCode($result);
+    }
+}
