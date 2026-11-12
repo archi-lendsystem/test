@@ -1,3 +1,4 @@
+
 <?php
 
 use Illuminate\Database\Migrations\Migration;
@@ -6,24 +7,18 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
-        Schema::table('b_l_disbursments', function (Blueprint $table) {
-              $table->date('first_emi_date')
-                ->nullable();
-        });
+        if (!Schema::hasColumn('b_l_disbursments', 'first_emi_date')) {
+            Schema::table('b_l_disbursments', function (Blueprint $table) {
+                $table->date('first_emi_date')->nullable();
+            });
+        }
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
-        Schema::table('b_l_disbursments', function (Blueprint $table) {
-            $table->dropColumn('first_emi_date');
-        });
+        // Intentionally preserve the column.
+        // Its ownership may predate this migration.
     }
 };
