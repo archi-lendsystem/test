@@ -14,6 +14,7 @@ use Modules\BLLeadCreation\Models\BLLeadCreation;
 use Modules\BLSchemeSelect\Models\BLSchemeSelect;
 use Modules\ProductScheme\Models\ProductScheme;
 use Modules\UserManagement\Models\User;
+use RuntimeException;
 
 class BLAmortization extends Model
 {

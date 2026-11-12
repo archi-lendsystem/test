@@ -1,6 +1,7 @@
 <?php
 
 namespace Modules\BLReports\Exceptions;
+use RuntimeException;
 
 use Throwable;
 

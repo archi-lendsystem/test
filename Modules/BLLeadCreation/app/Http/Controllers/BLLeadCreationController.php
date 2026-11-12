@@ -7,6 +7,7 @@ namespace Modules\BLLeadCreation\Http\Controllers;
 use App\Http\Controllers\Controller;
 
 use App\Traits\ApiResponse;
+use RuntimeException;
 
 use Illuminate\Http\JsonResponse;
 

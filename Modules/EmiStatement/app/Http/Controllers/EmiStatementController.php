@@ -7,6 +7,7 @@ namespace Modules\EmiStatement\Http\Controllers;
 
 
 use App\Http\Controllers\Controller;
+use RuntimeException;
 
 use Barryvdh\DomPDF\Facade\Pdf;
 

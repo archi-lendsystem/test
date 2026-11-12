@@ -3,6 +3,7 @@
 namespace Modules\Repayment\Exceptions;
 
 use Throwable;
+use RuntimeException;
 
 final class RepaymentActivationException extends RuntimeException
 {

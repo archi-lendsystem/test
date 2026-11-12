@@ -8,6 +8,7 @@ use Modules\ESign\Services\ESignService;
 use Modules\ESign\Exceptions\DigioApiException;
 use Illuminate\Support\Facades\Log;
 use Modules\ESign\Services\ESignWebhookService;
+use RuntimeException;
 
 class ESignController extends Controller
 {
