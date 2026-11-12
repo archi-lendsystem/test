@@ -1,3 +1,4 @@
+
 <?php
 
 use Illuminate\Database\Migrations\Migration;
@@ -6,17 +7,29 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
+    /**
+     * Run the migrations.
+     */
     public function up(): void
     {
-        Schema::table('permissions', function (Blueprint $table) {
-            $table->text('description')->nullable()->after('module');
-        });
+        // Add description only if it does not already exist.
+        if (!Schema::hasColumn('permissions', 'description')) {
+            Schema::table('permissions', function (Blueprint $table) {
+                $table->text('description')
+                    ->nullable()
+                    ->after('module');
+            });
+        }
     }
 
+    /**
+     * Reverse the migrations.
+     */
     public function down(): void
     {
-        Schema::table('permissions', function (Blueprint $table) {
-            $table->dropColumn('description');
-        });
+        // Intentionally non-destructive.
+        // The description column may have existed
+        // before this migration.
+        // Preserve existing permission descriptions.
     }
 };
