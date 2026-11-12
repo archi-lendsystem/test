@@ -3,7 +3,6 @@
 namespace Modules\BLLeadCreation\Services;
 
 use Illuminate\Support\Facades\Storage;
-use RuntimeException;
 
 use Modules\BLApplicant\Models\BLApplicant;
 use Modules\BLApplicantDetails\Models\BLApplicantDetails;

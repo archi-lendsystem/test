@@ -7,7 +7,6 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Modules\ESign\Models\SigningRequest;
 use Modules\ESign\Models\WebhookEvent;
-use RuntimeException;
 use Throwable;
 
 class ESignWebhookService

@@ -16,7 +16,6 @@ use Modules\Repayment\Models\RepaymentTransaction;
 use Modules\Repayment\Services\RepaymentTransactionNumberGenerator;
 use Modules\Settlement\Enums\SettlementStatus;
 use Modules\Settlement\Models\RepaymentSettlement;
-use RuntimeException;
 
 class SettlementService
 {

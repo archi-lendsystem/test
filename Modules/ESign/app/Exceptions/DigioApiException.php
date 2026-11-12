@@ -2,7 +2,6 @@
 
 namespace Modules\ESign\Exceptions;
 
-use RuntimeException;
 use Throwable;
 
 class DigioApiException extends RuntimeException

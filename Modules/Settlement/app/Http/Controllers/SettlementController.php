@@ -11,7 +11,6 @@ use Modules\Repayment\Enums\RepaymentAccountStatus;
 use Modules\Repayment\Models\RepaymentAccount;
 use Modules\Settlement\Models\RepaymentSettlement;
 use Modules\Settlement\Services\SettlementService;
-use RuntimeException;
 use Throwable;
 
 class SettlementController extends Controller

@@ -2,7 +2,6 @@
 
 namespace Modules\BLReports\Exceptions;
 
-use RuntimeException;
 use Throwable;
 
 class BLReportException extends RuntimeException

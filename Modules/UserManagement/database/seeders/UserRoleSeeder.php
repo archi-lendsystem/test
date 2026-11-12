@@ -6,7 +6,6 @@ use Illuminate\Database\Seeder;
 use Modules\UserManagement\Models\Role;
 use Modules\UserManagement\Models\User;
 use Modules\UserManagement\Models\UserRole;
-use RuntimeException;
 
 class UserRoleSeeder extends Seeder
 {

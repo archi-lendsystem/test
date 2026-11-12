@@ -5,7 +5,6 @@ namespace Modules\BLWorkflow\Services;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
-use RuntimeException;
 use Modules\BLJourney\Models\BLJourney;
 use Modules\BLLeadCreation\Models\BLLeadCreation;
 use Modules\BLWorkflow\Models\BLStageRolePermission;
