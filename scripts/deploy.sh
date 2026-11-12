@@ -267,53 +267,64 @@ check_config() {
 # 5. Preserve original encryption key
 # ============================================================
 
-check_key_unchanged() {
 
+check_key_unchanged() {
   local old="$1"
   local new="$2"
-  local a b
+  local old_hash new_hash
 
-  a="$(
-    cd "$old"
+  get_app_key_hash() {
+    local app_dir="$1"
 
-    "$PHP_BIN" -r '
-      require "vendor/autoload.php";
+    (
+      cd "$app_dir" || exit 1
 
-      $app = require "bootstrap/app.php";
+      "$PHP_BIN" -r '
+        // Suppress incidental stdout during Laravel bootstrap.
+        ob_start();
 
-      $app->make(
-          Illuminate\Contracts\Console\Kernel::class
-      )->bootstrap();
+        require "vendor/autoload.php";
 
-      echo hash(
-          "sha256",
-          (string) config("app.key")
-      );
-    '
-  )"
+        $app = require "bootstrap/app.php";
 
-  b="$(
-    cd "$new"
+        $app->make(
+            Illuminate\Contracts\Console\Kernel::class
+        )->bootstrap();
 
-    "$PHP_BIN" -r '
-      require "vendor/autoload.php";
+        $key = config("app.key");
 
-      $app = require "bootstrap/app.php";
+        ob_end_clean();
 
-      $app->make(
-          Illuminate\Contracts\Console\Kernel::class
-      )->bootstrap();
+        if (!is_string($key) || $key === "") {
+            fwrite(STDERR, "Invalid APP_KEY\n");
+            exit(1);
+        }
 
-      echo hash(
-          "sha256",
-          (string) config("app.key")
-      );
-    '
-  )"
+        echo hash("sha256", $key);
+      '
+    )
+  }
 
-  [[ -n "$a" && "$a" == "$b" ]] \
-    || fail 'APP_KEY differs from previous application; refusing to rotate encryption key'
+  old_hash="$(get_app_key_hash "$old")" \
+    || fail "Unable to read previous APP_KEY"
+
+  new_hash="$(get_app_key_hash "$new")" \
+    || fail "Unable to read new APP_KEY"
+
+  # Reject malformed output before comparing.
+  [[ "$old_hash" =~ ^[0-9a-f]{64}$ ]] \
+    || fail "Invalid previous APP_KEY hash output"
+
+  [[ "$new_hash" =~ ^[0-9a-f]{64}$ ]] \
+    || fail "Invalid new APP_KEY hash output"
+
+  if [[ "$old_hash" != "$new_hash" ]]; then
+    fail "APP_KEY genuinely differs from previous application"
+  fi
+
+  log "APP_KEY verified: existing and new release match"
 }
+
 
 # ============================================================
 # 6. Restore public files after failed deployment
