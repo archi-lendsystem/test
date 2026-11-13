@@ -1,4 +1,3 @@
-
 name: Deploy Staging
 
 on:
@@ -10,7 +9,7 @@ on:
         required: true
         default: false
 
-      confirmation:
+      db_setup_confirmation:
         description: 'Type Confirm to confirm'
         type: string
         required: false
@@ -106,9 +105,13 @@ jobs:
 
       HEALTH_CHECK_TOKEN: ${{ secrets.HEALTH_CHECK_TOKEN }}
 
+      # Optional, read-only GET endpoints for smoke tests (repository/environment variables).
+      SMOKE_TEST_PATH: ${{ vars.SMOKE_TEST_PATH }}
+      SMOKE_TEST_PATHS: ${{ vars.SMOKE_TEST_PATHS }}
+
       COMMIT_SHA: ${{ github.sha }}
-      BOOTSTRAP_REQUESTED: ${{ inputs.bootstrap_staging }}
-      BOOTSTRAP_CONFIRMATION: ${{ inputs.bootstrap_confirmation }}
+      DB_SETUP_REQUESTED: ${{ inputs.db_setup }}
+      DB_SETUP_CONFIRMATION: ${{ inputs.db_setup_confirmation }}
 
     steps:
       # ======================================================
@@ -187,18 +190,19 @@ jobs:
           fi
 
           # Validate without displaying secrets.
+          # $'...' makes \r a real carriage return (BSD grep on macOS does not understand \r).
 
-          grep -Eq '^APP_ENV=staging\r?$' "$LOCAL_ENV_PATH" || {
+          grep -Eq $'^APP_ENV=staging\r?$' "$LOCAL_ENV_PATH" || {
             echo '::error::APP_ENV must be staging'
             exit 1
           }
 
-          grep -Eq '^APP_DEBUG=false\r?$' "$LOCAL_ENV_PATH" || {
+          grep -Eq $'^APP_DEBUG=false\r?$' "$LOCAL_ENV_PATH" || {
             echo '::error::APP_DEBUG must be false'
             exit 1
           }
 
-          grep -Eq '^APP_KEY=base64:[A-Za-z0-9+/=]+\r?$' "$LOCAL_ENV_PATH" || {
+          grep -Eq $'^APP_KEY=base64:[A-Za-z0-9+/=]+\r?$' "$LOCAL_ENV_PATH" || {
             echo '::error::Restore the existing APP_KEY in LOCAL_ENV_PATH'
             exit 1
           }
@@ -215,9 +219,10 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [[ "${BOOTSTRAP_REQUESTED:-false}" == 'true' ]]; then
-            [[ "$BOOTSTRAP_CONFIRMATION" == 'Confirm' ]] || {
-              echo '::error::One-time bootstrap confirmation is missing'
+          # Action names must match those accepted by scripts/deploy.sh.
+          if [[ "${DB_SETUP_REQUESTED:-false}" == 'true' ]]; then
+            [[ "$DB_SETUP_CONFIRMATION" == 'Confirm' ]] || {
+              echo '::error::One-time database setup confirmation is missing'
               exit 1
             }
             echo 'preflight_action=bootstrap-preflight' >> "$GITHUB_OUTPUT"
@@ -294,16 +299,23 @@ jobs:
       # ======================================================
 
       - name: Verify current application can be rolled back
+        env:
+          PREFLIGHT_ACTION: ${{ steps.mode.outputs.preflight_action }}
         run: |
           set -euo pipefail
 
+          [[ "$PREFLIGHT_ACTION" =~ ^(preflight|bootstrap-preflight)$ ]]
+
           ssh -F "$RUNNER_TEMP/deploy-ssh/config" \
             cpanel-deploy \
-            "bash -se -- '${{ steps.mode.outputs.preflight_action }}' '$REMOTE_DEPLOY_DIR' '${REMOTE_WEB_ROOT:-public_html}' '$RELEASE_ID' '$BACKEND_URL' '$EXPECTED_DB_HOST' '$EXPECTED_DB_DATABASE'" \
+            "bash -se -- '$PREFLIGHT_ACTION' '$REMOTE_DEPLOY_DIR' '${REMOTE_WEB_ROOT:-public_html}' '$RELEASE_ID' '$BACKEND_URL' '$EXPECTED_DB_HOST' '$EXPECTED_DB_DATABASE'" \
             < scripts/deploy.sh
 
-
+      # Compares the runner's APP_KEY against a pinned SHA-256 (secret
+      # EXPECTED_APP_KEY_SHA256), the same hash format deploy.sh uses remotely.
       - name: Verify staging APP_KEY
+        env:
+          EXPECTED_APP_KEY_SHA256: ${{ secrets.EXPECTED_APP_KEY_SHA256 }}
         run: |
           set -euo pipefail
 
@@ -312,28 +324,29 @@ jobs:
             exit 1
           }
 
-          ENV_FILE="$LOCAL_ENV_PATH" php <<'PHP'
-          <?php
-          $env = parse_ini_file(
-              getenv('ENV_FILE'),
-              false,
-              INI_SCANNER_RAW
-          );
-
-          $key = trim(
-              (string) ($env['APP_KEY'] ?? ''),
-              "\"'"
-          );
-
-          $expected = '61a14ec1802024cba80b001cc776967ef72f2e260b9f2981a24a128d0447a1a7';
-
-          if (!hash_equals($expected, hash('sha256', $key))) {
-              fwrite(STDERR, "APP_KEY mismatch in runner file\n");
-              exit(1);
+          expected="$(printf '%s' "${EXPECTED_APP_KEY_SHA256:-}" | tr 'A-F' 'a-f')"
+          [[ "$expected" =~ ^[0-9a-f]{64}$ ]] || {
+            echo '::error::EXPECTED_APP_KEY_SHA256 is missing or not a SHA-256 hex digest'
+            exit 1
           }
 
-          echo "Staging APP_KEY verified successfully\n";
-          PHP
+          count="$(grep -c '^APP_KEY=' "$LOCAL_ENV_PATH" || true)"
+          [[ "$count" == 1 ]] || {
+            echo '::error::APP_KEY must be defined exactly once in the runner file'
+            exit 1
+          }
+
+          key="$(grep '^APP_KEY=' "$LOCAL_ENV_PATH" | tr -d '\r')"
+          key="${key#APP_KEY=}"
+
+          actual="$(printf '%s' "$key" | shasum -a 256 | cut -d ' ' -f 1)"
+
+          [[ "$actual" == "$expected" ]] || {
+            echo '::error::APP_KEY mismatch in runner file'
+            exit 1
+          }
+
+          echo 'Staging APP_KEY verified successfully'
 
       # ======================================================
       # 5. Package source code and generate SHA-256
@@ -390,13 +403,16 @@ jobs:
 
       - name: Deploy with automatic recovery
         id: deploy_release
-
+        env:
+          DEPLOY_ACTION: ${{ steps.mode.outputs.deploy_action }}
         run: |
           set -euo pipefail
 
+          [[ "$DEPLOY_ACTION" =~ ^(deploy|bootstrap)$ ]]
+
           ssh -F "$RUNNER_TEMP/deploy-ssh/config" \
             cpanel-deploy \
-            "bash -se -- '${{ steps.mode.outputs.deploy_action }}' '$REMOTE_DEPLOY_DIR' '${REMOTE_WEB_ROOT:-public_html}' '$RELEASE_ID' '$BACKEND_URL' '$EXPECTED_DB_HOST' '$EXPECTED_DB_DATABASE'" \
+            "bash -se -- '$DEPLOY_ACTION' '$REMOTE_DEPLOY_DIR' '${REMOTE_WEB_ROOT:-public_html}' '$RELEASE_ID' '$BACKEND_URL' '$EXPECTED_DB_HOST' '$EXPECTED_DB_DATABASE'" \
             < scripts/deploy.sh
 
       # Validate the actual published Laravel DB connection (not only HTTP 200).
@@ -407,6 +423,56 @@ jobs:
             cpanel-deploy \
             "bash -se -- verify '$REMOTE_DEPLOY_DIR' '${REMOTE_WEB_ROOT:-public_html}' '$RELEASE_ID' '$BACKEND_URL' '$EXPECTED_DB_HOST' '$EXPECTED_DB_DATABASE'" \
             < scripts/deploy.sh
+
+      # ======================================================
+      # 8. External HTTP smoke checks
+      # ======================================================
+
+      - name: External HTTP smoke checks
+        run: |
+          set -euo pipefail
+          umask 077
+
+          base="${BACKEND_URL%/}"
+          header_file="$RUNNER_TEMP/deploy-ssh/health-header"
+
+          # Header read from a file so the token never appears in the process list.
+          printf 'Authorization: Bearer %s\n' "$HEALTH_CHECK_TOKEN" > "$header_file"
+
+          paths=(/api/health)
+          if [[ -n "${SMOKE_TEST_PATH:-}" ]]; then
+            paths+=("$SMOKE_TEST_PATH")
+          fi
+          for path in ${SMOKE_TEST_PATHS:-}; do
+            paths+=("$path")
+          done
+
+          for path in "${paths[@]}"; do
+            status=000
+            for attempt in 1 2 3 4 5 6; do
+              status="$(
+                curl --silent --show-error \
+                  --proto '=https' --tlsv1.2 \
+                  --max-redirs 0 \
+                  --connect-timeout 10 --max-time 20 \
+                  -H "@$header_file" \
+                  -H 'Accept: application/json' \
+                  --output "$RUNNER_TEMP/health-response" \
+                  --write-out '%{http_code}' \
+                  "$base$path"
+              )" || status=000
+
+              [[ "$status" =~ ^2[0-9][0-9]$ ]] && break
+              sleep 5
+            done
+
+            if [[ ! "$status" =~ ^2[0-9][0-9]$ ]]; then
+              echo "::error::Smoke check failed: GET $path (HTTP $status)"
+              exit 1
+            fi
+
+            echo "Smoke check passed: GET $path (HTTP $status)"
+          done
 
       # ======================================================
       # 9. Rollback if external verification fails

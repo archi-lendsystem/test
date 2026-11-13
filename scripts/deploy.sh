@@ -1,8 +1,16 @@
-
 #!/usr/bin/env bash
+
+# The entire script is a single brace group, so bash parses all of it before
+# executing anything. This script is streamed over SSH (`bash -s`): without the
+# group, a dropped connection could execute a truncated script, and any child
+# process reading stdin could consume the remainder of the script.
+{
 
 set -Eeuo pipefail
 umask 077
+
+# Script is fully parsed at this point; detach stdin from the SSH stream.
+exec </dev/null
 
 # Actions: preflight | bootstrap-preflight | deploy | bootstrap | rollback | verify | cleanup
 # Bootstrap requires explicit GitHub Actions manual dispatch authorization.
@@ -53,6 +61,7 @@ LOG="$BASE/.deployment-history.log"
 OLD_APP=""
 MAINTENANCE_STARTED=0
 SWITCH_STARTED=0
+RELEASE_CREATED=0
 SUCCESS=0
 
 log() {
@@ -424,6 +433,11 @@ recover() {
 
   trap - EXIT
 
+  # Recovery must run to completion even if the SSH session has dropped:
+  # a failed log write (broken pipe) must not abort the rollback.
+  set +e
+  trap '' PIPE HUP
+
   if [[ "$ACTION" == deploy || "$ACTION" == bootstrap ]]; then
     if [[ "$code" -ne 0 && "$SUCCESS" -eq 0 ]]; then
       log 'Deployment failed: attempting recovery'
@@ -439,7 +453,9 @@ recover() {
         ) || log 'CRITICAL: Could not exit old maintenance mode'
       fi
 
-      if [[ -d "$RELEASE" &&
+      # Only remove a release directory this run created.
+      if (( RELEASE_CREATED )) &&
+         [[ -d "$RELEASE" &&
             "$(cat "$ACTIVE" 2>/dev/null || true)" != "$RELEASE" ]]; then
         rm -rf -- "$RELEASE" || true
       fi
@@ -670,6 +686,7 @@ fi
 trap recover EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
+trap 'exit 129' HUP
 
 mkdir -p \
   "$INCOMING" \
@@ -757,6 +774,7 @@ fi
 log 'Preparing isolated release'
 
 mkdir -m 750 "$RELEASE"
+RELEASE_CREATED=1
 
 tar -xzf \
   "$INCOMING/$RELEASE_ID.tar.gz" \
@@ -989,12 +1007,16 @@ tar -czf "$SNAP/public-html-before.tar.gz" -C "$HOME" "$WEB_DIR"
   || fail 'Public web-root backup invalid'
 chmod 600 "$SNAP/public-html-before.tar.gz"
 
+# storage/ is excluded exactly as rsync excludes it below; otherwise a
+# rollback would delete real uploaded files through the storage symlink.
 (
   cd "$RELEASE/public"
 
   find . \
     -type f \
     ! -path './index.php' \
+    ! -path './storage' \
+    ! -path './storage/*' \
     -print0
 
 ) > "$SNAP/manifest"
@@ -1303,3 +1325,5 @@ SUCCESS=1
 log "Release $RELEASE_ID published"
 
 log "External HTTP smoke checks will follow"
+
+}
