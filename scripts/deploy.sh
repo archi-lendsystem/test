@@ -821,9 +821,6 @@ fi
 
   "$PHP_BIN" artisan view:cache \
     || log 'WARNING: view cache failed'
-  
-  "$PHP_BIN" artisan view:cache \
-  || fail 'Blade view compilation failed'
 
   "$PHP_BIN" artisan route:list --json |
   "$PHP_BIN" -r '
