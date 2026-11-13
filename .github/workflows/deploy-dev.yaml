@@ -106,7 +106,7 @@ jobs:
 
       HEALTH_CHECK_TOKEN: ${{ secrets.HEALTH_CHECK_TOKEN }}
 
-      RELEASE_ID: ${{ github.sha }}
+      COMMIT_SHA: ${{ github.sha }}
       BOOTSTRAP_REQUESTED: ${{ inputs.bootstrap_staging }}
       BOOTSTRAP_CONFIRMATION: ${{ inputs.bootstrap_confirmation }}
 
@@ -196,6 +196,28 @@ jobs:
           }
 
           echo "Staging configuration validated"
+
+
+      - name: Generate unique deployment release ID
+        run: |
+          set -euo pipefail
+
+          RELEASE_ID="$(
+            printf '%s' \
+              "${GITHUB_SHA}:${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}" \
+              | shasum -a 256 \
+              | cut -c1-40
+          )"
+
+          [[ "$RELEASE_ID" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "::error::Invalid release ID"
+            exit 1
+          }
+
+          echo "RELEASE_ID=$RELEASE_ID" >> "$GITHUB_ENV"
+
+          echo "Source commit: $GITHUB_SHA"
+          echo "Deployment release ID: $RELEASE_ID"
 
       - name: Select protected deployment mode
         id: mode
