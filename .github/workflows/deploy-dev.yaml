@@ -106,7 +106,7 @@ jobs:
 
       HEALTH_CHECK_TOKEN: ${{ secrets.HEALTH_CHECK_TOKEN }}
 
-      COMMIT_SHA: ${{ github.sha }}
+      RELEASE_ID: ${{ github.sha }}
       BOOTSTRAP_REQUESTED: ${{ inputs.bootstrap_staging }}
       BOOTSTRAP_CONFIRMATION: ${{ inputs.bootstrap_confirmation }}
 
