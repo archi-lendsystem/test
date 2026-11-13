@@ -1,3 +1,4 @@
+
 <?php
 
 use Illuminate\Database\Migrations\Migration;
@@ -11,20 +12,27 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('b_l_applicant_details', function (Blueprint $table) {
-            $table->enum('secondary_kyc_type', [
-                'PAN Card',
-                'Voter ID Card',
-                'Driving Licence',
-                'Passport',
-                'Job Card',
-                'Digital Ration Card',
-            ])->nullable();
+        // Add secondary_kyc_type only if it does not exist.
+        if (!Schema::hasColumn('b_l_applicant_details', 'secondary_kyc_type')) {
+            Schema::table('b_l_applicant_details', function (Blueprint $table) {
+                $table->enum('secondary_kyc_type', [
+                    'PAN Card',
+                    'Voter ID Card',
+                    'Driving Licence',
+                    'Passport',
+                    'Job Card',
+                    'Digital Ration Card',
+                ])->nullable();
+            });
+        }
 
-            $table->string('secondary_kyc_number', 50)
-                ->nullable();
-            
-        });
+        // Add secondary_kyc_number only if it does not exist.
+        if (!Schema::hasColumn('b_l_applicant_details', 'secondary_kyc_number')) {
+            Schema::table('b_l_applicant_details', function (Blueprint $table) {
+                $table->string('secondary_kyc_number', 50)
+                    ->nullable();
+            });
+        }
     }
 
     /**
@@ -32,11 +40,8 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('b_l_applicant_details', function (Blueprint $table) {
-               $table->dropColumn([
-                'secondary_kyc_type',
-                'secondary_kyc_number',
-            ]);
-        });
+        // Intentionally non-destructive.
+        // Both columns may have existed before this migration.
+        // Preserve existing applicant KYC data.
     }
 };
