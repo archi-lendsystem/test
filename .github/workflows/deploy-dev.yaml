@@ -11,7 +11,7 @@ on:
         default: false
 
       bootstrap_confirmation:
-        description: 'Type BOOTSTRAP_EXISTING_STAGING_DB to confirm'
+        description: 'Type Confirm to confirm'
         type: string
         required: false
         default: ''
@@ -203,7 +203,7 @@ jobs:
           set -euo pipefail
 
           if [[ "${BOOTSTRAP_REQUESTED:-false}" == 'true' ]]; then
-            [[ "$BOOTSTRAP_CONFIRMATION" == 'BOOTSTRAP_EXISTING_STAGING_DB' ]] || {
+            [[ "$BOOTSTRAP_CONFIRMATION" == 'Confirm' ]] || {
               echo '::error::One-time bootstrap confirmation is missing'
               exit 1
             }
