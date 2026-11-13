@@ -106,7 +106,7 @@ jobs:
 
       HEALTH_CHECK_TOKEN: ${{ secrets.HEALTH_CHECK_TOKEN }}
 
-      RELEASE_ID: ${{ github.sha }}
+      COMMIT_SHA: ${{ github.sha }}
       BOOTSTRAP_REQUESTED: ${{ inputs.bootstrap_staging }}
       BOOTSTRAP_CONFIRMATION: ${{ inputs.bootstrap_confirmation }}
 
@@ -120,6 +120,19 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 1
+
+      # Each workflow rerun must have new release and snapshot paths.
+      # Preserve 40-character hexadecimal format expected by deploy.sh.
+      - name: Generate unique deployment release ID
+        run: |
+          set -euo pipefail
+          RELEASE_ID="$(
+            printf '%s' "${GITHUB_SHA}:${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}" \
+              | shasum -a 256 | cut -c1-40
+          )"
+          [[ "$RELEASE_ID" =~ ^[0-9a-f]{40}$ ]]
+          echo "RELEASE_ID=$RELEASE_ID" >> "$GITHUB_ENV"
+          echo "Deployment attempt release ID: $RELEASE_ID"
 
       # ======================================================
       # 2. Validate staging environment before deployment
@@ -412,6 +425,15 @@ jobs:
 
           # A rollback restores files, not applied database migrations.
           echo '::warning::Rollback restored the previous application files; check database schema compatibility and live health.'
+
+      # Release pruning occurs only after successful release and DB verification.
+      # Backup snapshots (especially database.sql.gz) are not auto-deleted.
+      - name: Prune old staging releases safely
+        if: success() && steps.deploy_release.outcome == 'success'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/deploy-ssh/config" \n            cpanel-deploy \n            "bash -se -- cleanup '$REMOTE_DEPLOY_DIR' '${REMOTE_WEB_ROOT:-public_html}' '$RELEASE_ID' '$BACKEND_URL' '$EXPECTED_DB_HOST' '$EXPECTED_DB_DATABASE'" \n            < scripts/deploy.sh
 
       # ======================================================
       # 10. Cleanup temporary files

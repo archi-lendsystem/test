@@ -4,7 +4,7 @@
 set -Eeuo pipefail
 umask 077
 
-# Actions: preflight | bootstrap-preflight | deploy | bootstrap | rollback | verify
+# Actions: preflight | bootstrap-preflight | deploy | bootstrap | rollback | verify | cleanup
 # Bootstrap requires explicit GitHub Actions manual dispatch authorization.
 # Bootstrap backs up populated database and public files but NEVER migrates.
 
@@ -16,7 +16,7 @@ EXPECTED_URL="${5:?Expected URL required}"
 EXPECTED_DB_HOST="${6:?Expected DB host required}"
 EXPECTED_DB_NAME="${7:?Expected DB name required}"
 
-[[ "$ACTION" =~ ^(preflight|bootstrap-preflight|deploy|bootstrap|rollback|verify)$ ]] || exit 1
+[[ "$ACTION" =~ ^(preflight|bootstrap-preflight|deploy|bootstrap|rollback|verify|cleanup)$ ]] || exit 1
 [[ "$DEPLOY_DIR" =~ ^[A-Za-z0-9_-]+$ ]] || exit 1
 
 [[ "$WEB_DIR" =~ ^[A-Za-z0-9_][A-Za-z0-9_/-]*$ &&
@@ -496,6 +496,77 @@ if [[ "$ACTION" == rollback ]]; then
   log 'Prior public state restored; bootstrap rollback cannot restore missing backend'
   log 'Verify database schema compatibility manually'
 
+  exit 0
+fi
+
+# ============================================================
+# Post-verification retention: preserve active, newest 3, and
+# the release required for the current snapshot's rollback.
+# Database backups and their historical manifests are retained.
+# ============================================================
+
+if [[ "$ACTION" == cleanup ]]; then
+  [[ -s "$ACTIVE" && ! -L "$ACTIVE" ]] \
+    || fail 'Missing or unsafe active release pointer; skipping cleanup'
+  [[ "$(cat "$ACTIVE")" == "$RELEASE" ]] \
+    || fail 'Expected release is not active; skipping cleanup'
+
+  identify_previous
+  [[ "$OLD_APP" == "$RELEASE" ]] \
+    || fail 'Published application changed; skipping cleanup'
+
+  [[ -d "$RELEASES" && ! -L "$RELEASES" ]] \
+    || fail 'Unsafe releases directory; skipping cleanup'
+
+  # No snapshot pruning: database backups are recovery data, not cache.
+  declare -A protected=()
+  protected["$RELEASE_ID"]=1
+
+  # Protect the exact previous application needed to roll back this release.
+  if [[ -f "$SNAP/old-app" && ! -L "$SNAP/old-app" ]]; then
+    previous="$(cat "$SNAP/old-app")"
+    if [[ "$previous" == "$RELEASES/"* ]]; then
+      previous_id="${previous##*/}"
+      [[ "$previous_id" =~ ^[0-9a-f]{40}$ &&
+         "$previous" == "$RELEASES/$previous_id" ]] \
+        || fail 'Unsafe snapshot rollback reference; skipping cleanup'
+      protected["$previous_id"]=1
+    elif [[ "$previous" != "$BASE" ]]; then
+      fail 'Unexpected rollback reference; skipping cleanup'
+    fi
+  elif [[ -f "$SNAP/bootstrap" ]]; then
+    : # Bootstrap snapshot has no previous application.
+  else
+    fail 'Missing current rollback snapshot; skipping cleanup'
+  fi
+
+  # Keep the three newest release directories for quick recovery.
+  mapfile -t newest < <(
+    find "$RELEASES" -mindepth 1 -maxdepth 1 -type d \
+      -printf '%T@ %f\n' | sort -nr | awk '{print $2}'
+  )
+  for (( i=0; i<${#newest[@]} && i<3; i++ )); do
+    [[ "${newest[$i]}" =~ ^[0-9a-f]{40}$ ]] \
+      || fail 'Unexpected release directory name; skipping cleanup'
+    protected["${newest[$i]}"]=1
+  done
+
+  removed=0
+  for id in "${newest[@]}"; do
+    [[ "$id" =~ ^[0-9a-f]{40}$ ]] \
+      || fail 'Unexpected release directory name; skipping cleanup'
+    [[ -n "${protected[$id]:-}" ]] && continue
+    target="$RELEASES/$id"
+    [[ -d "$target" && ! -L "$target" && -f "$target/artisan" ]] \
+      || fail 'Unexpected release contents; skipping cleanup'
+    [[ "$target" != "$(cat "$ACTIVE")" ]] \
+      || fail 'Active release guard triggered'
+    log "Pruning old inactive release $id"
+    rm -rf -- "$target"
+    (( removed += 1 ))
+  done
+
+  log "Release cleanup completed: $removed old inactive release(s) removed; database backups preserved"
   exit 0
 fi
 
