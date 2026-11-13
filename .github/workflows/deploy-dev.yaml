@@ -433,7 +433,10 @@ jobs:
         continue-on-error: true
         run: |
           set -euo pipefail
-          ssh -F "$RUNNER_TEMP/deploy-ssh/config" \n            cpanel-deploy \n            "bash -se -- cleanup '$REMOTE_DEPLOY_DIR' '${REMOTE_WEB_ROOT:-public_html}' '$RELEASE_ID' '$BACKEND_URL' '$EXPECTED_DB_HOST' '$EXPECTED_DB_DATABASE'" \n            < scripts/deploy.sh
+          ssh -F "$RUNNER_TEMP/deploy-ssh/config" \
+            cpanel-deploy \
+            "bash -se -- cleanup '$REMOTE_DEPLOY_DIR' '${REMOTE_WEB_ROOT:-public_html}' '$RELEASE_ID' '$BACKEND_URL' '$EXPECTED_DB_HOST' '$EXPECTED_DB_DATABASE'" \
+            < scripts/deploy.sh
 
       # ======================================================
       # 10. Cleanup temporary files
