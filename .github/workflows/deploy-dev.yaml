@@ -4,13 +4,13 @@ name: Deploy Staging
 on:
   workflow_dispatch:
     inputs:
-      bootstrap_staging:
+      db_setup:
         description: 'First-time setup (no migrations)'
         type: boolean
         required: true
         default: false
 
-      bootstrap_confirmation:
+      confirmation:
         description: 'Type Confirm to confirm'
         type: string
         required: false
