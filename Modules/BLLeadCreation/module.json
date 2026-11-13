@@ -1,0 +1,11 @@
+{
+    "name": "BLLeadCreation",
+    "alias": "blleadcreation",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\BLLeadCreation\\Providers\\BLLeadCreationServiceProvider"
+    ],
+    "files": []
+}

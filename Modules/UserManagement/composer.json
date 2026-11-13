@@ -1,0 +1,34 @@
+{
+    "name": "nwidart/usermanagement",
+    "description": "User Management module for Laravel",
+    "authors": [
+        {
+            "name": "Your Name",
+            "email": "your@email.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Modules\\UserManagement\\Providers\\UserManagementServiceProvider"
+            ],
+            "aliases": {}
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\UserManagement\\": "app/",
+            "Modules\\UserManagement\\Database\\Factories\\": "database/factories/",
+            "Modules\\UserManagement\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\UserManagement\\Tests\\": "tests/"
+        }
+    },
+    "require": {},
+    "require-dev": {},
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}

@@ -1,0 +1,11 @@
+{
+    "name": "BLCaseDiscusion",
+    "alias": "blcasediscusion",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\BLCaseDiscusion\\Providers\\BLCaseDiscusionServiceProvider"
+    ],
+    "files": []
+}

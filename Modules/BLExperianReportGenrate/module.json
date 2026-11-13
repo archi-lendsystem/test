@@ -1,0 +1,11 @@
+{
+    "name": "BLExperianReportGenrate",
+    "alias": "blexperianreportgenrate",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\BLExperianReportGenrate\\Providers\\BLExperianReportGenrateServiceProvider"
+    ],
+    "files": []
+}

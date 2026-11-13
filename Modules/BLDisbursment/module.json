@@ -1,0 +1,11 @@
+{
+    "name": "BLDisbursment",
+    "alias": "bldisbursment",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\BLDisbursment\\Providers\\BLDisbursmentServiceProvider"
+    ],
+    "files": []
+}

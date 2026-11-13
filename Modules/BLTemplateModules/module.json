@@ -1,0 +1,11 @@
+{
+    "name": "BLTemplateModules",
+    "alias": "bltemplatemodules",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\BLTemplateModules\\Providers\\BLTemplateModulesServiceProvider"
+    ],
+    "files": []
+}

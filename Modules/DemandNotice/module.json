@@ -1,0 +1,11 @@
+{
+    "name": "DemandNotice",
+    "alias": "demandnotice",
+    "description": "Formal payment-demand notices issued to overdue borrowers.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\DemandNotice\\Providers\\DemandNoticeServiceProvider"
+    ],
+    "files": []
+}

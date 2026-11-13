@@ -1,0 +1,11 @@
+{
+    "name": "EmiStatement",
+    "alias": "emistatement",
+    "description": "Customer-shareable EMI statement — paid vs pending installments.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\EmiStatement\\Providers\\EmiStatementServiceProvider"
+    ],
+    "files": []
+}

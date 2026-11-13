@@ -1,0 +1,11 @@
+{
+    "name": "LUCReport",
+    "alias": "lucreport",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\LUCReport\\Providers\\LUCReportServiceProvider"
+    ],
+    "files": []
+}

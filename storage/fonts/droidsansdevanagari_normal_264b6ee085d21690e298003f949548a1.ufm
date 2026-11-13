@@ -1,0 +1,199 @@
+StartFontMetrics 4.1
+Notice Converted by PHP-font-lib
+Comment https://github.com/dompdf/php-font-lib
+EncodingScheme FontSpecific
+Copyright Digitized data copyright (c) 2012, Google Corporation.
+FontName Droid Sans Devanagari
+FontSubfamily Regular
+UniqueID Monotype - Droid Sans Devanagari
+FullName Droid Sans Devanagari
+Version Version 1.01
+PostScriptName DroidSansDevanagari
+Trademark Droid is a trademark of Google and may be registered in certain jurisdictions.
+Manufacturer Monotype Imaging Inc.
+Designer Jelle Bosma
+Description Droid Sans Devanagari is a low contrast Devanagari typeface intended to harmonize with sans serif typeface families like Droid Sans.
+FontVendorURL http://www.monotypeimaging.com
+FontDesignerURL http://www.monotypeimaging.com/ProductsServices/TypeDesignerShowcase
+LicenseDescription Licensed under the OFL license, version 1.1
+LicenseURL http://scripts.sil.org/cms/scripts/page.php?item_id=OFL_web
+Weight Medium
+ItalicAngle 0
+IsFixedPitch false
+UnderlineThickness 50
+UnderlinePosition -75
+FontHeightOffset 0
+Ascender 896
+Descender -408
+FontBBox -602 -394 1293 896
+StartCharMetrics 693
+U 32 ; WX 260 ; N space ; G 3
+U 33 ; WX 383 ; N exclam.deva ; G 4
+U 34 ; WX 502 ; N quotedbl.deva ; G 5
+U 35 ; WX 653 ; N numbersign.deva ; G 6
+U 37 ; WX 828 ; N percent.deva ; G 7
+U 39 ; WX 326 ; N quotesingle.deva ; G 8
+U 40 ; WX 354 ; N parenleft.deva ; G 9
+U 41 ; WX 354 ; N parenright.deva ; G 10
+U 42 ; WX 607 ; N asterisk.deva ; G 11
+U 43 ; WX 551 ; N plus.deva ; G 12
+U 44 ; WX 250 ; N comma.deva ; G 13
+U 45 ; WX 340 ; N hyphen.deva ; G 14
+U 46 ; WX 268 ; N period.deva ; G 15
+U 47 ; WX 429 ; N slash.deva ; G 16
+U 48 ; WX 551 ; N zero.deva ; G 17
+U 49 ; WX 551 ; N one.deva ; G 18
+U 50 ; WX 551 ; N two.deva ; G 19
+U 51 ; WX 551 ; N three.deva ; G 20
+U 52 ; WX 551 ; N four.deva ; G 21
+U 53 ; WX 551 ; N five.deva ; G 22
+U 54 ; WX 551 ; N six.deva ; G 23
+U 55 ; WX 551 ; N seven.deva ; G 24
+U 56 ; WX 551 ; N eight.deva ; G 25
+U 57 ; WX 551 ; N nine.deva ; G 26
+U 58 ; WX 294 ; N colon.deva ; G 27
+U 59 ; WX 294 ; N semicolon.deva ; G 28
+U 60 ; WX 551 ; N less.deva ; G 29
+U 61 ; WX 551 ; N equal.deva ; G 30
+U 62 ; WX 551 ; N greater.deva ; G 31
+U 63 ; WX 518 ; N question.deva ; G 32
+U 91 ; WX 356 ; N bracketleft.deva ; G 33
+U 92 ; WX 429 ; N backslash.deva ; G 34
+U 93 ; WX 356 ; N bracketright.deva ; G 35
+U 94 ; WX 551 ; N asciicircum.deva ; G 36
+U 95 ; WX 411 ; N underscore.deva ; G 37
+U 123 ; WX 391 ; N braceleft.deva ; G 38
+U 124 ; WX 540 ; N bar.deva ; G 39
+U 125 ; WX 376 ; N braceright.deva ; G 40
+U 126 ; WX 551 ; N asciitilde.deva ; G 41
+U 160 ; WX 260 ; N space ; G 3
+U 175 ; WX 340 ; N sfthyphen.deva ; G 42
+U 215 ; WX 551 ; N multiply.deva ; G 43
+U 247 ; WX 551 ; N divide.deva ; G 44
+U 700 ; WX 312 ; N uni02BC ; G 45
+U 2305 ; WX 0 ; N candrabindudeva ; G 46
+U 2306 ; WX 0 ; N anusvaradeva ; G 47
+U 2307 ; WX 272 ; N visargadeva ; G 48
+U 2308 ; WX 764 ; N ashortdeva ; G 49
+U 2309 ; WX 764 ; N adeva ; G 50
+U 2310 ; WX 1023 ; N aadeva ; G 51
+U 2311 ; WX 474 ; N ideva ; G 52
+U 2312 ; WX 474 ; N iideva ; G 53
+U 2313 ; WX 548 ; N udeva ; G 54
+U 2314 ; WX 765 ; N uudeva ; G 55
+U 2315 ; WX 853 ; N rvocalicdeva ; G 56
+U 2316 ; WX 699 ; N lvocalicdeva ; G 57
+U 2317 ; WX 553 ; N ecandradeva ; G 58
+U 2318 ; WX 553 ; N eshortdeva ; G 59
+U 2319 ; WX 553 ; N edeva ; G 60
+U 2320 ; WX 553 ; N aideva ; G 61
+U 2321 ; WX 1023 ; N ocandradeva ; G 62
+U 2322 ; WX 1023 ; N oshortdeva ; G 63
+U 2323 ; WX 1023 ; N odeva ; G 64
+U 2324 ; WX 1023 ; N audeva ; G 65
+U 2325 ; WX 762 ; N kadeva ; G 66
+U 2326 ; WX 818 ; N khadeva ; G 67
+U 2327 ; WX 563 ; N gadeva ; G 68
+U 2328 ; WX 591 ; N ghadeva ; G 69
+U 2329 ; WX 697 ; N ngadeva ; G 70
+U 2330 ; WX 634 ; N cadeva ; G 71
+U 2331 ; WX 701 ; N chadeva ; G 72
+U 2332 ; WX 742 ; N jadeva ; G 73
+U 2333 ; WX 739 ; N jhadeva ; G 74
+U 2334 ; WX 742 ; N nyadeva ; G 75
+U 2335 ; WX 504 ; N ttadeva ; G 76
+U 2336 ; WX 585 ; N tthadeva ; G 77
+U 2337 ; WX 627 ; N ddadeva ; G 78
+U 2338 ; WX 563 ; N ddhadeva ; G 79
+U 2339 ; WX 723 ; N nnadeva ; G 80
+U 2340 ; WX 570 ; N tadeva ; G 81
+U 2341 ; WX 642 ; N thadeva ; G 82
+U 2342 ; WX 520 ; N dadeva ; G 83
+U 2343 ; WX 615 ; N dhadeva ; G 84
+U 2344 ; WX 555 ; N nadeva ; G 85
+U 2345 ; WX 555 ; N nnnadeva ; G 86
+U 2346 ; WX 568 ; N padeva ; G 87
+U 2347 ; WX 771 ; N phadeva ; G 88
+U 2348 ; WX 571 ; N badeva ; G 89
+U 2349 ; WX 703 ; N bhadeva ; G 90
+U 2350 ; WX 598 ; N madeva ; G 91
+U 2351 ; WX 580 ; N yadeva ; G 92
+U 2352 ; WX 409 ; N radeva ; G 93
+U 2353 ; WX 409 ; N rradeva ; G 94
+U 2354 ; WX 678 ; N ladeva ; G 95
+U 2355 ; WX 760 ; N lladeva ; G 96
+U 2356 ; WX 760 ; N llladeva ; G 97
+U 2357 ; WX 556 ; N vadeva ; G 98
+U 2358 ; WX 680 ; N shadeva ; G 99
+U 2359 ; WX 578 ; N ssadeva ; G 100
+U 2360 ; WX 671 ; N sadeva ; G 101
+U 2361 ; WX 531 ; N hadeva ; G 102
+U 2364 ; WX 0 ; N nuktadeva ; G 103
+U 2365 ; WX 467 ; N avagrahadeva ; G 104
+U 2366 ; WX 259 ; N aavowelsigndeva ; G 105
+U 2367 ; WX 259 ; N ivowelsigndeva ; G 106
+U 2368 ; WX 259 ; N iivowelsigndeva ; G 107
+U 2369 ; WX 0 ; N uvowelsigndeva ; G 108
+U 2370 ; WX 0 ; N uuvowelsigndeva ; G 109
+U 2371 ; WX 0 ; N rvocalicvowelsigndeva ; G 110
+U 2372 ; WX 0 ; N rrvocalicvowelsigndeva ; G 111
+U 2373 ; WX 0 ; N ecandravowelsigndeva ; G 112
+U 2374 ; WX 0 ; N eshortvowelsigndeva ; G 113
+U 2375 ; WX 0 ; N evowelsigndeva ; G 114
+U 2376 ; WX 0 ; N aivowelsigndeva ; G 115
+U 2377 ; WX 259 ; N ocandravowelsigndeva ; G 116
+U 2378 ; WX 259 ; N oshortvowelsigndeva ; G 117
+U 2379 ; WX 259 ; N ovowelsigndeva ; G 118
+U 2380 ; WX 259 ; N auvowelsigndeva ; G 119
+U 2381 ; WX 0 ; N viramadeva ; G 120
+U 2384 ; WX 902 ; N omdeva ; G 121
+U 2385 ; WX 0 ; N udattadeva ; G 122
+U 2386 ; WX 0 ; N anudattadeva ; G 123
+U 2387 ; WX 0 ; N uni0953 ; G 124
+U 2388 ; WX 0 ; N uni0954 ; G 125
+U 2392 ; WX 762 ; N qadeva ; G 126
+U 2393 ; WX 818 ; N khhadeva ; G 127
+U 2394 ; WX 563 ; N ghhadeva ; G 128
+U 2395 ; WX 742 ; N zadeva ; G 129
+U 2396 ; WX 627 ; N dddhadeva ; G 130
+U 2397 ; WX 563 ; N rhadeva ; G 131
+U 2398 ; WX 771 ; N fadeva ; G 132
+U 2399 ; WX 580 ; N yyadeva ; G 133
+U 2400 ; WX 853 ; N rrvocalicdeva ; G 134
+U 2401 ; WX 699 ; N llvocalicdeva ; G 135
+U 2402 ; WX 0 ; N lvocalicvowelsigndeva ; G 136
+U 2403 ; WX 0 ; N llvocalicvowelsigndeva ; G 137
+U 2404 ; WX 379 ; N dandadeva ; G 138
+U 2405 ; WX 599 ; N dbldandadeva ; G 139
+U 2406 ; WX 551 ; N zerodeva ; G 140
+U 2407 ; WX 551 ; N onedeva ; G 141
+U 2408 ; WX 551 ; N twodeva ; G 142
+U 2409 ; WX 551 ; N threedeva ; G 143
+U 2410 ; WX 551 ; N fourdeva ; G 144
+U 2411 ; WX 551 ; N fivedeva ; G 145
+U 2412 ; WX 551 ; N sixdeva ; G 146
+U 2413 ; WX 551 ; N sevendeva ; G 147
+U 2414 ; WX 551 ; N eightdeva ; G 148
+U 2415 ; WX 551 ; N ninedeva ; G 149
+U 2416 ; WX 426 ; N abbreviationsigndeva ; G 150
+U 2417 ; WX 317 ; N uni0971 ; G 151
+U 2418 ; WX 764 ; N acandradeva ; G 152
+U 2427 ; WX 563 ; N gabardeva ; G 153
+U 2428 ; WX 723 ; N jabardeva ; G 154
+U 2429 ; WX 469 ; N uni097D ; G 155
+U 2430 ; WX 627 ; N ddabardeva ; G 156
+U 2431 ; WX 571 ; N babardeva ; G 157
+U 8204 ; WX 0 ; N uni200C ; G 158
+U 8205 ; WX 0 ; N uni200D ; G 159
+U 8211 ; WX 500 ; N endash.deva ; G 160
+U 8212 ; WX 1000 ; N emdash.deva ; G 161
+U 8216 ; WX 312 ; N quoteleft.deva ; G 162
+U 8217 ; WX 312 ; N quoteright.deva ; G 163
+U 8220 ; WX 500 ; N quotedblleft.deva ; G 164
+U 8221 ; WX 500 ; N quotedblright.deva ; G 165
+U 8230 ; WX 804 ; N ellipsis.deva ; G 166
+U 8377 ; WX 551 ; N uni20B9.deva ; G 167
+U 8722 ; WX 551 ; N minus.deva ; G 168
+U 9676 ; WX 510 ; N uni25CC ; G 169
+EndCharMetrics
+EndFontMetrics

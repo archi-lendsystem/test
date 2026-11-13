@@ -1,0 +1,30 @@
+{
+    "name": "nwidart/blleads",
+    "description": "",
+    "authors": [
+        {
+            "name": "Nicolas Widart",
+            "email": "n.widart@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\BLLeads\\": "app/",
+            "Modules\\BLLeads\\Database\\Factories\\": "database/factories/",
+            "Modules\\BLLeads\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\BLLeads\\Tests\\": "tests/"
+        }
+    }
+}

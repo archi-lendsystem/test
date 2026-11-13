@@ -1,0 +1,30 @@
+{
+    "name": "nwidart/bljourney",
+    "description": "",
+    "authors": [
+        {
+            "name": "Nicolas Widart",
+            "email": "n.widart@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\BLJourney\\": "app/",
+            "Modules\\BLJourney\\Database\\Factories\\": "database/factories/",
+            "Modules\\BLJourney\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\BLJourney\\Tests\\": "tests/"
+        }
+    }
+}

@@ -1,0 +1,30 @@
+{
+    "name": "nwidart/rcu",
+    "description": "",
+    "authors": [
+        {
+            "name": "Nicolas Widart",
+            "email": "n.widart@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\RCU\\": "app/",
+            "Modules\\RCU\\Database\\Factories\\": "database/factories/",
+            "Modules\\RCU\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\RCU\\Tests\\": "tests/"
+        }
+    }
+}

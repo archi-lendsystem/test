@@ -1,0 +1,30 @@
+{
+    "name": "nwidart/bldocumentchecklist",
+    "description": "",
+    "authors": [
+        {
+            "name": "Nicolas Widart",
+            "email": "n.widart@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\BLDocumentCheckList\\": "app/",
+            "Modules\\BLDocumentCheckList\\Database\\Factories\\": "database/factories/",
+            "Modules\\BLDocumentCheckList\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\BLDocumentCheckList\\Tests\\": "tests/"
+        }
+    }
+}

@@ -1,0 +1,11 @@
+{
+    "name": "RCU",
+    "alias": "rcu",
+    "description": "Risk Control Unit — document verification and case approve/reject.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\RCU\\Providers\\RCUServiceProvider"
+    ],
+    "files": []
+}

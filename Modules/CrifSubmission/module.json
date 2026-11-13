@@ -1,0 +1,11 @@
+{
+    "name": "CrifSubmission",
+    "alias": "crifsubmission",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\CrifSubmission\\Providers\\CrifSubmissionServiceProvider"
+    ],
+    "files": []
+}

@@ -1,0 +1,30 @@
+{
+    "name": "nwidart/followupptp",
+    "description": "",
+    "authors": [
+        {
+            "name": "Nicolas Widart",
+            "email": "n.widart@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\FollowUpPTP\\": "app/",
+            "Modules\\FollowUpPTP\\Database\\Factories\\": "database/factories/",
+            "Modules\\FollowUpPTP\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\FollowUpPTP\\Tests\\": "tests/"
+        }
+    }
+}

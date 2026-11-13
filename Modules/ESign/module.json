@@ -1,0 +1,11 @@
+{
+    "name": "ESign",
+    "alias": "esign",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\ESign\\Providers\\ESignServiceProvider"
+    ],
+    "files": []
+}

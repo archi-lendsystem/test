@@ -1,327 +1,464 @@
 
-name: Deploy Development
+name: Deploy Staging
 
 on:
-  push:
-    branches:
-      - staging
   workflow_dispatch:
+    inputs:
+      bootstrap_staging:
+        description: 'First-time setup (no migrations)'
+        type: boolean
+        required: true
+        default: false
+
+      bootstrap_confirmation:
+        description: 'Type Confirm to confirm'
+        type: string
+        required: false
+        default: ''
 
 permissions:
   contents: read
 
 concurrency:
-  group: development-deployment
+  group: deploy-${{ github.repository }}-staging
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  tests:
     if: github.ref == 'refs/heads/staging'
-    name: Build and Deploy React Vite
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
 
-    environment:
-      name: development
-      url: https://test.thelendsystem.com
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
-    env:
-      SERVER_HOST: ${{ secrets.DEV_SERVER_HOST }}
-      SERVER_USER: ${{ secrets.DEV_SERVER_USER }}
-      SERVER_PORT: ${{ secrets.DEV_SERVER_PORT }}
-      WEBSITE_URL: https://test.thelendsystem.com
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+          tools: composer:v2
+          extensions: pdo_sqlite, sqlite3
+
+      - name: Validate and run tests
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          bash -n scripts/deploy.sh
+
+          composer validate --no-check-publish
+
+          composer install \
+            --prefer-dist \
+            --no-interaction \
+            --no-progress
+
+          composer check-platform-reqs
+
+          test -d tests
+
+          find tests -type f -name '*Test.php' \
+            -print -quit | grep -q .
+
+          # Isolated test environment, no staging credentials.
+          cat > .env <<'ENV'
+          APP_NAME=Laravel
+          APP_ENV=testing
+          APP_KEY=
+          APP_DEBUG=true
+          APP_URL=http://localhost
+          DB_CONNECTION=sqlite
+          DB_DATABASE=:memory:
+          CACHE_STORE=array
+          SESSION_DRIVER=array
+          QUEUE_CONNECTION=sync
+          MAIL_MAILER=array
+          ENV
+
+          php artisan key:generate --force
+
+          php artisan test --stop-on-failure
+
+  deploy:
+    name: Deploying backend code to staging
+
+    if: github.ref == 'refs/heads/staging'
+    needs: tests
+    environment: staging
+
+    runs-on: [self-hosted, macOS, ARM64]
+    timeout-minutes: 45
 
     defaults:
       run:
         shell: bash
 
+    env:
+      LOCAL_ENV_PATH: ${{ secrets.LOCAL_ENV_PATH }}
+      REMOTE_DEPLOY_DIR: ${{ secrets.REMOTE_DEPLOY_DIR }}
+      REMOTE_WEB_ROOT: ${{ secrets.REMOTE_WEB_ROOT }}
+      BACKEND_URL: ${{ secrets.BACKEND_URL }}
+
+      EXPECTED_DB_HOST: ${{ secrets.EXPECTED_DB_HOST }}
+      EXPECTED_DB_DATABASE: ${{ secrets.EXPECTED_DB_DATABASE }}
+
+      HEALTH_CHECK_TOKEN: ${{ secrets.HEALTH_CHECK_TOKEN }}
+
+      COMMIT_SHA: ${{ github.sha }}
+      BOOTSTRAP_REQUESTED: ${{ inputs.bootstrap_staging }}
+      BOOTSTRAP_CONFIRMATION: ${{ inputs.bootstrap_confirmation }}
+
     steps:
-      # Step 1: Checkout exact commit
-      - name: Checkout Repository
+      # ======================================================
+      # 1. Checkout repository
+      # ======================================================
+
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           persist-credentials: false
+          fetch-depth: 1
 
-      # Step 2: Setup Node.js
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
+      # Each workflow rerun must have new release and snapshot paths.
+      # Preserve 40-character hexadecimal format expected by deploy.sh.
+      - name: Generate unique deployment release ID
+        run: |
+          set -euo pipefail
+          RELEASE_ID="$(
+            printf '%s' "${GITHUB_SHA}:${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}" \
+              | shasum -a 256 | cut -c1-40
+          )"
+          [[ "$RELEASE_ID" =~ ^[0-9a-f]{40}$ ]]
+          echo "RELEASE_ID=$RELEASE_ID" >> "$GITHUB_ENV"
+          echo "Deployment attempt release ID: $RELEASE_ID"
 
-      # Step 3: Install dependencies
-      - name: Install Dependencies
-        run: npm ci
+      # ======================================================
+      # 2. Validate staging environment before deployment
+      # ======================================================
 
-      # Step 4: Run lint and tests
-      - name: Lint and Test
+      - name: Validate staging configuration and environment file
         run: |
           set -euo pipefail
 
-          npm run lint --if-present
+          [[ "$GITHUB_REF" == 'refs/heads/staging' ]]
 
-          if npm run | grep -qE '^[[:space:]]+test$'; then
-            npm test -- --run
-          else
-            echo "No test script configured"
-          fi
+          : "${LOCAL_ENV_PATH:?Missing LOCAL_ENV_PATH}"
+          : "${REMOTE_DEPLOY_DIR:?Missing REMOTE_DEPLOY_DIR}"
+          : "${BACKEND_URL:?Missing BACKEND_URL}"
+          : "${EXPECTED_DB_HOST:?Missing EXPECTED_DB_HOST}"
+          : "${EXPECTED_DB_DATABASE:?Missing EXPECTED_DB_DATABASE}"
+          : "${HEALTH_CHECK_TOKEN:?Missing HEALTH_CHECK_TOKEN}"
 
-      # Step 5: Build React Vite
-      - name: Build Application
-        env:
-          # Optional: configure this repository variable
-          VITE_API_URL: ${{ vars.VITE_API_URL }}
-        run: |
-          set -euo pipefail
+          [[ -f "$LOCAL_ENV_PATH" &&
+             -s "$LOCAL_ENV_PATH" &&
+             -r "$LOCAL_ENV_PATH" ]]
 
-          echo "Building commit: $GITHUB_SHA"
+          [[ "$REMOTE_DEPLOY_DIR" =~ ^[A-Za-z0-9_-]+$ ]]
 
-          npm run build
+          [[ "${REMOTE_WEB_ROOT:-public_html}" =~ ^[A-Za-z0-9_][A-Za-z0-9_/-]*$ ]]
+          [[ "${REMOTE_WEB_ROOT:-public_html}" != *..* ]]
 
-          test -s dist/index.html
-          test -d dist/assets
+          [[ "$BACKEND_URL" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?/?$ ]]
 
-          echo "=== Build files ==="
-          find dist -maxdepth 2 -type f
+          [[ "$EXPECTED_DB_HOST" =~ ^[A-Za-z0-9._-]+$ ]]
+          [[ "$EXPECTED_DB_DATABASE" =~ ^[A-Za-z0-9_-]+$ ]]
 
-          echo "Build completed successfully"
+          [[ -z "${SMOKE_TEST_PATH:-}" ||
+             "$SMOKE_TEST_PATH" =~ ^/[A-Za-z0-9_./-]+$ ]]
 
-      # Step 6: Prepare deployment metadata
-      - name: Prepare Deployment Version
-        run: |
-          set -euo pipefail
+          [[ "${SMOKE_TEST_PATH:-}" != *..* ]]
 
-          printf '%s\n' "$GITHUB_SHA" \
-            > dist/deployment-version.txt
+          # Optional whitespace-separated, read-only endpoints for deeper smoke tests.
+          # Keep existing SMOKE_TEST_PATH support unchanged.
+          for path in ${SMOKE_TEST_PATHS:-}; do
+            [[ "$path" =~ ^/[A-Za-z0-9_./-]+$ && "$path" != *..* ]] || {
+              echo '::error::Invalid SMOKE_TEST_PATHS entry'
+              exit 1
+            }
+          done
 
-          echo "Deployment commit: $GITHUB_SHA"
+          bash -n scripts/deploy.sh
 
-      # Step 7: Create shared rsync exclusions
-      - name: Prepare Rsync Exclusions
-        run: |
-          set -euo pipefail
-
-          cat > "$RUNNER_TEMP/rsync-exclude.txt" <<'EOF'
-          .htaccess
-          .user.ini
-          php.ini
-          .well-known/
-          cgi-bin/
-          EOF
-
-          echo "Shared rsync exclusions created"
-
-      # Step 8: Configure SSH
-      - name: Configure SSH
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.DEV_SERVER_SSH_KEY }}
-          SSH_KNOWN_HOSTS: ${{ secrets.DEV_SERVER_KNOWN_HOSTS }}
-        run: |
-          set -euo pipefail
-
-          test -n "$SERVER_HOST"
-          test -n "$SERVER_USER"
-          test -n "$SERVER_PORT"
-          test -n "$SSH_PRIVATE_KEY"
-          test -n "$SSH_KNOWN_HOSTS"
-
-          mkdir -p "$HOME/.ssh"
-          chmod 700 "$HOME/.ssh"
-
-          printf '%s\n' "$SSH_PRIVATE_KEY" \
-            > "$HOME/.ssh/deploy_key"
-          chmod 600 "$HOME/.ssh/deploy_key"
-
-          printf '%s\n' "$SSH_KNOWN_HOSTS" \
-            > "$HOME/.ssh/known_hosts"
-          chmod 600 "$HOME/.ssh/known_hosts"
-
-          ssh-keygen -y -P "" \
-            -f "$HOME/.ssh/deploy_key" \
-            > /dev/null
-
-          cat > "$HOME/.ssh/config" <<EOF
-          Host deploy-server
-              HostName $SERVER_HOST
-              User $SERVER_USER
-              Port $SERVER_PORT
-              IdentityFile $HOME/.ssh/deploy_key
-              IdentitiesOnly yes
-              BatchMode yes
-              StrictHostKeyChecking yes
-              UserKnownHostsFile $HOME/.ssh/known_hosts
-              ConnectTimeout 20
-              AddressFamily inet
-              ServerAliveInterval 15
-          EOF
-
-          chmod 600 "$HOME/.ssh/config"
-
-          echo "SSH configuration complete"
-
-      # Step 9: Test SSH connection
-      - name: Test SSH Connection
-        run: |
-          set -euo pipefail
-
-          nc -4 -vz -w 15 \
-            "$SERVER_HOST" "$SERVER_PORT"
-
-          ssh deploy-server \
-            'whoami && test -d "$HOME/public_html"'
-
-          echo "SSH connection successful"
-
-      # Step 10: Deploy assets and other files first
-      - name: Deploy Application Files
-        run: |
-          set -euo pipefail
-
-          echo "Phase 1: Uploading application files..."
-
-          rsync -avz \
-            --checksum \
-            --chmod=D755,F644 \
-            --exclude-from="$RUNNER_TEMP/rsync-exclude.txt" \
-            --exclude='/index.html' \
-            --exclude='/deployment-version.txt' \
-            dist/ \
-            deploy-server:public_html/
-
-          echo "Phase 1 completed"
-
-          echo "Phase 2: Publishing index.html..."
-
-          rsync -avz \
-            --checksum \
-            --chmod=D755,F644 \
-            dist/index.html \
-            deploy-server:public_html/index.html
-
-          echo "Publishing deployment version..."
-
-          rsync -avz \
-            --checksum \
-            --chmod=D755,F644 \
-            dist/deployment-version.txt \
-            deploy-server:public_html/deployment-version.txt
-
-          echo "Application deployment completed"
-
-      # Step 11: Verify uploaded files
-      - name: Verify Uploaded Files
-        run: |
-          set -euo pipefail
-
-          echo "Comparing build with server files..."
-
-          DIFF=$(rsync -rcn \
-            --out-format='%n' \
-            --exclude-from="$RUNNER_TEMP/rsync-exclude.txt" \
-            dist/ \
-            deploy-server:public_html/)
-
-          if [ -n "$DIFF" ]; then
-            echo "ERROR: Build files differ from server"
-            echo "$DIFF"
+          if git ls-files --error-unmatch .env >/dev/null 2>&1; then
+            echo '::error::.env is tracked by Git'
             exit 1
           fi
 
-          echo "SUCCESS: Uploaded files match build"
+          # Validate without displaying secrets.
 
-      
-      # Step 12: Verify live website
-      - name: Verify Live Website
-        run: |
-          set -euo pipefail
-
-          fetch() {
-            curl \
-              -fLsS \
-              --retry 3 \
-              --retry-delay 5 \
-              --retry-all-errors \
-              --max-time 20 \
-              -H "Cache-Control: no-cache" \
-              "$@"
+          grep -Eq '^APP_ENV=staging\r?$' "$LOCAL_ENV_PATH" || {
+            echo '::error::APP_ENV must be staging'
+            exit 1
           }
 
-          echo "Checking live website..."
-
-          fetch \
-            "$WEBSITE_URL/?sha=$GITHUB_SHA" \
-            -o live-index.html
-
-          echo "Checking live deployment commit..."
-
-          LIVE_COMMIT=$(fetch \
-            "$WEBSITE_URL/deployment-version.txt?sha=$GITHUB_SHA")
-
-          echo "Expected commit: $GITHUB_SHA"
-          echo "Live commit: $LIVE_COMMIT"
-
-          if [ "$LIVE_COMMIT" != "$GITHUB_SHA" ]; then
-            echo "ERROR: Live commit mismatch"
+          grep -Eq '^APP_DEBUG=false\r?$' "$LOCAL_ENV_PATH" || {
+            echo '::error::APP_DEBUG must be false'
             exit 1
-          fi
+          }
 
-          echo "Checking complete live HTML..."
-
-          if ! cmp -s dist/index.html live-index.html; then
-            echo "ERROR: Live HTML differs from build"
+          grep -Eq '^APP_KEY=base64:[A-Za-z0-9+/=]+\r?$' "$LOCAL_ENV_PATH" || {
+            echo '::error::Restore the existing APP_KEY in LOCAL_ENV_PATH'
             exit 1
-          fi
+          }
 
-          echo "SUCCESS: Live HTML matches build"
-
-          echo "Extracting build asset references..."
-
-          grep -oE "/assets/[^\"'[:space:]<>]+" \
-            dist/index.html > expected-assets.txt || true
-
-          grep -oE "/assets/[^\"'[:space:]<>]+" \
-            live-index.html > live-assets.txt || true
-
-          if ! diff -u expected-assets.txt live-assets.txt; then
-            echo "ERROR: Live HTML references incorrect assets"
+          grep -Eq '^APP_URL=https://' "$LOCAL_ENV_PATH" || {
+            echo '::error::APP_URL must be HTTPS'
             exit 1
-          fi
+          }
 
-          echo "Checking JavaScript and CSS assets..."
+          echo "Staging configuration validated"
 
-          while IFS= read -r asset; do
-            test -n "$asset" || continue
-
-            if [ ! -f "dist${asset}" ]; then
-              echo "ERROR: Asset not found in build: $asset"
-              exit 1
-            fi
-
-            fetch \
-              "$WEBSITE_URL$asset?sha=$GITHUB_SHA" \
-              -o live-asset.tmp
-
-            if ! cmp -s "dist${asset}" live-asset.tmp; then
-              echo "ERROR: Live asset differs: $asset"
-              exit 1
-            fi
-
-            echo "Verified: $asset"
-
-          done < expected-assets.txt
-
-          echo "SUCCESS: Live website matches build"
-
-
-      # Step 13: Deployment Summary
-      - name: Deployment Summary
-        if: success()
+      - name: Select protected deployment mode
+        id: mode
         run: |
-          echo "## Deployment Successful" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Website: $WEBSITE_URL" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Branch: $GITHUB_REF_NAME" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Commit: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Environment: development" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Framework: React + Vite" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Document root: public_html" >> "$GITHUB_STEP_SUMMARY"
+          set -euo pipefail
+
+          if [[ "${BOOTSTRAP_REQUESTED:-false}" == 'true' ]]; then
+            [[ "$BOOTSTRAP_CONFIRMATION" == 'Confirm' ]] || {
+              echo '::error::One-time bootstrap confirmation is missing'
+              exit 1
+            }
+            echo 'preflight_action=bootstrap-preflight' >> "$GITHUB_OUTPUT"
+            echo 'deploy_action=bootstrap' >> "$GITHUB_OUTPUT"
+            echo 'rollback_action=rollback' >> "$GITHUB_OUTPUT"
+            echo 'One-time staging bootstrap selected. Database migrations will NOT run.'
+          else
+            echo 'preflight_action=preflight' >> "$GITHUB_OUTPUT"
+            echo 'deploy_action=deploy' >> "$GITHUB_OUTPUT"
+            echo 'rollback_action=rollback' >> "$GITHUB_OUTPUT"
+            echo 'Protected normal deployment selected.'
+          fi
+
+      # ======================================================
+      # 3. Configure verified SSH
+      # ======================================================
+
+      - name: Configure verified SSH
+        env:
+          SSH_HOST: ${{ secrets.DEV_SERVER_HOST }}
+          SSH_USER: ${{ secrets.DEV_SERVER_USER }}
+          SSH_PORT: ${{ secrets.DEV_SERVER_PORT }}
+          SSH_KEY: ${{ secrets.DEV_SERVER_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEV_SERVER_KNOWN_HOSTS }}
+
+        run: |
+          set -euo pipefail
+          umask 077
+
+          : "${SSH_HOST:?Missing SSH host}"
+          : "${SSH_USER:?Missing SSH user}"
+          : "${SSH_KEY:?Missing private SSH key}"
+          : "${KNOWN_HOSTS:?Missing pinned SSH host key}"
+
+          [[ "$SSH_HOST" =~ ^[A-Za-z0-9.-]+$ ]]
+          [[ "$SSH_USER" =~ ^[A-Za-z0-9_-]+$ ]]
+
+          [[ "${SSH_PORT:-22}" =~ ^[0-9]{1,5}$ ]]
+
+          (( 10#${SSH_PORT:-22} >= 1 &&
+             10#${SSH_PORT:-22} <= 65535 ))
+
+          mkdir -p -m 700 "$RUNNER_TEMP/deploy-ssh"
+
+          printf '%s\n' "$SSH_KEY" \
+            > "$RUNNER_TEMP/deploy-ssh/key"
+
+          printf '%s\n' "$KNOWN_HOSTS" \
+            > "$RUNNER_TEMP/deploy-ssh/known_hosts"
+
+          chmod 600 \
+            "$RUNNER_TEMP/deploy-ssh/key" \
+            "$RUNNER_TEMP/deploy-ssh/known_hosts"
+
+          cat > "$RUNNER_TEMP/deploy-ssh/config" <<EOF
+          Host cpanel-deploy
+            HostName $SSH_HOST
+            User $SSH_USER
+            Port ${SSH_PORT:-22}
+            IdentityFile $RUNNER_TEMP/deploy-ssh/key
+            UserKnownHostsFile $RUNNER_TEMP/deploy-ssh/known_hosts
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 15
+            ServerAliveInterval 30
+            ServerAliveCountMax 5
+          EOF
+
+          chmod 600 "$RUNNER_TEMP/deploy-ssh/config"
+
+      # ======================================================
+      # 4. Verify previous Laravel application before upload
+      # ======================================================
+
+      - name: Verify current application can be rolled back
+        run: |
+          set -euo pipefail
+
+          ssh -F "$RUNNER_TEMP/deploy-ssh/config" \
+            cpanel-deploy \
+            "bash -se -- '${{ steps.mode.outputs.preflight_action }}' '$REMOTE_DEPLOY_DIR' '${REMOTE_WEB_ROOT:-public_html}' '$RELEASE_ID' '$BACKEND_URL' '$EXPECTED_DB_HOST' '$EXPECTED_DB_DATABASE'" \
+            < scripts/deploy.sh
+
+
+      - name: Verify staging APP_KEY
+        run: |
+          set -euo pipefail
+
+          test -r "$LOCAL_ENV_PATH" || {
+            echo "::error::Environment file not readable"
+            exit 1
+          }
+
+          ENV_FILE="$LOCAL_ENV_PATH" php <<'PHP'
+          <?php
+          $env = parse_ini_file(
+              getenv('ENV_FILE'),
+              false,
+              INI_SCANNER_RAW
+          );
+
+          $key = trim(
+              (string) ($env['APP_KEY'] ?? ''),
+              "\"'"
+          );
+
+          $expected = '61a14ec1802024cba80b001cc776967ef72f2e260b9f2981a24a128d0447a1a7';
+
+          if (!hash_equals($expected, hash('sha256', $key))) {
+              fwrite(STDERR, "APP_KEY mismatch in runner file\n");
+              exit(1);
+          }
+
+          echo "Staging APP_KEY verified successfully\n";
+          PHP
+
+      # ======================================================
+      # 5. Package source code and generate SHA-256
+      # ======================================================
+
+      - name: Package and checksum release
+        run: |
+          set -euo pipefail
+          umask 077
+
+          git archive --format=tar HEAD \
+            | gzip -6 > "$RUNNER_TEMP/$RELEASE_ID.tar.gz"
+
+          (
+            cd "$RUNNER_TEMP"
+
+            shasum -a 256 "$RELEASE_ID.tar.gz" \
+              > "$RELEASE_ID.sha256"
+          )
+
+          cp "$LOCAL_ENV_PATH" \
+            "$RUNNER_TEMP/$RELEASE_ID.env"
+
+          chmod 600 "$RUNNER_TEMP/$RELEASE_ID.env"
+
+          tar -tzf "$RUNNER_TEMP/$RELEASE_ID.tar.gz" >/dev/null
+
+          echo "Release archive and checksum generated"
+
+      # ======================================================
+      # 6. Upload into private remote directory
+      # ======================================================
+
+      - name: Upload release to private incoming directory
+        run: |
+          set -euo pipefail
+
+          ssh -F "$RUNNER_TEMP/deploy-ssh/config" \
+            cpanel-deploy \
+            "mkdir -p \"\$HOME/$REMOTE_DEPLOY_DIR/.incoming\" && chmod 700 \"\$HOME/$REMOTE_DEPLOY_DIR/.incoming\""
+
+          scp -q \
+            -F "$RUNNER_TEMP/deploy-ssh/config" \
+            "$RUNNER_TEMP/$RELEASE_ID.tar.gz" \
+            "$RUNNER_TEMP/$RELEASE_ID.sha256" \
+            "$RUNNER_TEMP/$RELEASE_ID.env" \
+            "cpanel-deploy:$REMOTE_DEPLOY_DIR/.incoming/"
+
+          echo "Release uploaded"
+
+      # ======================================================
+      # 7. Deploy with automatic recovery
+      # ======================================================
+
+      - name: Deploy with automatic recovery
+        id: deploy_release
+
+        run: |
+          set -euo pipefail
+
+          ssh -F "$RUNNER_TEMP/deploy-ssh/config" \
+            cpanel-deploy \
+            "bash -se -- '${{ steps.mode.outputs.deploy_action }}' '$REMOTE_DEPLOY_DIR' '${REMOTE_WEB_ROOT:-public_html}' '$RELEASE_ID' '$BACKEND_URL' '$EXPECTED_DB_HOST' '$EXPECTED_DB_DATABASE'" \
+            < scripts/deploy.sh
+
+      # Validate the actual published Laravel DB connection (not only HTTP 200).
+      - name: Verify active release and database connectivity
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/deploy-ssh/config" \
+            cpanel-deploy \
+            "bash -se -- verify '$REMOTE_DEPLOY_DIR' '${REMOTE_WEB_ROOT:-public_html}' '$RELEASE_ID' '$BACKEND_URL' '$EXPECTED_DB_HOST' '$EXPECTED_DB_DATABASE'" \
+            < scripts/deploy.sh
+
+      # ======================================================
+      # 9. Rollback if external verification fails
+      # ======================================================
+
+      - name: Roll back if external verification fails
+        if: failure() && steps.deploy_release.outcome == 'success'
+
+        run: |
+          set -euo pipefail
+
+          ssh -F "$RUNNER_TEMP/deploy-ssh/config" \
+            cpanel-deploy \
+            "bash -se -- rollback '$REMOTE_DEPLOY_DIR' '${REMOTE_WEB_ROOT:-public_html}' '$RELEASE_ID' '$BACKEND_URL' '$EXPECTED_DB_HOST' '$EXPECTED_DB_DATABASE'" \
+            < scripts/deploy.sh
+
+          # A rollback restores files, not applied database migrations.
+          echo '::warning::Rollback restored the previous application files; check database schema compatibility and live health.'
+
+      # Release pruning occurs only after successful release and DB verification.
+      # Backup snapshots (especially database.sql.gz) are not auto-deleted.
+      - name: Prune old staging releases safely
+        if: success() && steps.deploy_release.outcome == 'success'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/deploy-ssh/config" \n            cpanel-deploy \n            "bash -se -- cleanup '$REMOTE_DEPLOY_DIR' '${REMOTE_WEB_ROOT:-public_html}' '$RELEASE_ID' '$BACKEND_URL' '$EXPECTED_DB_HOST' '$EXPECTED_DB_DATABASE'" \n            < scripts/deploy.sh
+
+      # ======================================================
+      # 10. Cleanup temporary files
+      # ======================================================
+
+      - name: Clean temporary files
+        if: always()
+
+        run: |
+          if [[ -f "$RUNNER_TEMP/deploy-ssh/config" &&
+                "$REMOTE_DEPLOY_DIR" =~ ^[A-Za-z0-9_-]+$ ]]; then
+
+            ssh -F "$RUNNER_TEMP/deploy-ssh/config" \
+              cpanel-deploy \
+              "rm -f \"\$HOME/$REMOTE_DEPLOY_DIR/.incoming/$RELEASE_ID.tar.gz\" \"\$HOME/$REMOTE_DEPLOY_DIR/.incoming/$RELEASE_ID.sha256\" \"\$HOME/$REMOTE_DEPLOY_DIR/.incoming/$RELEASE_ID.env\"" \
+              || true
+
+          fi
+
+          rm -rf "$RUNNER_TEMP/deploy-ssh"
+
+          rm -f \
+            "$RUNNER_TEMP/$RELEASE_ID.tar.gz" \
+            "$RUNNER_TEMP/$RELEASE_ID.sha256" \
+            "$RUNNER_TEMP/$RELEASE_ID.env" \
+            "$RUNNER_TEMP/health-response"
+
+          echo "Temporary cleanup completed"

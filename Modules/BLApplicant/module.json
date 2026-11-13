@@ -1,0 +1,11 @@
+{
+    "name": "BLApplicant",
+    "alias": "blapplicant",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\BLApplicant\\Providers\\BLApplicantServiceProvider"
+    ],
+    "files": []
+}

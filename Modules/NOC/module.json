@@ -1,0 +1,11 @@
+{
+    "name": "NOC",
+    "alias": "noc",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\NOC\\Providers\\NOCServiceProvider"
+    ],
+    "files": []
+}

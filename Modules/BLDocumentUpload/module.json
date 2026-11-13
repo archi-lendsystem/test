@@ -1,0 +1,11 @@
+{
+    "name": "BLDocumentUpload",
+    "alias": "bldocumentupload",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\BLDocumentUpload\\Providers\\BLDocumentUploadServiceProvider"
+    ],
+    "files": []
+}

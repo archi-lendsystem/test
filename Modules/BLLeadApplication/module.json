@@ -1,0 +1,11 @@
+{
+    "name": "BLLeadApplication",
+    "alias": "blleadapplication",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\BLLeadApplication\\Providers\\BLLeadApplicationServiceProvider"
+    ],
+    "files": []
+}

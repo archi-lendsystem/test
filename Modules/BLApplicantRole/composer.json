@@ -1,0 +1,30 @@
+{
+    "name": "nwidart/blapplicantrole",
+    "description": "",
+    "authors": [
+        {
+            "name": "Nicolas Widart",
+            "email": "n.widart@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\BLApplicantRole\\": "app/",
+            "Modules\\BLApplicantRole\\Database\\Factories\\": "database/factories/",
+            "Modules\\BLApplicantRole\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\BLApplicantRole\\Tests\\": "tests/"
+        }
+    }
+}

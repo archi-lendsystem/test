@@ -1,0 +1,11 @@
+{
+    "name": "BLReports",
+    "alias": "blreports",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\BLReports\\Providers\\BLReportsServiceProvider"
+    ],
+    "files": []
+}

@@ -1,0 +1,11 @@
+{
+    "name": "PinCode",
+    "alias": "pincode",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\PinCode\\Providers\\PinCodeServiceProvider"
+    ],
+    "files": []
+}

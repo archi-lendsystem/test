@@ -1,0 +1,30 @@
+{
+    "name": "nwidart/dpd",
+    "description": "",
+    "authors": [
+        {
+            "name": "Nicolas Widart",
+            "email": "n.widart@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\DPD\\": "app/",
+            "Modules\\DPD\\Database\\Factories\\": "database/factories/",
+            "Modules\\DPD\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\DPD\\Tests\\": "tests/"
+        }
+    }
+}

@@ -1,0 +1,11 @@
+{
+    "name": "DemandVsCollection",
+    "alias": "demandvscollection",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\DemandVsCollection\\Providers\\DemandVsCollectionServiceProvider"
+    ],
+    "files": []
+}

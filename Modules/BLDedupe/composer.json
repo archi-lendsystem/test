@@ -1,0 +1,30 @@
+{
+    "name": "nwidart/bldedupe",
+    "description": "",
+    "authors": [
+        {
+            "name": "Nicolas Widart",
+            "email": "n.widart@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\BLDedupe\\": "app/",
+            "Modules\\BLDedupe\\Database\\Factories\\": "database/factories/",
+            "Modules\\BLDedupe\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\BLDedupe\\Tests\\": "tests/"
+        }
+    }
+}

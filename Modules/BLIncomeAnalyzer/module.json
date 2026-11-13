@@ -1,0 +1,11 @@
+{
+    "name": "BLIncomeAnalyzer",
+    "alias": "blincomeanalyzer",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\BLIncomeAnalyzer\\Providers\\BLIncomeAnalyzerServiceProvider"
+    ],
+    "files": []
+}

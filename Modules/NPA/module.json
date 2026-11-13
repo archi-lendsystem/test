@@ -1,0 +1,11 @@
+{
+    "name": "NPA",
+    "alias": "npa",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\NPA\\Providers\\NPAServiceProvider"
+    ],
+    "files": []
+}

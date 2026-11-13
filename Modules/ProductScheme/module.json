@@ -1,0 +1,11 @@
+{
+    "name": "ProductScheme",
+    "alias": "productscheme",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\ProductScheme\\Providers\\ProductSchemeServiceProvider"
+    ],
+    "files": []
+}

@@ -1,0 +1,11 @@
+{
+    "name": "DPD",
+    "alias": "dpd",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\DPD\\Providers\\DPDServiceProvider"
+    ],
+    "files": []
+}

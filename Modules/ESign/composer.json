@@ -1,0 +1,30 @@
+{
+    "name": "nwidart/esign",
+    "description": "",
+    "authors": [
+        {
+            "name": "Nicolas Widart",
+            "email": "n.widart@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\ESign\\": "app/",
+            "Modules\\ESign\\Database\\Factories\\": "database/factories/",
+            "Modules\\ESign\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\ESign\\Tests\\": "tests/"
+        }
+    }
+}

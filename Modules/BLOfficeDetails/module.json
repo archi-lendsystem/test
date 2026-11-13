@@ -1,0 +1,11 @@
+{
+    "name": "BLOfficeDetails",
+    "alias": "blofficedetails",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\BLOfficeDetails\\Providers\\BLOfficeDetailsServiceProvider"
+    ],
+    "files": []
+}

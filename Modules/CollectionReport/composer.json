@@ -1,0 +1,30 @@
+{
+    "name": "nwidart/collectionreport",
+    "description": "",
+    "authors": [
+        {
+            "name": "Nicolas Widart",
+            "email": "n.widart@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\CollectionReport\\": "app/",
+            "Modules\\CollectionReport\\Database\\Factories\\": "database/factories/",
+            "Modules\\CollectionReport\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\CollectionReport\\Tests\\": "tests/"
+        }
+    }
+}

@@ -1,0 +1,11 @@
+{
+    "name": "BLWorkflow",
+    "alias": "blworkflow",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\BLWorkflow\\Providers\\BLWorkflowServiceProvider"
+    ],
+    "files": []
+}

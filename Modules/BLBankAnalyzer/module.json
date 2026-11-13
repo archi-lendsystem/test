@@ -1,0 +1,11 @@
+{
+    "name": "BLBankAnalyzer",
+    "alias": "blbankanalyzer",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\BLBankAnalyzer\\Providers\\BLBankAnalyzerServiceProvider"
+    ],
+    "files": []
+}
